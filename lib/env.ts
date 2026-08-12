@@ -77,7 +77,7 @@ const CAPABILITIES: Capability[] = [
     name: "Email",
     vars: ["RESEND_API_KEY"],
     without:
-      "no verification mail, so no new account can ever sign in; no invites and no reauth notices",
+      "no verification mail, so no new account can ever sign in; no invites, no reauth notices, and no cron alerts",
   },
   {
     name: "Billing",

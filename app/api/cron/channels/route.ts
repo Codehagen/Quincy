@@ -1,4 +1,5 @@
 import { runChannelMaintenance } from "@/lib/channels-maintenance"
+import { alertCronFailure } from "@/lib/cron-alert"
 
 /**
  * The daily channel sweep. Scheduled in vercel.json at 06:00 UTC.
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
 
   if (!secret) {
+    // The silent one. The scheduler gets a response, records it, and moves on;
+    // nothing else in the system ever mentions that this job did nothing.
+    await alertCronFailure({ job: "channels", failure: "unconfigured" })
+
     return Response.json(
       { error: "CRON_SECRET is not set. Refusing to run unauthenticated." },
       { status: 503 }
@@ -44,6 +49,10 @@ export async function GET(request: Request) {
   // dead: the one thing it exists to notice is a revoked grant, and a silent
   // failure means nobody notices that nobody is noticing.
   const degraded = run.failed > 0 || run.truncated
+
+  // Reported, not just returned. A 500 reaches whoever is watching the
+  // scheduler; nobody is watching the scheduler.
+  if (degraded) await alertCronFailure({ job: "channels", failure: "degraded" })
 
   return Response.json(
     { ok: !degraded, ms: Date.now() - started, ...run },

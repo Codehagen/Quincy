@@ -1,4 +1,5 @@
 import { countStuck, runDueRhythms } from "@/lib/rhythm-run"
+import { alertCronFailure } from "@/lib/cron-alert"
 
 /**
  * The sweep that runs rhythms. Scheduled in vercel.json every fifteen minutes.
@@ -28,6 +29,10 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
 
   if (!secret) {
+    // The silent one. The scheduler gets a response, records it, and moves on;
+    // nothing else in the system ever mentions that this job did nothing.
+    await alertCronFailure({ job: "rhythms", failure: "unconfigured" })
+
     return Response.json(
       { error: "CRON_SECRET is not set. Refusing to run unauthenticated." },
       { status: 503 }
@@ -64,6 +69,10 @@ export async function GET(request: Request) {
    * is this route working exactly as intended.
    */
   const degraded = run.failed > 0 || run.truncated || run.outcomes.missed > 0
+
+  // Reported, not just returned. A 500 reaches whoever is watching the
+  // scheduler; nobody is watching the scheduler.
+  if (degraded) await alertCronFailure({ job: "rhythms", failure: "degraded" })
 
   return Response.json(
     { ok: !degraded, ms: Date.now() - started, stuck, ...run },

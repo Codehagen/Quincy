@@ -1,4 +1,5 @@
 import { countUnresolved, runScheduledPublish } from "@/lib/publish-run"
+import { alertCronFailure } from "@/lib/cron-alert"
 
 /**
  * The sweep that sends. Scheduled in vercel.json every five minutes.
@@ -28,6 +29,10 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
 
   if (!secret) {
+    // The silent one. The scheduler gets a response, records it, and moves on;
+    // nothing else in the system ever mentions that this job did nothing.
+    await alertCronFailure({ job: "publish", failure: "unconfigured" })
+
     return Response.json(
       { error: "CRON_SECRET is not set. Refusing to run unauthenticated." },
       { status: 503 }
@@ -71,6 +76,10 @@ export async function GET(request: Request) {
     run.truncated ||
     run.deferred > 0 ||
     run.outcomes.missed > 0
+
+  // Reported, not just returned. A 500 reaches whoever is watching the
+  // scheduler; nobody is watching the scheduler.
+  if (degraded) await alertCronFailure({ job: "publish", failure: "degraded" })
 
   return Response.json(
     { ok: !degraded, ms: Date.now() - started, unresolved, ...run },

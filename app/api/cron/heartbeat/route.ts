@@ -1,4 +1,5 @@
 import { runHeartbeatForEveryone } from "@/lib/heartbeat"
+import { alertCronFailure } from "@/lib/cron-alert"
 
 /**
  * Heartbeat, the brain's maintenance loop. Scheduled in vercel.json.
@@ -19,6 +20,10 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
 
   if (!secret) {
+    // The silent one. The scheduler gets a response, records it, and moves on;
+    // nothing else in the system ever mentions that this job did nothing.
+    await alertCronFailure({ job: "heartbeat", failure: "unconfigured" })
+
     return Response.json(
       { error: "CRON_SECRET is not set. Refusing to run unauthenticated." },
       { status: 503 }
