@@ -1,0 +1,27 @@
+packages: []
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  msw: false
+  # drizzle-kit and react-email both bundle with esbuild, which fetches its
+  # platform binary in a postinstall script. Without this, neither CLI runs.
+  esbuild: true
+  # Downloads the ffmpeg binary for the install platform in a postinstall
+  # script. Without this there is no binary and every transcode throws ENOENT —
+  # locally and, more expensively, on the first deploy.
+  ffmpeg-static: true
+  # Both arrived with `workflow` (plans/018) and both are native builds.
+  #
+  # @swc/core is what compiles the "use workflow" / "use step" directives. With
+  # the build script blocked the package installs without its platform binary
+  # and the transform never runs, so a directive silently does nothing — the
+  # function executes inline as ordinary code and the durability it was added
+  # for is gone, with no error anywhere to say so.
+  '@swc/core': true
+  # cbor-extract is the native decoder behind cbor-x, which serialises workflow
+  # run state. It falls back to a pure-JS path when absent, so this one is
+  # speed rather than correctness — but the fallback sits in the hot path of
+  # every step boundary, and prebuilt binaries exist for the platforms this
+  # deploys to.
+  cbor-extract: true

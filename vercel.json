@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/heartbeat",
+      "schedule": "17 22 * * 1"
+    },
+    {
+      "path": "/api/cron/channels",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/publish",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/rhythms",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

@@ -1,0 +1,791 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Tailwind scans raw file text, so a class name written inside prose generates
+   that class for real. AGENTS.md documents the no-all-properties-transition
+   rule by naming the utility, which was enough to ship a dead rule for it.
+   Markdown is documentation, never a source of classes. */
+@source not "../**/*.md";
+/* Prose styling for rendered markdown — the Brain's prose kinds and the
+   agent's streaming replies. Generated at ui.shadcn.com/typeset. The presets
+   at the bottom of this file set its variables; do not edit typeset.css by
+   hand, regenerate it. */
+@import "./typeset.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════
+   Quincy — colour system
+
+   Two ramps, ONE hue (H 70). Lightness steps are evenly spaced so
+   every adjacent pair reads equally far apart; chroma is expressed
+   as a fraction of that step's own sRGB ceiling, computed per step,
+   so nothing leaves the gamut and no step drifts in hue.
+
+   --brass-*  the brand. H 70's sRGB ceiling peaks at L 0.78, which
+              is why absolute chroma crests at 300–400, not 500.
+   --sand-*   neutrals on the identical hue at a whisper of chroma.
+              Sharing H is the strictest form of "neutrals agree with
+              the brand hue" — and it makes drift impossible.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  --color-brass-50: oklch(0.97 0.006 70);
+  --color-brass-100: oklch(0.93 0.019 70);
+  --color-brass-200: oklch(0.86 0.057 70);
+  --color-brass-300: oklch(0.78 0.115 70);
+  --color-brass-400: oklch(0.7 0.124 70);
+  --color-brass-500: oklch(0.62 0.114 70);
+  --color-brass-600: oklch(0.545 0.094 70);
+  --color-brass-700: oklch(0.47 0.071 70);
+  --color-brass-800: oklch(0.395 0.05 70);
+  --color-brass-900: oklch(0.31 0.03 70);
+  --color-brass-950: oklch(0.235 0.017 70);
+
+  --color-sand-50: oklch(0.97 0.004 70);
+  --color-sand-100: oklch(0.93 0.012 70);
+  --color-sand-200: oklch(0.86 0.016 70);
+  --color-sand-300: oklch(0.78 0.017 70);
+  --color-sand-400: oklch(0.7 0.014 70);
+  --color-sand-500: oklch(0.62 0.011 70);
+  --color-sand-600: oklch(0.545 0.01 70);
+  --color-sand-700: oklch(0.47 0.009 70);
+  --color-sand-800: oklch(0.395 0.009 70);
+  --color-sand-900: oklch(0.31 0.008 70);
+  --color-sand-950: oklch(0.235 0.008 70);
+
+  /* Sibling accents: one lightness, each at 72% of its OWN ceiling.
+     Three different absolute chromas, one perceived intensity. */
+  --color-danger-500: oklch(0.545 0.16 27);
+  --color-danger-400: oklch(0.7 0.15 27);
+  --color-success-500: oklch(0.545 0.108 150);
+  --color-success-400: oklch(0.7 0.108 150);
+  --color-info-500: oklch(0.545 0.111 250);
+  --color-info-400: oklch(0.7 0.111 250);
+
+  /* Effects on the timeline. One hue, not one per kind.
+     Hue 300 because every other slot is spoken for and means something:
+     brass is action and live state, danger is loss, success is done, info is
+     the neutral note. An effect is none of those, and four raw palette hues —
+     one per effect type — would have said "these are four categories" when the
+     lane already packs chips into whichever row fits, so colour cannot carry
+     which kind it is. The icon and the label do that. */
+  --color-effect-100: oklch(0.88 0.045 300);
+  --color-effect-400: oklch(0.7 0.09 300);
+  --color-effect-700: oklch(0.4 0.1 300);
+  --color-effect-900: oklch(0.31 0.06 300);
+
+  /* Type scale — named by role, because a role name polices its own use. */
+  --text-eyebrow: 0.8125rem;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.06em;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-card-title: 0.9375rem;
+  --text-card-title--line-height: 1.35;
+  --text-card-title--font-weight: 600;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.55;
+  --text-section: 1.0625rem;
+  --text-section--line-height: 1.3;
+  --text-section--font-weight: 600;
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.015em;
+
+  /* Explicit radius scale. Nested radius = outer − padding, so a
+     16px card with 12px padding needs a 4px inner tile — hence xs. */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+  /* Typeset's defaults reference --font-heading. Kept as an alias so the
+     stylesheet resolves without editing it. */
+  --font-heading: var(--font-sans);
+}
+
+/* ── Semantic tokens ──────────────────────────────────────────────
+   These point at ramp steps, never at raw values. Every foreground/
+   background pair below was verified against WCAG AA before shipping.
+   ────────────────────────────────────────────────────────────── */
+
+:root {
+  --radius: 1rem;
+
+  --background: var(--color-sand-100);
+  --foreground: var(--color-sand-900);
+
+  /* Cards lift off the page rather than sitting flush with it. */
+  --card: var(--color-sand-50);
+  --card-foreground: var(--color-sand-900);
+  --popover: var(--color-sand-50);
+  --popover-foreground: var(--color-sand-900);
+
+  /* Ink, not brass. Decided against five palettes at a prototype since deleted; the
+     argument is in docs/colour.md.
+
+     Two facts settled it. Hue 70 at L 0.70 tops out at chroma 0.152 in sRGB and
+     brass-400 already spends 0.124 of it — 82% — so brass cannot be made to
+     feel like more without leaving the hue. And the primary fill is Approve, a
+     control pressed dozens of times a day; the loudest colour on the screen was
+     bolted to the most repeated action, which taxes attention on every pass.
+
+     Worse, --primary and --signal were the same value. The rule says brass
+     means live, but the largest brass object on any screen was a button, so
+     live signalled nothing. Neutralising the fill is what makes the rule true:
+     brass now appears only as a dot, a label, a mark or a selection, and is
+     never a surface you press. 15.29:1 either way round. */
+  --primary: var(--color-sand-950);
+  --primary-foreground: var(--color-sand-50);
+
+  /* The hover, expressed as a step toward the page rather than as alpha.
+     `bg-primary/80` was tuned against brass: it moved L by 0.052, a whisper.
+     Against a near-black fill the same alpha moves it 0.170 — three times as
+     far, and toward the page, so the button read as disabled rather than
+     hovered. Mixing toward --background instead is self-correcting, because
+     both operands flip with the theme: 7% lightens the near-black fill in light
+     mode and darkens the near-white one in dark mode, ~0.05 L in both. */
+  --primary-hover: color-mix(in oklch, var(--primary) 93%, var(--background));
+
+  --secondary: var(--color-sand-200);
+  --secondary-foreground: var(--color-sand-800);
+
+  --muted: var(--color-sand-200);
+  --muted-foreground: var(--color-sand-700);
+
+  /* Neutral, deliberately. Menu and list hovers must not glow brass —
+     brass is reserved for actions and live state. */
+  --accent: var(--color-sand-200);
+  --accent-foreground: var(--color-sand-900);
+
+  --destructive: var(--color-danger-500);
+  --destructive-foreground: var(--color-sand-50);
+
+  /* Alpha in light mode so the edge recedes into the surface;
+     a solid hairline reads as pasted on top of it. */
+  --border: color-mix(in oklch, var(--color-sand-950) 8%, transparent);
+  --input: color-mix(in oklch, var(--color-sand-950) 14%, transparent);
+  /* Neutral, not brass. A focus ring says "the keyboard is here", which every
+     control can be — brass says "live", which is a claim about state. When the
+     ring was brass the two were indistinguishable, and an autofocused composer
+     wore a brand-coloured frame for saying nothing at all.
+     Sand-700 rather than the like-for-like sand-500: dropping chroma drops
+     salience too, so the ring steps one shade further from the ground to stay
+     exactly as loud as the brass one was. */
+  --ring: var(--color-sand-700);
+
+  /* Live state. The one thing brass-as-surface is allowed to mean. */
+  --signal: var(--color-brass-400);
+  --signal-surface: var(--color-brass-100);
+  --signal-foreground: var(--color-brass-800);
+  --signal-border: color-mix(in oklch, var(--color-brass-500) 28%, transparent);
+  /* Text that sits ON a --signal fill. Its own slot rather than a borrowed
+     --primary-foreground: --signal is brass-400 in both modes and needs
+     near-black text in both, while --primary-foreground now flips. Sharing them
+     used to work by coincidence, and repointing --primary turned that
+     coincidence into white-on-brass at 3.73:1. 6.10:1. */
+  --signal-on: var(--color-sand-950);
+
+  /* An effect chip, and the same pair swapped when it is selected. Inversion
+     rather than a ring: the chip is 28px tall, and a 2px ring on every side is
+     a tenth of it — on a dense lane the rings of neighbouring chips visually
+     merge into one another. Swapping the fill changes nothing about the box.
+     6.61:1 either way round. */
+  --effect-surface: var(--color-effect-100);
+  --effect-foreground: var(--color-effect-700);
+
+  --chart-1: oklch(0.62 0.105 70);
+  --chart-2: oklch(0.62 0.137 250);
+  --chart-3: oklch(0.62 0.133 150);
+  --chart-4: oklch(0.62 0.232 320);
+  --chart-5: oklch(0.62 0.194 30);
+
+  /* Above or below your own median — the one job that wants a diverging pair,
+     because the data is a ratio around a baseline rather than a set of
+     categories. Marks borrow the chart tokens (warm H70 / cool H250): warm and
+     cool read as opposite poles, where two cool hues would not. Deliberately
+     NOT --signal; brass-as-surface means "this ritual is running", and a bar is
+     not a state claim.
+
+     The ink steps are separate slots because the marks sit at L 0.62 and lose
+     to body text on sand-50. Brass has a ramp to borrow from. The cool pole
+     does not, so --shortfall-ink is a raw value pinned to L 0.47 — brass-700
+     exactly — so neither pole reads louder than the other. */
+  --gain: var(--chart-1);
+  --gain-soft: color-mix(in oklch, var(--chart-1) 16%, transparent);
+  --gain-ink: var(--color-brass-700);
+
+  --shortfall: var(--chart-2);
+  --shortfall-soft: color-mix(in oklch, var(--chart-2) 14%, transparent);
+  --shortfall-ink: oklch(0.47 0.13 250);
+
+  --sidebar: var(--color-sand-100);
+  --sidebar-foreground: var(--color-sand-900);
+  --sidebar-primary: var(--color-sand-950);
+  --sidebar-primary-foreground: var(--color-sand-50);
+  --sidebar-accent: var(--color-sand-50);
+  /* Hover sits between the sidebar surface and the filled active row, so the
+     two states are told apart by tone instead of by font weight. Mixed
+     explicitly: an alpha modifier on --sidebar-accent silently resolves to the
+     full colour, which made hover and active identical. */
+  --sidebar-accent-subtle: color-mix(
+    in oklch,
+    var(--color-sand-50) 55%,
+    var(--color-sand-100)
+  );
+  --sidebar-accent-foreground: var(--color-sand-900);
+  --sidebar-border: color-mix(in oklch, var(--color-sand-950) 8%, transparent);
+  --sidebar-ring: var(--color-sand-700);
+
+  /* Each stack opens with a 1px spread ring that stands in for a border,
+     then a tight layer and a wide ambient one. A translucent ring
+     composites over any background; a solid border is tuned to exactly
+     one. One big drop shadow reads as fake. */
+  --elevation-0: 0 0 0 1px oklch(0.235 0.008 70 / 0.04);
+  --elevation-1:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.05),
+    0 1px 2px oklch(0.235 0.008 70 / 0.05);
+  --elevation-2:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.06),
+    0 1px 3px oklch(0.235 0.008 70 / 0.05),
+    0 4px 10px -4px oklch(0.235 0.008 70 / 0.05);
+  --elevation-3:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.07),
+    0 2px 4px -1px oklch(0.235 0.008 70 / 0.06),
+    0 8px 18px -6px oklch(0.235 0.008 70 / 0.07);
+  --elevation-4:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.08),
+    0 4px 8px -2px oklch(0.235 0.008 70 / 0.07),
+    0 16px 32px -8px oklch(0.235 0.008 70 / 0.08);
+  --elevation-5:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.09),
+    0 8px 16px -4px oklch(0.235 0.008 70 / 0.08),
+    0 28px 56px -12px oklch(0.235 0.008 70 / 0.1);
+
+  /* Dividers stay crisp on retina. */
+  --border-hairline: 1px;
+}
+
+@media only screen and (min-resolution: 192dpi) {
+  :root {
+    --border-hairline: 0.5px;
+  }
+}
+
+.dark {
+  --background: var(--color-sand-950);
+  --foreground: var(--color-sand-50);
+
+  /* Cards stay the LIGHTER surface. Dark mode mirrors the layering,
+     it does not invert it — the topmost surface remains the brightest. */
+  --card: var(--color-sand-900);
+  --card-foreground: var(--color-sand-50);
+  --popover: var(--color-sand-900);
+  --popover-foreground: var(--color-sand-50);
+
+  /* Mirrored, not repeated: the near-black fill becomes the near-white one and
+     the text flips with it. --primary-hover needs no dark override — it mixes
+     --primary toward --background, and both of those have already flipped. */
+  --primary: var(--color-sand-50);
+  --primary-foreground: var(--color-sand-950);
+
+  --secondary: var(--color-sand-800);
+  --secondary-foreground: var(--color-sand-100);
+
+  --muted: var(--color-sand-800);
+  --muted-foreground: var(--color-sand-400);
+
+  --accent: var(--color-sand-800);
+  --accent-foreground: var(--color-sand-50);
+
+  --destructive: var(--color-danger-400);
+  --destructive-foreground: var(--color-sand-950);
+
+  /* Solid in dark mode. An alpha-white hairline glows against a dark
+     surface; a solid one sits quietly. Exactly the reverse of light. */
+  --border: var(--color-sand-800);
+  --input: var(--color-sand-700);
+  /* Same swap as light, mirrored: brass-400 sat at L 0.70, sand-300 at L 0.78.
+     One step lighter, because the ground here is dark and the chroma that
+     carried the old ring is gone. */
+  --ring: var(--color-sand-300);
+
+  --signal: var(--color-brass-400);
+  --signal-surface: var(--color-brass-900);
+  --signal-foreground: var(--color-brass-200);
+  --signal-border: color-mix(in oklch, var(--color-brass-400) 34%, transparent);
+
+  /* Mirrored, not inverted: the chip stays the lighter surface against a dark
+     lane, the same way cards do. 6.99:1. */
+  --effect-surface: oklch(0.42 0.06 300);
+  --effect-foreground: oklch(0.93 0.03 300);
+
+  --chart-1: oklch(0.7 0.11 70);
+  --chart-2: oklch(0.7 0.14 250);
+  --chart-3: oklch(0.7 0.14 150);
+  --chart-4: oklch(0.7 0.2 320);
+  --chart-5: oklch(0.7 0.16 30);
+
+  /* Selected, not flipped. The marks step up with the chart tokens above; the
+     ink slots collapse onto them, because against sand-950 the L 0.47 steps
+     that carried on paper go muddy. */
+  --gain-ink: var(--color-brass-300);
+  --shortfall-ink: oklch(0.78 0.12 250);
+
+  --sidebar: var(--color-sand-950);
+  --sidebar-foreground: var(--color-sand-50);
+  --sidebar-primary: var(--color-sand-50);
+  --sidebar-primary-foreground: var(--color-sand-950);
+  --sidebar-accent: var(--color-sand-900);
+  --sidebar-accent-subtle: color-mix(
+    in oklch,
+    var(--color-sand-900) 55%,
+    var(--color-sand-950)
+  );
+  --sidebar-accent-foreground: var(--color-sand-50);
+  --sidebar-border: var(--color-sand-800);
+  --sidebar-ring: var(--color-sand-300);
+
+  /* Stacked depth shadows are invisible against a dark ground. Collapse
+     every stack to a single low-opacity white ring — that is what reads
+     as elevation in dark mode. */
+  --elevation-0: 0 0 0 1px oklch(1 0 0 / 0.06);
+  --elevation-1: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --elevation-2: 0 0 0 1px oklch(1 0 0 / 0.09);
+  --elevation-3: 0 0 0 1px oklch(1 0 0 / 0.11);
+  --elevation-4: 0 0 0 1px oklch(1 0 0 / 0.13);
+  --elevation-5: 0 0 0 1px oklch(1 0 0 / 0.16);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-signal: var(--signal);
+  --color-signal-surface: var(--signal-surface);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-signal-border: var(--signal-border);
+  --color-signal-on: var(--signal-on);
+
+  --color-effect-surface: var(--effect-surface);
+  --color-effect-foreground: var(--effect-foreground);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-gain: var(--gain);
+  --color-gain-soft: var(--gain-soft);
+  --color-gain-ink: var(--gain-ink);
+  --color-shortfall: var(--shortfall);
+  --color-shortfall-soft: var(--shortfall-soft);
+  --color-shortfall-ink: var(--shortfall-ink);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-subtle: var(--sidebar-accent-subtle);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-2xs: var(--elevation-0);
+  --shadow-xs: var(--elevation-1);
+  --shadow-sm: var(--elevation-2);
+  --shadow-md: var(--elevation-3);
+  --shadow-lg: var(--elevation-4);
+  --shadow-xl: var(--elevation-5);
+}
+
+/* Wide-gamut screens get richer brass; sRGB keeps the safe base above.
+   Chroma raised to the same fraction of the P3 ceiling — +15% to +25%. */
+@media (color-gamut: p3) {
+  @supports (color: oklch(1 0 0)) {
+    :root,
+    .dark {
+      --color-brass-200: oklch(0.86 0.071 70);
+      --color-brass-300: oklch(0.78 0.132 70);
+      --color-brass-400: oklch(0.7 0.143 70);
+      --color-brass-500: oklch(0.62 0.131 70);
+      --color-brass-600: oklch(0.545 0.108 70);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    /* A missing weight should surface as an obvious regression,
+       not as a quietly fabricated bold. */
+    font-synthesis: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Digits that tick must not shove their neighbours around. */
+  [data-slot="metric"],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-brass-200);
+    color: var(--color-sand-950);
+  }
+
+  a:not([class]) {
+    text-decoration-line: underline;
+    text-decoration-thickness: from-font;
+    text-underline-position: from-font;
+    text-decoration-skip-ink: auto;
+  }
+
+  /* Anything user-supplied can carry a URL or token that would
+     otherwise punch straight out of its container. */
+  [data-slot="user-content"] {
+    overflow-wrap: break-word;
+  }
+
+  /* Press feedback. A transition (not a keyframe) so releasing mid-press
+     returns smoothly instead of restarting. The timing lives on the
+     component's own utility class — a rule here sits in @layer base and
+     would be overridden by it. */
+  [data-slot="button"]:active:not(:disabled) {
+    scale: 0.96;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Prose presets — inert until ./typeset.css is imported above.
+
+   The boundary that keeps the two type systems from fighting:
+
+     chrome  →  the role scale in @theme (text-body, text-caption,
+                text-card-title). Cards, rows, buttons, sidebar, forms.
+     prose   →  .typeset + a preset. Rendered markdown only.
+
+   Never set text-* utilities inside a .typeset container: two rhythm
+   systems would compete for the same paragraph.
+
+   Font names are mapped here rather than in the generated file, so
+   typeset.css can be replaced wholesale without losing the wiring.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --typeset-size is stated, not inherited. Left unset it resolves to 1em,
+   which meant the chat prose picked up whatever the chrome scale had set on
+   the bubble above it — the transcript rendered at text-sm, 14px, for the one
+   surface in the product people actually read. Naming it here is also what
+   keeps the two type systems from meeting: a text-* utility on an ancestor can
+   no longer reach in and set the rhythm of a paragraph.
+
+   Same 15px as the wiki preset. The app has one prose size; chat is denser
+   than an essay only in its flow, not in its type. */
+.typeset-chat {
+  --typeset-font-body: var(--font-sans);
+  --typeset-font-heading: var(--font-sans);
+  --typeset-font-mono: var(--font-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.6;
+  --typeset-flow: 1em;
+}
+
+.typeset-wiki {
+  --typeset-font-body: var(--font-sans);
+  --typeset-font-heading: var(--font-sans);
+  --typeset-font-mono: var(--font-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.75;
+  --typeset-flow: 1.5em;
+}
+
+/* Dark surfaces read tighter than light ones at the same leading. */
+.dark .typeset {
+  --typeset-leading: 1.85;
+}
+
+/* A heading that leaves one word alone on its last line is the most visible
+   kind of ragged type, and long-form prose is where multi-line headings
+   actually happen — /why runs 208 lines of them. `balance` rather than
+   `pretty`: browsers cap balancing at a handful of lines, which is exactly the
+   range a heading occupies, while `pretty` is tuned for paragraphs.
+
+   Lives here rather than in typeset.css because that file is generated at
+   ui.shadcn.com/typeset and gets replaced wholesale. */
+.typeset :is(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+/* ── Touch defaults ───────────────────────────────────────────────
+   Unlayered on purpose: these must win over utility classes.
+   ────────────────────────────────────────────────────────────── */
+
+/* Kills the 300ms tap delay and double-tap-to-zoom on controls. Without
+   it every button on the page feels a beat behind on mobile. */
+button,
+a,
+input,
+textarea,
+select,
+label,
+[role="button"],
+[data-slot="switch"] {
+  touch-action: manipulation;
+}
+
+/* Safety net for the iOS zoom-on-focus rule. shadcn's Input and Textarea
+   already ship `text-base md:text-sm`; this catches anything hand-rolled
+   later, and native <select>, which nothing has covered. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* The composer's icon buttons render at 28×28. They are the attach and send
+   controls on the primary surface, and send is the one action the whole page
+   exists for — 28px is a miss on a phone. Same treatment as the switch below:
+   the pseudo-element grows to 44×44, the visual size does not move, and the
+   two never collide because they sit at opposite ends of the addon row. */
+@media (pointer: coarse) {
+  [data-slot="input-group-addon"] [data-slot="button"] {
+    position: relative;
+  }
+
+  [data-slot="input-group-addon"] [data-slot="button"]::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* Every other button. The default size is h-8 — 32px, well under the 44px
+   floor — and every other size variant is smaller still, down to 24px for
+   `xs`. This was previously worked around per page, which meant the floor held
+   wherever someone remembered it.
+
+   Height-agnostic on purpose: a fixed 44px box centred on the button covers
+   every size variant with one rule, instead of four rules keyed on utility
+   classes that a size variant could rename out from under them.
+
+   Vertical only. Buttons sit side by side in groups and toolbars far more
+   often than they stack, so growing the width is what would make two hit
+   areas overlap — and an overlapping target is a different bug, not a fix.
+   The width already matches what the eye aims at.
+
+   The addon buttons above keep their own rule: it grows them on both axes,
+   and taking that away to apply this one would be a regression. */
+@media (pointer: coarse) {
+  [data-slot="button"]:not(:where([data-slot="input-group-addon"] *))::after,
+  /* HoldToConfirm is a button that is not `data-slot="button"` — it renders its
+     own element so the progress fill and the charging state have somewhere to
+     live. It was therefore the one control the rule above missed, which is the
+     worst possible one to miss: it is the pattern AGENTS.md mandates for every
+     destructive action, so the floor failed exactly where the mistake is least
+     recoverable. Listed explicitly rather than renamed to `button`, because the
+     slot name is what the fill and `data-charging` key off. */
+  [data-slot="hold-to-confirm"]::after,
+  /* A disclosure summary is a control even though it is not a button. Where one
+     gates a destructive action, its caption-sized line is the only way to reach
+     that action on touch. */
+  [data-slot="disclosure-summary"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 0;
+    left: 0;
+    height: 44px;
+    translate: 0 -50%;
+  }
+}
+
+/* The small switch is 24×14px with a 48×30px hit area — under the 44px
+   floor on the axis that matters. Visual size stays put; only the
+   pseudo-element grows, so nothing reflows. */
+@media (pointer: coarse) {
+  [data-slot="switch"]::after {
+    inset: -15px -12px;
+  }
+}
+
+/* Every animation gets a reduced-motion path — including opacity fades. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* `*` matches elements, not `::details-content` — and `transition-duration`
+     does not inherit, so the universal rule above cannot reach the disclosure
+     panel. Without this the chevron (a real element, so flattened) snaps while
+     the panel it points at still animates its height for 200ms, which is the
+     mismatched pair the animation was added to prevent, delivered only to the
+     people who asked for less motion. */
+  [data-slot="disclosure"]::details-content {
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Killing the transition alone would leave the press *snapping* into place
+     instead of easing there — still motion, just abrupt. Remove the
+     displacement itself; the button keeps its colour and ring feedback.
+
+     Both properties are named because the press is two displacements, not
+     one: `scale: 0.96` above, plus `translate-y-px` on the button's own
+     utility class. Only the scale was neutralised here, so the 1px drop
+     survived reduced motion — and survived it silently, since nothing looks
+     wrong until the setting is actually on. */
+  [data-slot="button"]:active:not(:disabled) {
+    scale: 1;
+    translate: none;
+  }
+}
+
+/* View transitions.
+
+   Used by components/drafts/drafts-list.tsx for approve, discard and reopen —
+   the three changes that move a version card in ways CSS cannot reach: a 450px
+   editor becoming a 75px receipt in place, and a discarded column letting its
+   neighbours slide 355px sideways into the vacated slots.
+
+   The browser's default is 250ms `ease`, which is both slower than this UI's
+   budget and a weaker curve than anything else here uses. 200ms on the group
+   (position and size) with the same curve the buttons use, and a shorter
+   cross-fade on the image pair so the two states are not both half-visible for
+   the whole transition.
+
+   `prefers-reduced-motion` is handled in JS rather than here: the reduce block
+   above flattens durations, but a view transition with a near-zero duration
+   still snapshots and repaints the document. `withViewTransition` skips
+   `startViewTransition` entirely instead, so reduced motion gets a plain
+   synchronous state change. */
+/* Disclosures open, they do not appear.
+ *
+ * A native `<details>` toggles its content between `display: none` and laid
+ * out, so the body snaps into place in a single frame. That is fine on its own;
+ * it stops being fine the moment the summary's chevron rotates beside it, which
+ * is what this is for. One element takes 200ms and the other teleports, and the
+ * eye reads the pair as broken rather than reading the faster one as fast.
+ *
+ * `::details-content` plus `interpolate-size: allow-keywords` is what makes
+ * `height: auto` an interpolatable value, so the panel can grow to its natural
+ * height without anybody measuring it in JavaScript. `interpolate-size` is
+ * inherited, so it is scoped to the element rather than set on `:root` — this
+ * should not quietly enable auto-height interpolation everywhere.
+ *
+ * `transition-behavior: allow-discrete` is load-bearing: `content-visibility`
+ * flips discretely, and without it the content stays hidden for the whole
+ * transition and then pops.
+ *
+ * Height is normally the wrong thing to animate — it is layout, not compositing.
+ * It is the right thing here: the panel has to push the content below it down,
+ * and a transform would slide it over that content instead. The tradeoff is
+ * accepted knowingly, on a small panel that opens on demand rather than on a
+ * list that reflows.
+ *
+ * Browsers without `::details-content` support get today's behaviour, which is
+ * the instant open. Nothing is broken by the absence.
+ *
+ * Reduced motion needs its own rule up in the reduce block, and this is the
+ * trap: the universal selector there matches elements, not `::details-content`,
+ * and `transition-duration` does not inherit — so the global flattening does
+ * not reach this transition. An earlier version of this comment claimed it did.
+ * The visible symptom was the chevron snapping while the panel kept animating,
+ * for exactly the users who had asked for neither. */
+[data-slot="disclosure"] {
+  interpolate-size: allow-keywords;
+}
+
+[data-slot="disclosure"]::details-content {
+  height: 0;
+  overflow: hidden;
+  transition:
+    height 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    content-visibility 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition-behavior: allow-discrete;
+}
+
+[data-slot="disclosure"][open]::details-content {
+  height: auto;
+}
+
+/* The root must not cross-fade.
+
+   By default the browser lays a snapshot of the whole old page over the whole
+   new one and dissolves between them. Anything that moved is then visible in
+   both places at once: approving a version on one piece made the piece below
+   it drift, half-transparent, across the row that had taken its place. It read
+   as a rendering fault, which is worse than the jump it was meant to smooth.
+
+   Disabling the pair here means only named elements animate, and everything
+   else swaps in one frame. `isolation: auto` on the image pair is part of the
+   recipe — without it the two layers still blend. */
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(root) {
+  animation: none;
+  opacity: 1;
+}
+
+::view-transition-group(*) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 140ms;
+}

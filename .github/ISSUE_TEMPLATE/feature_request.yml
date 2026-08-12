@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose something Quincy should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        [`docs/vision.md`](../../docs/vision.md) decides whether a feature
+        should exist. Worth a skim first — some things (dashboards, follower
+        charts, autoposting without approval) are deliberately not built.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do that Quincy does not do today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working. Which surface does it live on?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
