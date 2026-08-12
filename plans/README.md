@@ -19,7 +19,7 @@ The reviewer maintains this index; executors do not edit it.
 | 005 | Let customers enter a promotion code at checkout | P2 | S | — | DONE — `47d7725` |
 | 006 | Actually refuse a second subscription — 003's guard never runs | P1 | M | 003 | DONE — `5748f35` — verified 409 |
 | 007 | Record what every turn costs, and make /credits real | P1 | M | — | DONE — `de66738` |
-| 008 | The trial ceiling | P1 | S | 007 | **NOT WRITTEN — waiting on data** |
+| 008 | The trial ceiling | P1 | S | 007 | **NOT WRITTEN — the data has arrived, the plan has not.** Measured 2026-08-12 over 142 rows: the owner's account is 77 turns at $1.61, mean 2.1¢, p50 1.45¢, p95 4.1¢; `dev@quincy.test` is 65 turns at $0.88. Everything before 2026-08-31 is introductory pricing, so double it for September. That is enough to write the number against. Deliberately left unwritten in this pass because the owner asked for it to be held back, not because it is still blocked. |
 
 ### Why 008 is deliberately unwritten
 
@@ -53,13 +53,20 @@ which is why there are **two 005s** — read the filename, not the number.
 | [012-harden-the-import-money-path.md](012-harden-the-import-money-path.md) | Cooldown claim on import, result objects instead of throws after spend, meter the compile, bound the prompt | DONE — `09a905b`, reviewed. Scope amended mid-flight to allow one line in `lib/channels.ts` (see below) |
 | [013-backfill-cursor-and-pagination-tests.md](013-backfill-cursor-and-pagination-tests.md) | `until_id` backfill so "import again" is true, NULL-safe cursors via id numerics, pagination test suite | DONE — `a7feb96`, reviewed |
 | [014-sources-row-polish.md](014-sources-row-polish.md) | Aggregate `corpusSummary`, fix `@@handle`, receipt state describes one run | DONE — `c9cfb67`, reviewed |
-| [015-quincy-writes-the-draft.md](015-quincy-writes-the-draft.md) | `draftAngle` calls a model: channel-adapted drafts written from the brain's voice, metered and entitlement-gated | DONE — `d327057`, reviewed. On branch `advisor/015-quincy-writes-the-draft`, **not merged**; a live "Draft this" check is owed |
+| [015-quincy-writes-the-draft.md](015-quincy-writes-the-draft.md) | `draftAngle` calls a model: channel-adapted drafts written from the brain's voice, metered and entitlement-gated | DONE — `d327057`, reviewed. **Merged**: it is in the open-source commit, and `draftAngle` is now also what the Studio chat's `draft_angle` tool calls. A live "Draft this" check is still owed |
 | [016-the-schedule-table-and-dispatcher.md](016-the-schedule-table-and-dispatcher.md) | `rhythm_subscription` + `rhythm_run`, a wall-clock timing model, the dispatcher cron, a handler registry, and a `/rhythm` switch that works | DONE — branch `feat/rhythms-and-adapt`. Executed with two deliberate changes to the plan, recorded below |
 | [018-voice-notes-become-riffs.md](018-voice-notes-become-riffs.md) | Speak a thought, come back to angles: batch transcription through the Gateway, the first Vercel Workflow, a level meter instead of a live session, and two malformed-output bugs found live | DONE — branch `feat/voice-riffs`. Written after execution; see the note at its head |
 | [019-circleback-meetings-become-riffs.md](019-circleback-meetings-become-riffs.md) | The first real source connection: a signed inbound webhook, `source_connection`, speaker-filtered transcripts, and a selection pass because a meeting is not a scrap | DONE — branch `feat/circleback-meetings`. 30 e2e checks pass stubbed and live. Four departures, one silent entitlement bug, and a cold audit that found four more — all recorded in the plan |
 | [020-the-pricing-page.md](020-the-pricing-page.md) | `$49` where a stranger can read it: four directions compared live, the setup sequence corrected from the flow rather than from row counts, an entrance instead of a walk, and `/pricing` taken out of the auth gate | DONE — branch `pricing-page`. Written after execution; see the note at its head |
 | [021-shipped-work-becomes-riffs.md](021-shipped-work-becomes-riffs.md) | The third input `docs/vision.md` names: merged pull requests become riffs. The description is the material and the diff is not — measured 51x larger across this repo's own 27 merges — plus a GitHub App, a public webhook URL where the signature is the whole authentication, and a selection whose expected answer is no | DONE — branch `feat/shipped-work`, off 019. 41/41 e2e live, 24 unit. Decision 2 overturned before execution (App, not repo webhook); recorded at the head of the plan. Owed: the app itself and one real merge |
 | [022-first-run-interview-then-wiring.md](022-first-run-interview-then-wiring.md) | The cold start: four questions in the Studio's own chat components that write to the brain as they land, then one wiring screen — channels above sources, with the corpus read hanging off the X grant because that consent buys both. Design decided across two prototype rounds, whose losers and reasoning are folded into the plan itself | DONE — branch `feat/first-run`. 22/22 verify, 8/8 unit. Five departures recorded at the head of the plan. Owed: a real X connect through `?next=/welcome`, which needs a browser |
+
+**Status of every "not merged" note below: stale.** The repository's history
+was reset on 2026-08-12 when it went open source, and every branch named here
+was squashed into the single commit `b9f7643`. Their content is in `main`; the
+branch pointers still exist locally and their old SHAs still resolve, because
+`pre-oss/main` points into the history they came from. Read a "not merged" in
+this file as "merged, by a squash that erased the merge commit".
 
 There is no `plans/017`. The riffs table and the paste box are referenced
 throughout the code as "plans/017" but that file was never written — the work
