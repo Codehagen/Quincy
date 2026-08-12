@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   GenerationFailed,
+  hasSpend,
   retryMalformed,
   unwrapStringifiedObject,
   usageAccumulator,
@@ -336,6 +337,78 @@ describe("retryMalformed", () => {
     expect(out.tokens).toBe(100)
   })
 
+  /**
+   * The 2026-08-08 failure and its boundary.
+   *
+   * A model that returns nothing is the most retry-worthy failure there is, and
+   * it was the only one this loop did not cover — an unguarded `await` exits on
+   * a throw. What must not be retried is our own bug, which would simply be
+   * bought twice.
+   */
+  const failed = (tokens: number) =>
+    new GenerationFailed(new Error("the model did not return a response"), {
+      inputTokens: tokens,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+    })
+
+  it("gives a no-response the second attempt it was promised", async () => {
+    const call = vi
+      .fn<() => Promise<{ angles: unknown }>>()
+      .mockRejectedValueOnce(failed(3156))
+      .mockResolvedValueOnce({ angles: [1, 2] })
+
+    const out = await retryMalformed(call, (v) => Array.isArray(v.angles))
+
+    expect(out).toEqual({ angles: [1, 2] })
+    expect(call).toHaveBeenCalledTimes(2)
+  })
+
+  it("rethrows the last failure, which is the one carrying the whole bill", async () => {
+    const first = failed(3156)
+    const second = failed(6312)
+    const call = vi
+      .fn<() => Promise<{ angles: unknown }>>()
+      .mockRejectedValueOnce(first)
+      .mockRejectedValueOnce(second)
+
+    // Identity, not type. `spent` accumulates across attempts, so the second
+    // instance knows what both calls cost and the first knows only its own.
+    // Rethrowing the wrong one under-reports on the path that already failed.
+    await expect(
+      retryMalformed(call, (v) => Array.isArray(v.angles))
+    ).rejects.toBe(second)
+    expect(call).toHaveBeenCalledTimes(2)
+  })
+
+  it("never buys our own bug a second time", async () => {
+    const bug = new TypeError("cannot read properties of undefined")
+    const call = vi
+      .fn<() => Promise<{ angles: unknown }>>()
+      .mockRejectedValue(bug)
+
+    await expect(
+      retryMalformed(call, (v) => Array.isArray(v.angles))
+    ).rejects.toBe(bug)
+    // The whole safety argument for retrying a throw at all.
+    expect(call).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns a malformed answer that followed a no-response", async () => {
+    const malformed = { angles: "still a string" }
+    const call = vi
+      .fn<() => Promise<{ angles: unknown }>>()
+      .mockRejectedValueOnce(failed(3156))
+      .mockResolvedValueOnce(malformed)
+
+    // Not a rejection: the caller's "the model found nothing" path handles
+    // this, and it would be surprised by a throw it never got before.
+    const out = await retryMalformed(call, (v) => Array.isArray(v.angles))
+
+    expect(out).toBe(malformed)
+    expect(call).toHaveBeenCalledTimes(2)
+  })
+
   it("passes the attempt number through, so a caller can vary the ask", async () => {
     const seen: number[] = []
     const call = vi.fn(async (attempt: number) => {
@@ -460,6 +533,41 @@ describe("usageFromError", () => {
       cachedInputTokens: 0,
       outputTokens: 12,
     })
+  })
+})
+
+describe("hasSpend", () => {
+  it("refuses a bill of nothing", () => {
+    // The regression: a connection that never reached the model. Both the
+    // accumulator's starting value and a `usageFromError` that found nothing
+    // arrive here as {0,0,0}, and recording it puts a turn on /credits that
+    // nobody took.
+    expect(
+      hasSpend({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 })
+    ).toBe(false)
+  })
+
+  it("counts a call that only sent a prompt", () => {
+    // The 2026-08-08 shape: input spent, the model threw before writing
+    // anything back. That is the money this predicate must not suppress.
+    expect(
+      hasSpend({ inputTokens: 3156, cachedInputTokens: 0, outputTokens: 0 })
+    ).toBe(true)
+  })
+
+  it("counts a call that only produced output", () => {
+    expect(
+      hasSpend({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 43 })
+    ).toBe(true)
+  })
+
+  it("counts a cache read on its own", () => {
+    // A cache-read-only turn was still billed, at a lower rate. Treating it as
+    // free would under-report in exactly the direction the accumulator was
+    // written to prevent.
+    expect(
+      hasSpend({ inputTokens: 0, cachedInputTokens: 2048, outputTokens: 0 })
+    ).toBe(true)
   })
 })
 

@@ -28,7 +28,7 @@ import {
   type Riff,
 } from "@/lib/riffs"
 import { getSession } from "@/lib/session"
-import { GenerationFailed } from "@/lib/structured-output"
+import { GenerationFailed, hasSpend } from "@/lib/structured-output"
 import { draft, draftVersion, riffAngle } from "@/lib/schema-app"
 import { recordUsage, spendCooldown } from "@/lib/usage"
 
@@ -314,8 +314,16 @@ export async function draftAngle(input: {
      * rather than a duck-type because a genuinely unexpected error (a DB blip
      * inside the try, a bug in this file) owes nothing and must not invent a
      * charge.
+     *
+     * `hasSpend` is the second half of that same argument. A `GenerationFailed`
+     * whose bill is `{0, 0, 0}` is a throw that never reached the model, and
+     * carrying it out through the exception does not make it a charge. Writing
+     * the row anyway would put a turn on /credits that nobody took — the fix
+     * for one under-report becoming an over-report in the other direction.
      */
-    if (cause instanceof GenerationFailed) await meter(cause.usage)
+    if (cause instanceof GenerationFailed && hasSpend(cause.usage)) {
+      await meter(cause.usage)
+    }
   }
 
   const bodies = new Map(versions.map((v) => [v.channel, v.body]))

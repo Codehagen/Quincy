@@ -69,10 +69,31 @@
  * attempts turns a measured ~10-15% malformed rate into ~1-2% while costing
  * the extra call only on the runs that actually needed it.
  *
- * `usable` decides. It is given the value and must say whether it is the shape
- * the caller needs — a predicate rather than a try/catch, because the failures
- * here do not throw. They return a plausible object with a string where an
- * array belongs, and the throw happens later, somewhere that cannot retry.
+ * `usable` decides for the answers that come back. It is given the value and
+ * must say whether it is the shape the caller needs — a predicate rather than a
+ * try/catch, because the mangling this was built for does not throw. It returns
+ * a plausible object with a string where an array belongs, and the throw
+ * happens later, somewhere that cannot retry.
+ *
+ * **A `GenerationFailed` is retried too, and it is the case that needed it
+ * most.** On 2026-08-08 at 22:05:20 UTC a drafting call came back as
+ * `AI_NoObjectGeneratedError` — the model did not return a response — and this
+ * loop gave it one attempt where the paragraph above promises two, because an
+ * unguarded `await` exits a loop on a throw. The user pressed "Draft this" and
+ * got their own hook back as the post body. Nothing came back, so there is
+ * nothing to salvage and no reason to believe the second attempt inherits the
+ * first one's problem: it is the most retry-worthy failure there is, and it was
+ * the only one not covered.
+ *
+ * **Only that one.** `GenerationFailed` is thrown by exactly one thing — a
+ * `catch` wrapped around a model call — so anything else reaching here is ours:
+ * a bug in an unwrap, a database error, a mistake in a callback. Retrying those
+ * buys a second copy of the same bug at model prices, so they propagate on the
+ * first attempt, untouched. The `instanceof` is the whole safety argument.
+ *
+ * The ceiling does not move. Two attempts is still the worst case and still the
+ * most this can ever cost; what changes is which failures are allowed to use
+ * the second one.
  */
 export async function retryMalformed<T>(
   call: (attempt: number) => Promise<T>,
@@ -87,14 +108,46 @@ export async function retryMalformed<T>(
 ): Promise<T> {
   let last: T | undefined
 
+  /**
+   * The most recent model failure, or nothing if the last attempt returned.
+   *
+   * Cleared on every attempt that comes back at all, so a throw followed by a
+   * malformed answer falls through to the return below — which is the caller's
+   * "the model found nothing" path and already handled. Kept when the last
+   * attempt threw, because a caller that catches a failed generation to build a
+   * fallback needs the error, not an `undefined` it never expected.
+   */
+  let thrown: GenerationFailed | undefined
+
   for (let attempt = 0; attempt < attempts; attempt++) {
-    last = await call(attempt)
+    try {
+      last = await call(attempt)
+      thrown = undefined
+    } catch (cause) {
+      // Ours propagates; the model's is retried. See the doc comment above.
+      if (!(cause instanceof GenerationFailed)) throw cause
+
+      thrown = cause
+      console.error(
+        `[${label}] no response on attempt ${attempt + 1} of ${attempts}`
+      )
+      continue
+    }
+
     if (usable(last)) return last
 
     console.error(
       `[${label}] malformed result on attempt ${attempt + 1} of ${attempts}`
     )
   }
+
+  /**
+   * Attempts ran out with the last one throwing. The bill it carries is the
+   * accumulated one — every attempt's spend, not just the final call's — so
+   * rethrowing this exact instance rather than the first is what keeps the
+   * caller's meter honest.
+   */
+  if (thrown) throw thrown
 
   /**
    * The last one is returned rather than thrown on.
@@ -213,6 +266,35 @@ export function usageFromError(cause: unknown): StructuredUsage | undefined {
     cachedInputTokens: inputTokenDetails?.cacheReadTokens ?? 0,
     outputTokens: outputTokens ?? 0,
   }
+}
+
+/**
+ * Whether this usage is worth a `usage_event` row.
+ *
+ * Two different nothings arrive at a call site wearing the same face. The
+ * accumulator starts at zero because nothing has been spent yet, and
+ * `usageFromError` returns `undefined` when an error carried no usage at all —
+ * a connection reset, an abort, a model id that does not exist. Fold the second
+ * into the first and you get `{0, 0, 0}`, which is indistinguishable from a
+ * call that genuinely reached the model and cost nothing.
+ *
+ * Recording that is not merely useless. `summariseUsage` counts rows, so a zero
+ * row is a phantom turn on /credits, and `recentUsage` lists it as an entry
+ * that happened. The page whose entire job is to be an accurate number would be
+ * wrong in the direction nobody checks — upward, quietly, on failures.
+ *
+ * The rule is `usageFromError`'s own, one layer up: a call that never reached
+ * the model owes nothing. It lives here rather than inside `recordUsage`
+ * because a caller that genuinely wants to record a zero-cost event must still
+ * be able to, and burying the judgment in the writer hides it from the call
+ * sites that actually make it.
+ */
+export function hasSpend(usage: StructuredUsage): boolean {
+  return (
+    usage.inputTokens > 0 ||
+    usage.cachedInputTokens > 0 ||
+    usage.outputTokens > 0
+  )
 }
 
 /**
