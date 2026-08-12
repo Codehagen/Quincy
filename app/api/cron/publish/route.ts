@@ -61,8 +61,16 @@ export async function GET(request: Request) {
    *
    * `failed` and `unsupported` are not degraded. A platform refusing a post is
    * this route working: the refusal was recorded and the user can read it.
+   *
+   * `deferred` counts for the same reason `truncated` does, and says something
+   * `truncated` cannot: the sweep ran out of clock rather than out of cap. Work
+   * it declined to start is still due, so the run did not finish its job.
    */
-  const degraded = run.failed > 0 || run.truncated || run.outcomes.missed > 0
+  const degraded =
+    run.failed > 0 ||
+    run.truncated ||
+    run.deferred > 0 ||
+    run.outcomes.missed > 0
 
   return Response.json(
     { ok: !degraded, ms: Date.now() - started, unresolved, ...run },

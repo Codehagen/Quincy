@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { isMissed, windowFor } from "./publish-run"
+import {
+  isMissed,
+  MAX_ROWS_PER_RUN,
+  RUN_BUDGET_MS,
+  windowFor,
+  WORST_CASE_ROW_MS,
+} from "./publish-run"
+import { PLATFORM_TIMEOUT_MS } from "./channels"
 
 /**
  * The catch-up window, which is the rule standing between a cron that missed
@@ -68,5 +75,51 @@ describe("isMissed", () => {
     // re-checks the window on every row and must not invent a verdict for one
     // that has not come round yet.
     expect(isMissed(new Date(NOW.getTime() + HOUR), cutoff)).toBe(false)
+  })
+})
+
+/**
+ * The budget arithmetic, which is what keeps a run from being killed while it
+ * holds a claimed row.
+ *
+ * The loop itself reads the database and belongs to
+ * scripts/verify-publish-run.ts. What is worth pinning here is the property
+ * the loop depends on: that the cap cannot outlive the clock. Every one of
+ * these fails if somebody raises a number without moving the others.
+ */
+describe("the run budget", () => {
+  it("cannot start more rows than the budget can finish", () => {
+    // The property that makes the cap honest. If this fails, the sweep is
+    // allowed to begin a row it has no time to complete — and a row killed
+    // after the claim is a post nobody can tell the fate of.
+    expect(MAX_ROWS_PER_RUN * WORST_CASE_ROW_MS).toBeLessThanOrEqual(
+      RUN_BUDGET_MS
+    )
+  })
+
+  it("leaves the route headroom to answer", () => {
+    // The other half of this pair is `maxDuration = 300` in
+    // app/api/cron/publish/route.ts. The gap pays for the row still in flight
+    // when the budget expires, plus countUnresolved and the response.
+    const MAX_DURATION_MS = 300_000
+
+    expect(RUN_BUDGET_MS).toBeLessThan(MAX_DURATION_MS)
+    expect(MAX_DURATION_MS - RUN_BUDGET_MS).toBeGreaterThanOrEqual(
+      WORST_CASE_ROW_MS
+    )
+  })
+
+  it("prices a row at three bounded fetches", () => {
+    // A token refresh, LinkedIn's /rest/posts, and its /v2/ugcPosts fallback.
+    // Lowering this below what one LinkedIn attempt can cost would make the
+    // cap a fiction rather than a bound.
+    expect(WORST_CASE_ROW_MS).toBeGreaterThanOrEqual(3 * PLATFORM_TIMEOUT_MS)
+  })
+
+  it("takes at least one row", () => {
+    // MAX_ROWS_PER_RUN is derived by division, so a future timeout large
+    // enough to exceed the budget would floor it to zero and the sweep would
+    // silently stop publishing anything at all.
+    expect(MAX_ROWS_PER_RUN).toBeGreaterThanOrEqual(1)
   })
 })

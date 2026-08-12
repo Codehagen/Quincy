@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 
-import { isChannelEnabled } from "./channels"
+import { isChannelEnabled, PLATFORM_TIMEOUT_MS } from "./channels"
 import { db } from "./db"
 import { publish, type PublishResult } from "./publish"
 import {
@@ -53,15 +53,63 @@ import {
 const CATCH_UP_MS = 2 * 60 * 60 * 1000
 
 /**
+ * The slowest one row can plausibly be.
+ *
+ * Three bounded fetches, each capped at `PLATFORM_TIMEOUT_MS`: a token refresh
+ * inside `getAccessToken`, then LinkedIn's `/rest/posts` attempt, then its
+ * `/v2/ugcPosts` fallback. X is cheaper — one refresh and one post — so this is
+ * the ceiling rather than the average.
+ *
+ * Expressed in terms of the timeout rather than as 30_000, so that lowering the
+ * per-fetch bound in lib/channels.ts moves this with it instead of leaving a
+ * number here that used to be right.
+ *
+ * Exported for lib/publish-run.test.ts.
+ */
+export const WORST_CASE_ROW_MS = 3 * PLATFORM_TIMEOUT_MS
+
+/**
+ * How long the sweep may keep *starting* rows.
+ *
+ * The route allows `maxDuration = 300` seconds. This is 240, and the 60 seconds
+ * of headroom are not slack: the run still has to finish the row it is holding
+ * when the budget expires, then call `countUnresolved` and build the response.
+ * A budget equal to the limit would be no budget at all — the deadline would
+ * arrive at the same moment Vercel's does.
+ *
+ * The number this protects is not throughput. `claim` moves a row to `sending`
+ * *before* calling the platform and nothing moves it back automatically,
+ * because a retry of an unknown outcome is a double post. So every row killed
+ * mid-flight needs a human with database access to resolve it. Stopping between
+ * rows is what keeps that number at zero.
+ *
+ * Exported for lib/publish-run.test.ts.
+ */
+export const RUN_BUDGET_MS = 240_000
+
+/**
  * The most rows one run will take.
  *
- * Same reasoning as MAX_ROWS_PER_RUN in lib/channels-maintenance.ts, with a
- * smaller number: each row here is an OAuth call plus a publish call rather
- * than one heartbeat, and unlike that sweep, work skipped by this one expires.
- * A truncated run is not "we will get them tomorrow" — it is posts that will
- * miss their window while the queue in front of them is served.
+ * Derived, not chosen. It is how many worst-case rows fit inside the budget —
+ * so the cap and the clock can never disagree, and changing a timeout moves it
+ * automatically.
+ *
+ * The previous value was 100, borrowed from MAX_ROWS_PER_RUN in
+ * lib/channels-maintenance.ts, and the reasoning did not transfer: that sweep
+ * does one cheap request per row and its skipped work waits for tomorrow. Here
+ * ten slow rows can exhaust a five-minute function, and work skipped by this
+ * sweep expires rather than waiting.
+ *
+ * It works out at 8, which is a guarantee rather than a throughput target: a
+ * typical row costs a fraction of the worst case, so a run usually empties its
+ * batch in seconds and the deadline below never fires. A queue deeper than this
+ * is served across consecutive runs — at five-minute intervals inside a
+ * two-hour window, that is 24 chances, and `truncated` says so out loud rather
+ * than letting the depth go unnoticed.
+ *
+ * Exported for lib/publish-run.test.ts.
  */
-const MAX_ROWS_PER_RUN = 100
+export const MAX_ROWS_PER_RUN = Math.floor(RUN_BUDGET_MS / WORST_CASE_ROW_MS)
 
 /**
  * The two-hour rule, in one place.
@@ -346,6 +394,16 @@ async function attempt(
 export type PublishRun = {
   due: number
   truncated: boolean
+  /**
+   * Rows this run declined to *start* because the clock ran out.
+   *
+   * Deliberately not folded into `truncated`. They are different diagnoses
+   * demanding different answers: `truncated` says the queue is deeper than one
+   * run's cap, so raise the cap or shorten the interval; `deferred` says the
+   * platform was slow enough that the sweep ran out of time before the queue
+   * ran out of rows. One number could not tell an operator which.
+   */
+  deferred: number
   outcomes: Record<PublishOutcome, number>
   failed: number
 }
@@ -427,6 +485,17 @@ export async function runScheduledPublish({
   }
 
   let failed = 0
+  let deferred = 0
+
+  /**
+   * Wall clock, not `now`.
+   *
+   * `now` is injectable and the tests pass a fixed instant, which is right for
+   * window arithmetic and useless as a deadline — measured against a frozen
+   * clock the budget never expires. This one has to be the real elapsed time of
+   * the run.
+   */
+  const startedAt = Date.now()
 
   /**
    * Sequential, one post at a time, for the reason the maintenance sweep gives
@@ -434,7 +503,28 @@ export async function runScheduledPublish({
    * same instant is what a compromised account looks like, to a platform's
    * abuse heuristics and to a reader's timeline both.
    */
-  for (const row of batch) {
+  for (const [index, row] of batch.entries()) {
+    /**
+     * Before the claim, never after.
+     *
+     * `attempt` moves the row to `sending` and only then calls the platform, so
+     * a deadline checked anywhere inside or after it would strand exactly the
+     * row it was added to protect. Checked here, an expired budget costs a post
+     * five more minutes in the queue; checked one line later, it costs somebody
+     * a manual database read to find out whether that post went out.
+     */
+    if (Date.now() - startedAt > RUN_BUDGET_MS) {
+      deferred = batch.length - index
+      console.error(
+        `[publish] sweep stopped after ${RUN_BUDGET_MS / 1000}s with ` +
+          `${deferred} row(s) unstarted — they are still queued and their ` +
+          "windows are still closing. The next run has five minutes to reach " +
+          "them. A platform is answering slowly, or the queue is deeper than " +
+          "one run."
+      )
+      break
+    }
+
     try {
       const result = await attempt(row, cutoff, deps)
       outcomes[result.outcome] += 1
@@ -458,7 +548,7 @@ export async function runScheduledPublish({
     )
   }
 
-  return { due: batch.length, truncated, outcomes, failed }
+  return { due: batch.length, truncated, deferred, outcomes, failed }
 }
 
 /**
