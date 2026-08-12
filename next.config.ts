@@ -15,7 +15,10 @@ const RENAMED_ROUTES: Array<[from: string, to: string]> = [
   ["/rituals-grid", "/rhythm"],
   ["/rhythm-grid", "/rhythm"],
   ["/ideate", "/riffs"],
-  ["/wiki", "/voice"],
+  // /wiki was the Brain's first name. This pointed at /voice, which was itself
+  // deleted as a placeholder (see components/app-sidebar.tsx) — so the one
+  // entry in this list whose job is to prevent a 404 was answering with one.
+  ["/wiki", "/brain"],
 ]
 
 const nextConfig: NextConfig = {

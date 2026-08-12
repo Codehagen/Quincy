@@ -207,7 +207,7 @@ confirm button.
 | | Use | Where |
 | --- | --- | --- |
 | Role scale (`text-body`, `text-caption`, `text-card-title`, `text-section`, `text-display`, `text-eyebrow`) | App chrome | Cards, rows, buttons, sidebar, forms |
-| `.typeset` + preset | Rendered markdown | Brain (`/wiki`), streaming agent replies (`/ideate`) |
+| `.typeset` + preset | Rendered markdown | Brain (`/brain`), streaming agent replies (`/riffs`, `/studio`) |
 
 Never put `text-*` utilities inside a `.typeset` container — two rhythm systems
 would compete for the same paragraph.
