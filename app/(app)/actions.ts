@@ -1,10 +1,9 @@
 "use server"
 
-import { eq } from "drizzle-orm"
+import { headers } from "next/headers"
 
-import { db } from "@/lib/db"
+import { auth } from "@/lib/auth"
 import { rescheduleForUser } from "@/lib/rhythm-run"
-import { user } from "@/lib/schema"
 import { getSession } from "@/lib/session"
 import { isValidTimeZone } from "@/lib/timezone"
 
@@ -37,10 +36,29 @@ export async function rememberTimeZone(zone: string) {
   // row that can only ever fall back is not worth storing.
   if (!isValidTimeZone(zone)) return
 
-  await db
-    .update(user)
-    .set({ timezone: zone })
-    .where(eq(user.id, session.user.id))
+  /**
+   * Through Better Auth, not through Drizzle, and the difference is the whole
+   * plan.
+   *
+   * `session.cookieCache` serves the entire `user` object out of a signed
+   * cookie for five minutes without touching the database, so a raw
+   * `db.update` lands in the row and changes nothing the next render can see.
+   * A Norwegian signing in with Google would meet the product with every
+   * scheduled post two hours out, with nothing to correct it until the cookie
+   * aged out — on the one visit where the product is explaining itself.
+   *
+   * `updateUser` writes the same column and then calls `setSessionCookie`,
+   * which re-issues the cookie with the new value in it. `timezone` is
+   * `input: true` in lib/auth.ts precisely so this path is open; the same call
+   * is what `saveTimezone` on the settings page makes.
+   *
+   * The cookie cache itself stays as it is. Shortening it to paper over this
+   * would slow every authenticated request in the app to fix one write.
+   */
+  await auth.api.updateUser({
+    body: { timezone: zone },
+    headers: await headers(),
+  })
 
   /**
    * Every rhythm cursor this user has, recomputed against the zone we just
@@ -53,9 +71,10 @@ export async function rememberTimeZone(zone: string) {
    * would have a 09:00 rhythm firing at 10:00 local, correct on the card and
    * an hour out in the world.
    *
-   * advisor-plans/005 made a captured timezone take effect immediately for
-   * rendering. This is the same fix for scheduling, and it belongs here rather
-   * than in a cron because "immediately" is the whole point.
+   * The `updateUser` call above makes a captured timezone take effect
+   * immediately for rendering (advisor-plans/005). This is the same fix for
+   * scheduling, and it belongs here rather than in a cron because
+   * "immediately" is the whole point.
    *
    * Logged rather than thrown: the zone is stored, which is the thing the user
    * asked for, and a rhythm an hour out is a smaller failure than an action
