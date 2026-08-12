@@ -5,6 +5,7 @@
  * npx tsx --env-file=.env.local scripts/invite.ts --count 5
  * npx tsx --env-file=.env.local scripts/invite.ts --count 5 --send
  * npx tsx --env-file=.env.local scripts/invite.ts alice@example.com --send
+ * npx tsx --env-file=.env.local scripts/invite.ts alice@example.com --send --force
  * ```
  *
  * **It is a dry run unless you pass `--send`, and that default is the point.**
@@ -45,7 +46,7 @@ function newCode() {
   return randomBytes(16).toString("base64url")
 }
 
-async function targets(addresses: string[], count: number) {
+async function targets(addresses: string[], count: number, force: boolean) {
   if (addresses.length === 0) {
     return nextInLine(count)
   }
@@ -62,6 +63,31 @@ async function targets(addresses: string[], count: number) {
     if (!row) {
       console.log(`  skip  ${address} — not on the list`)
       continue
+    }
+
+    /**
+     * A spent invite is not a re-invite; it is a second account.
+     *
+     * `spendInviteFor` in lib/waitlist.ts only requires `redeemed_at IS NULL`,
+     * and the write below clears that field so a re-issued code is not dead on
+     * arrival. Put together, naming an address that already signed up mails
+     * them a working code for a *second* signup — which is a different act
+     * from re-sending a link somebody lost, and should not share its command.
+     *
+     * `nextInLine` never reaches here: it excludes redeemed rows already.
+     */
+    if (row.redeemedAt) {
+      const on = row.redeemedAt.toISOString().slice(0, 10)
+      if (!force) {
+        console.log(
+          `  skip  ${row.email} — already signed up ${on}. Re-inviting would ` +
+            `re-open a spent invite; pass --force if that is truly intended.`
+        )
+        continue
+      }
+      console.log(
+        `  note  ${row.email} — already signed up ${on}, --force re-opens the invite`
+      )
     }
 
     if (row.invitedAt) {
@@ -81,6 +107,8 @@ async function targets(addresses: string[], count: number) {
 async function main() {
   const args = process.argv.slice(2)
   const send = args.includes("--send")
+  // Only reachable for explicitly named addresses; see `targets`.
+  const force = args.includes("--force")
   const countFlag = args.indexOf("--count")
   const count = countFlag >= 0 ? Number(args[countFlag + 1]) : 5
   const addresses = args.filter(
@@ -105,7 +133,7 @@ async function main() {
     `\nWaitlist: ${summary.total} total · ${summary.invited} invited · ${summary.redeemed} redeemed\n`
   )
 
-  const people = await targets(addresses, count)
+  const people = await targets(addresses, count, force)
 
   if (people.length === 0) {
     console.log("Nobody to invite.\n")

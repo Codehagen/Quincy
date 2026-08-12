@@ -13,12 +13,16 @@
  *            generic slop, stop and iterate on the prompt.
  *
  * Usage:
- *   npx tsx --env-file=.env.local scripts/corpus-x-live.ts import [--posts=50] [--email=...]
+ *   npx tsx --env-file=.env.local scripts/corpus-x-live.ts import [--posts=50] [--email=...] [--live]
  *   npx tsx --env-file=.env.local scripts/corpus-x-live.ts show [--email=...]
- *   npx tsx --env-file=.env.local scripts/corpus-x-live.ts compile [--email=...]
+ *   npx tsx --env-file=.env.local scripts/corpus-x-live.ts compile [--email=...] [--live]
  *
  * Without --email it targets the one account holding an active X connection,
  * and refuses to guess when there is more than one.
+ *
+ * `import` and `compile` spend money and write to whichever account they
+ * resolve. Against a real address they refuse unless `--live` is passed —
+ * see the comment in main().
  */
 import { and, asc, desc, eq, inArray } from "drizzle-orm"
 
@@ -26,6 +30,7 @@ import { db } from "../lib/db"
 import { importXCorpus } from "../lib/corpus-x"
 import { brainPage, channelConnection, sourceItem } from "../lib/schema-app"
 import { user } from "../lib/schema"
+import { isUnreachableTestAddress } from "../lib/test-address"
 import { compileVoice } from "../lib/voice"
 
 function arg(name: string): string | undefined {
@@ -72,7 +77,35 @@ async function resolveUser(): Promise<{ id: string; email: string }> {
 async function main() {
   const command = process.argv[2]
   const who = await resolveUser()
-  console.log(`Account: ${who.email}\n`)
+
+  /**
+   * The one mutating script that is *supposed* to reach a real account.
+   *
+   * Its whole purpose is a live X connection, and only a person has one — a
+   * hard `@quincy.test` guard like the seed scripts carry would make it
+   * unrunnable. So the guard is an explicit act instead of a suffix: naming a
+   * real account is allowed, but you have to say `--live` while doing it, and
+   * the account is echoed back before a cent is spent.
+   *
+   * `show` is exempt because it only reads.
+   */
+  const live = process.argv.includes("--live")
+  const spends = command !== "show"
+
+  if (spends && !isUnreachableTestAddress(who.email) && !live) {
+    console.error(
+      `Resolved ${who.email} (${who.id}), which is a real account — and ` +
+        `\`${command}\` spends money and writes to it. Pass --live to say so ` +
+        `on purpose, or --email=…@quincy.test to work against a test account.`
+    )
+    process.exit(1)
+  }
+
+  console.log(
+    live && !isUnreachableTestAddress(who.email)
+      ? `Running LIVE against ${who.email} (${who.id})\n`
+      : `Account: ${who.email}\n`
+  )
 
   if (command === "import") {
     const maxPosts = Number(arg("posts") ?? 50)

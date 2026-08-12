@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm"
 import { putPage, type PolicyData } from "../lib/brain"
 import { db } from "../lib/db"
 import { user } from "../lib/schema"
+import { requireTestTarget } from "./target-guard"
 
 const X_STRATEGY: PolicyData = {
   platform: "x",
@@ -130,8 +131,7 @@ const THREADS_STRATEGY: PolicyData = {
 }
 
 async function main() {
-  const email = process.argv[2]
-  if (!email) throw new Error("Usage: seed-brain.ts <email>")
+  const email = requireTestTarget(process.argv[2], "seed-brain.ts")
 
   const [owner] = await db
     .select({ id: user.id })

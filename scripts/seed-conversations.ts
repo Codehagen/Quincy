@@ -7,14 +7,14 @@ import { db } from "../lib/db"
 import { saveTurn } from "../lib/conversations"
 import { conversation } from "../lib/schema-app"
 import { user } from "../lib/schema"
+import { requireTestTarget } from "./target-guard"
 
 const text = (id: string, role: "user" | "assistant", body: string) =>
   ({ id, role, parts: [{ type: "text", text: body }] }) as UIMessage
 
 async function main() {
   // Explicit, because "the first row" quietly seeded the wrong account once.
-  const email = process.argv[2]
-  if (!email) throw new Error("Usage: seed-conversations.ts <email>")
+  const email = requireTestTarget(process.argv[2], "seed-conversations.ts")
 
   const [owner] = await db
     .select({ id: user.id })

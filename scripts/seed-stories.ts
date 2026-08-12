@@ -24,6 +24,7 @@ import { proposePage, putPage, type StoryData } from "../lib/brain"
 import { db } from "../lib/db"
 import { user } from "../lib/schema"
 import { brainPage } from "../lib/schema-app"
+import { requireTestTarget } from "./target-guard"
 
 type Seed = {
   slug: string
@@ -208,14 +209,8 @@ const NOTES: Seed[] = [
 ]
 
 async function main() {
-  const email = process.argv[2]
+  const email = requireTestTarget(process.argv[2], "seed-stories.ts")
   const remove = process.argv.includes("--remove")
-
-  if (!email) {
-    throw new Error(
-      "Usage: seed-stories.ts <email> [--remove]"
-    )
-  }
 
   const [owner] = await db
     .select({ id: user.id })
