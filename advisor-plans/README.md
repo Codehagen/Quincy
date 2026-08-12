@@ -22,6 +22,13 @@ quietly reinterpreted.
 this repository and `pre-oss/main` points into that history. A drift check
 therefore still works; a `git log` against `main` will not show them.
 
+The 45 pre-reset branch pointers were deleted on 2026-08-12 after being
+bundled to `~/quincy-pre-oss-branches-2026-08-12.bundle` — verified as a
+complete history and test-cloned before anything was removed. Some of them
+(`feat/circleback-meetings` among them) carried commits **not** reachable from
+`pre-oss/main`, so that file is the only local copy of those. `git clone
+<bundle> <dir>` brings every one of them back.
+
 Execute in the order below unless dependencies say otherwise. Each executor:
 read the plan fully before starting, honor its STOP conditions, and update your
 row when done.
