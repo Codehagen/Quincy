@@ -2,6 +2,7 @@ import {
   convertToModelMessages,
   createIdGenerator,
   createUIMessageStreamResponse,
+  isStepCount,
   smoothStream,
   streamText,
   toUIMessageStream,
@@ -15,12 +16,25 @@ import {
   resolveEntitlementForRequest,
 } from "@/lib/entitlement"
 import { ceilingVerdict, inputVerdict } from "@/lib/chat-guards"
+import { chatTools, MAX_CHAT_STEPS } from "@/lib/chat-tools"
 import { renderBrainForUser } from "@/lib/brain"
 import { saveTurn } from "@/lib/conversations"
 import { captureTurn } from "@/lib/heartbeat"
 import { recordUsage, summariseUsage } from "@/lib/usage"
 
-export const maxDuration = 30
+/**
+ * Sixty, not thirty.
+ *
+ * It was thirty when a turn was one model call. A turn is now up to
+ * `MAX_CHAT_STEPS` calls with database reads between them, and `draft_angle`
+ * makes a model call of its own inside one of those steps — so the old ceiling
+ * would cut a working turn off mid-draft, after the money was spent and before
+ * the user was told what happened.
+ *
+ * Still well under the editor agent's 120: that one edits video and this one
+ * writes sentences.
+ */
+export const maxDuration = 60
 
 /**
  * Model id is a Vercel AI Gateway slug, not a provider SDK. The gateway
@@ -44,7 +58,21 @@ under their name, not yours.
 
 Be direct and concrete. Lead with the point. No preamble, no "great question",
 no summarising the request back. When you do not have enough to work with, ask
-the one question that unblocks you rather than guessing at length.`
+the one question that unblocks you rather than guessing at length.
+
+You have tools that read this person's own state — their riffs, drafts, lineup,
+channels and sources — and one that writes a draft. Rules that matter:
+
+- Look before you answer. A question about what is waiting, what is scheduled,
+  or what to write next is answered from the tools, never from memory or from
+  what was said earlier in the conversation. State changes between turns.
+- Never invent a riff, a draft, a hook or a time. If a tool did not return it,
+  it does not exist.
+- You draft, they send. Drafting is the only thing you can change, and a draft
+  waits on /drafts until they approve it. You cannot approve, schedule or
+  publish, and you must not imply otherwise — say "it is waiting for you".
+- Drafting costs money and takes a while. Do it when asked, on an angle they
+  chose, not speculatively and not on several angles to be helpful.`
 
 export async function POST(request: Request) {
   // The session is read here, not taken from the body. A conversation id in a
@@ -121,6 +149,22 @@ export async function POST(request: Request) {
     model: MODEL,
     system: brain ? `${BASE_PROMPT}\n\n${brain}` : BASE_PROMPT,
     messages: await convertToModelMessages(messages),
+    /**
+     * The chat can finally read the tables the pages read. See lib/chat-tools.ts
+     * for what they are and why only one of them writes.
+     *
+     * The user comes from the session resolved above, never from the body — the
+     * same rule the conversation id and the brain render already follow, and it
+     * is what stops a tool being asked to read somebody else's riffs.
+     */
+    tools: chatTools(session.user),
+    /**
+     * A tool loop is a spending path, and AGENTS.md asks every spending path
+     * for a ceiling. Without this a model that cannot make progress calls the
+     * cheapest read it has until the function times out, and every call is
+     * billed. See `MAX_CHAT_STEPS`.
+     */
+    stopWhen: isStepCount(MAX_CHAT_STEPS),
     // The gateway delivers whatever chunk sizes the provider felt like sending
     // — a clause, then forty characters, then a single token. Each arrival
     // rewraps the paragraph, so the transcript lurches rather than writes.
