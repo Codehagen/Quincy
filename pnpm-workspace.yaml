@@ -1,5 +1,35 @@
 packages: []
 
+# Transitive packages pulled up to their patched version.
+#
+# Every advisory this repo carries is transitive — nothing here is a dependency
+# Quincy chose, and none of them can be fixed by upgrading what it did choose.
+# An override is the only lever that reaches them, and each one below is a
+# patch-level pull inside the same major, which is what makes it safe: the API
+# does not move, only the fix arrives.
+#
+# Delete an entry the moment the parent catches up. An override that outlives
+# its advisory silently pins a package the ecosystem has moved past, and the
+# next person cannot tell the difference between a live constraint and a stale
+# one — so `pnpm audit --prod` is the record of why each line is here.
+overrides:
+  # GHSA — predictable id generation. Reached through better-auth, next, nuqs
+  # and workflow, which is nearly everything; both major lines are in the tree.
+  nanoid@^3.0.0: ^3.3.17
+  nanoid@^5.0.0: ^5.1.16
+  # High and moderate advisories in the HTTP client `workflow` uses.
+  undici@^7.0.0: ^7.29.0
+
+# Deliberately not overridden:
+#
+# **esbuild** (moderate, GHSA-67mh-4wv8-2f99). The advisory says "patched
+# >=0.24.3" and no such version exists — the 0.24 line ends at 0.24.2, so the
+# fix ships in 0.25, a major the tooling that pulls it (drizzle-kit, through
+# @esbuild-kit/esm-loader) cannot take. The vulnerability is in esbuild's own
+# development server, which nothing here runs: it is a build-time dependency of
+# a CLI, invoked and gone. Forcing 0.25 would break `pnpm db:*` to fix a server
+# that never starts. Revisit when drizzle-kit updates its loader.
+
 allowBuilds:
   sharp: true
   unrs-resolver: true
@@ -25,3 +55,19 @@ allowBuilds:
   # every step boundary, and prebuilt binaries exist for the platforms this
   # deploys to.
   cbor-extract: true
+
+minimumReleaseAgeExclude:
+  - '@workflow/astro@4.0.17'
+  - '@workflow/builders@4.1.7'
+  - '@workflow/cli@4.3.6'
+  - '@workflow/core@4.8.2'
+  - '@workflow/nest@4.0.18'
+  - '@workflow/next@4.1.6'
+  - '@workflow/nitro@4.1.8'
+  - '@workflow/nuxt@4.0.18'
+  - '@workflow/rollup@4.0.17'
+  - '@workflow/sveltekit@4.0.17'
+  - '@workflow/vite@4.0.17'
+  - '@workflow/web@4.1.18'
+  - shadcn@4.17.0
+  - workflow@4.8.2
