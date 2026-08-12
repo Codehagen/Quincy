@@ -209,6 +209,12 @@ export function StudioChat({
     if (greeting || isNew) return
     try {
       const raw = sessionStorage.getItem(greetingKey)
+      // Deliberate read-after-hydration: the server knows nothing about
+      // sessionStorage, so the first client render must match the server
+      // markup (no prelude) and pick the stored one up afterwards. A lazy
+      // initializer would read the store during hydration and mismatch.
+      // The set fires at most once per mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setStoredPrelude(JSON.parse(raw) as string[])
     } catch {
       // A prelude that cannot be read back is a prelude done without.

@@ -57,6 +57,11 @@ export function StudioPreview({
   return (
     <div className="flex h-full w-full items-center justify-center">
       <Player
+        // `player.ref` is a plain useRef created in use-player.ts and only
+        // *passed* here, never read during render. The react-hooks/refs rule
+        // cannot see through the object property. Do not restructure the
+        // Player API for this.
+        // eslint-disable-next-line react-hooks/refs
         ref={player.ref}
         component={EditorComposition}
         inputProps={inputProps}

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   contentKey,
   filmstripArgs,
-  FILMSTRIP_TILES,
   keyframeAtOrBefore,
   parseFrameRate,
   parseProbe,

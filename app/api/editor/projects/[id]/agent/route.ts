@@ -207,7 +207,7 @@ export async function POST(
           stream: result.stream,
           originalMessages: messages,
           generateMessageId,
-          onEnd: async ({ isAborted }) => {
+          onEnd: async () => {
             try {
               const usage = await result.usage
 
