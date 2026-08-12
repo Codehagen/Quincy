@@ -261,13 +261,14 @@ export type GithubSetup = {
    * decide whether this source is connected.**
    *
    * The page used to read `getSourceConnections()[…]` for that, which is wrong
-   * in a way that took a live install to find: that map returns a *fixture* for
-   * the demo addresses in lib/demo.ts, and the fixture claims GitHub has been
-   * arriving since yesterday. So a demo account saw a connected row, was
-   * offered Manage and Disconnect, and was never offered Install — with no row
-   * to disconnect, the fixture kept asserting the connection and the page could
-   * not be escaped. The install button was unreachable for exactly the account
-   * that needed it first.
+   * in a way that took a live install to find: that map then merged a *fixture*
+   * set for an allowlist of addresses, and the fixture claimed GitHub had been
+   * arriving since yesterday. So an allowlisted account saw a connected row,
+   * was offered Manage and Disconnect, and was never offered Install — with no
+   * row to disconnect, the fixture kept asserting the connection and the page
+   * could not be escaped. The install button was unreachable for exactly the
+   * account that needed it first. The fixtures are gone; the rule they taught
+   * is why this field exists.
    *
    * Circleback never had this fault because its row is gated on
    * `getCirclebackSetup()`, a real read. This field is the same discipline: a

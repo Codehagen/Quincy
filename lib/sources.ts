@@ -1,4 +1,3 @@
-import { isDemoAccount } from "./demo"
 import { formatConversationDate } from "./format-date"
 import { listSourceConnections } from "./source-connections"
 
@@ -61,45 +60,16 @@ export type Connection =
   | { state: "broken"; lastAt: string }
 
 /**
- * Fixture set for the demo accounts in lib/demo.ts. Covers all four states on
- * sources that a rhythm actually names in `lib/rhythms.ts`, so the page tells a
- * story the rest of the product agrees with.
- *
- * Slack is the `broken` one on purpose: it is the state worth seeing, and Slack
- * is the source with no rhythm behind it yet, so nothing is implied to be
- * running that is not.
- *
- * **A source stops being a fixture the day it becomes real**, and `github` was
- * removed for that reason rather than tidied away. It claimed to have been
- * arriving since yesterday, and the /sources page read that claim to decide
- * whether GitHub was connected — so on every demo address the row rendered as
- * connected, offered Manage and Disconnect, and never offered Install. The
- * account that would install first was the one account that could not.
- *
- * `circleback` is absent for the same reason and has been since plans/019. The
- * rule this file now follows: a fixture may describe a source with no
- * implementation, and may never describe one that has an implementation.
- */
-const DEMO_CONNECTIONS: Record<string, Connection> = {
-  voice: { state: "arriving", lastAt: "2 hours ago" },
-  slack: { state: "broken", lastAt: "9 days ago" },
-  loom: { state: "waiting", since: "3 days ago" },
-  granola: { state: "paused", lastAt: "6 days ago" },
-}
-
-/**
  * What is connected, keyed by source id.
  *
- * The table landed in plans/019 and this reads it, exactly as the previous
- * version of this comment promised: the demo branch stayed, the signature did
- * not move, and no caller changed. The `timezone` field is additive and
- * optional for the same reason — the page passes `session.user`, which already
+ * The table landed in plans/019 and this reads it. The `timezone` field is
+ * additive and optional — the page passes `session.user`, which already
  * carries it.
  *
- * Takes the user rather than an id because the allowlist is by address and
- * because the query wants the id — a seam that has to grow a parameter later is
- * a seam every call site has to be revisited for, which is the argument that
- * turned out to be worth making.
+ * Takes the user rather than an id, which was originally because the demo
+ * allowlist was by address. That allowlist is gone; the shape stays because a
+ * seam that has to grow a parameter later is a seam every call site has to be
+ * revisited for, and `timezone` is the second field it already needed.
  *
  * **Only Circleback can produce a row today**, so every other source still
  * resolves to nothing. That is the true answer rather than a value we have not
@@ -141,22 +111,16 @@ export async function getSourceConnections(user: {
   }
 
   /**
-   * The fixture fills gaps; it never covers a real row.
+   * The table is the whole answer.
    *
-   * This used to `return DEMO_CONNECTIONS` before reading the table at all,
-   * which meant a demo address could not see its own connections — and that is
-   * how a real, correct GitHub installation stayed invisible on /sources after
-   * it succeeded. The row existed, the redirect said `?github=connected`, and
-   * the page had never looked.
-   *
-   * Spread in this order so real state wins on every key. It is the precedence
-   * `getRiffs` in lib/riffs.ts already chose, in the same words: "A demo
-   * account with real riffs sees both, which is the right precedence: their own
-   * material first."
+   * A fixture set used to be merged under these rows for an allowlisted
+   * address, and it cost more than it showed: an earlier version returned it
+   * *before* reading the table, so a real, correct GitHub installation stayed
+   * invisible on /sources after it succeeded — the row existed, the redirect
+   * said `?github=connected`, and the page had never looked. It is gone with
+   * lib/demo.ts now that this table can answer for itself.
    */
-  return isDemoAccount(user.email)
-    ? { ...DEMO_CONNECTIONS, ...connections }
-    : connections
+  return connections
 }
 
 export const SOURCES: Source[] = [

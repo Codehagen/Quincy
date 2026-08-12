@@ -6,9 +6,12 @@
  * of "let me see the built half" is rows in the database owned by a real user.
  * Everyone else gets an empty page, which is still the true answer.
  *
- * The four pieces continue the Riffs fixtures — pricing, taxonomy, url-state
- * and rhythm-grid all appear there — so the chain Sources → Riffs → Drafts →
- * Lineup is legible end to end rather than as four disconnected screens.
+ * The four pieces — pricing, taxonomy, url-state and rhythm-grid — carry the
+ * hooks the Riffs fixtures used to show, so the chain Sources → Riffs → Drafts
+ * → Lineup stays legible end to end rather than as four disconnected screens.
+ * Those fixtures are gone with lib/demo.ts; a riff now comes from a paste, a
+ * voice note, a meeting or a merge, which is the honest version of the same
+ * demonstration.
  *
  * Between them they cover every state the two surfaces can render:
  *
@@ -30,6 +33,7 @@ import { eq, inArray } from "drizzle-orm"
 import { db } from "../lib/db"
 import { user } from "../lib/schema"
 import { draft, draftVersion, scheduledPost, slot } from "../lib/schema-app"
+import { requireTestTarget } from "./target-guard"
 import {
   addCalendarDays,
   calendarDayIn,
@@ -214,8 +218,9 @@ const SLOTS = [
 
 async function main() {
   // Explicit, because "the first row" quietly seeded the wrong account once.
-  const email = process.argv[2]
-  if (!email) throw new Error("Usage: seed-drafts.ts <email> [--remove]")
+  // Guarded, because the slot delete below is not scoped to the seeded rows —
+  // it clears everything the account owns.
+  const email = requireTestTarget(process.argv[2], "seed-drafts.ts")
   const remove = process.argv.includes("--remove")
 
   const [owner] = await db

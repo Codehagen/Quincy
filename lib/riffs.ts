@@ -12,7 +12,6 @@ import {
 import { renderBrainForUser } from "./brain"
 import { listConnections } from "./channels"
 import { db } from "./db"
-import { isDemoAccount } from "./demo"
 import { formatConversationDate } from "./format-date"
 import { draft, draftVersion, riff, riffAngle } from "./schema-app"
 import { resolveTimeZone } from "./timezone"
@@ -277,126 +276,18 @@ export type Riff = {
 }
 
 /**
- * Fixture set for the demo accounts in lib/demo.ts.
- *
- * Written against real material rather than lorem — an angle is prose, and
- * prose is the only way to judge line length, wrapping and whether three angles
- * on one card is too many. Sources are the ones a rhythm actually names in
- * lib/rhythms.ts, so the page tells a story the rest of the product agrees
- * with. Nothing here is a real post.
- */
-const DEMO_RIFFS: Riff[] = [
-  {
-    id: "pricing",
-    scrap:
-      "Per-seat pricing is wrong for us. We are selling something one person uses on behalf of a company — the value does not scale with headcount, it scales with how much gets published. Charging per seat would punish the exact customer we want.",
-    sourceId: "voice",
-    sourceLabel: "Voice notes",
-    capturedAt: "2 hours ago",
-    state: "ready",
-    failure: "",
-    stuck: false,
-    adaptedFrom: null,
-    angles: [
-      {
-        id: "pricing-1",
-        hook: "Vi droppet per-seat prising. Her er regnestykket som avgjorde det.",
-        shape: "Thread",
-        why: "You have the actual numbers, and pricing threads from founders who show the maths get saved rather than liked.",
-      },
-      {
-        id: "pricing-2",
-        hook: "Prising er et produktvalg, ikke et regnearkvalg.",
-        shape: "Short post",
-        why: "The shortest version of the same idea, and the one that works without any context about what you are building.",
-      },
-      {
-        id: "pricing-3",
-        hook: "Hvordan vi prissetter en agent som jobber for deg mens du sover",
-        shape: "Essay",
-        why: "Long enough to carry the reasoning, which is the part nobody else publishes.",
-      },
-    ],
-  },
-  {
-    id: "sources-split",
-    scrap:
-      "Grunnen til at vi deler Channels og Sources: Channels er hvor skrivingen går ut, Sources er hvor materialet kommer inn. Stanley slår sammen output, input og chat i ett rutenett og ender med 14 oppføringer under X og 1 under Instagram.",
-    sourceId: "slack",
-    sourceLabel: "Slack",
-    capturedAt: "Yesterday",
-    state: "ready",
-    failure: "",
-    stuck: false,
-    adaptedFrom: null,
-    angles: [
-      {
-        id: "sources-1",
-        hook: "Den vanligste feilen i integrasjonssider: å file etter plattform i stedet for retning.",
-        shape: "Thread",
-        why: "A concrete critique with a screenshot beats an abstract principle, and you already have the screenshot.",
-      },
-      {
-        id: "sources-2",
-        hook: "Taksonomi er design. Her er hva som skjer når du tar den feil.",
-        shape: "Carousel",
-        why: "This is a before/after argument, and before/after is what a carousel is actually good at.",
-      },
-    ],
-  },
-  {
-    id: "rhythm-grid",
-    scrap:
-      "Merged #212 — rhythm grid, platform filter in the URL. 24 rhythms grouped by function instead of by platform, nuqs for the filter state so a filtered view is shareable.",
-    sourceId: "github",
-    sourceLabel: "GitHub",
-    capturedAt: "Yesterday",
-    state: "ready",
-    failure: "",
-    stuck: false,
-    adaptedFrom: null,
-    angles: [
-      {
-        id: "rhythm-1",
-        hook: "URL-en er den beste state-managementen du ikke bruker.",
-        shape: "Short post",
-        why: "nuqs is having a moment in your niche and you just shipped a real use for it.",
-      },
-      {
-        id: "rhythm-2",
-        hook: "24 automatiseringer, gruppert etter hva de gjør — ikke hvor de kjører.",
-        shape: "Carousel",
-        why: "Shows the product without pitching it, which is the only way product posts land.",
-      },
-    ],
-  },
-  {
-    id: "advanti-call",
-    scrap:
-      "Call with Advanti — 41 min. They said the hard part is not writing the post, it is remembering what happened during the week that was worth writing about.",
-    sourceId: "circleback",
-    sourceLabel: "Meeting",
-    capturedAt: "6 days ago",
-    state: "working",
-    failure: "",
-    stuck: false,
-    adaptedFrom: null,
-    angles: [],
-  },
-]
-
-/**
  * The riffs waiting on you.
  *
- * Reads the database. This used to return an empty list for everyone outside
- * the demo allowlist, honestly — there was no pipeline, nothing read a source,
- * and an empty list was the true answer. plans/017 gave it one: pasting
- * somebody else's post creates a riff with angles, which is the first real
- * input this page has ever had.
+ * Reads the database, and nothing else. This used to return an empty list for
+ * everyone outside a demo allowlist, honestly — there was no pipeline, nothing
+ * read a source, and an empty list was the true answer. plans/017 gave it one:
+ * pasting somebody else's post creates a riff with angles, which is the first
+ * real input this page has ever had.
  *
- * The demo branch stays for the allowlisted addresses in lib/demo.ts, and it
- * is a lie scoped to that file. A demo account with real riffs sees both,
- * which is the right precedence: their own material first.
+ * The fixtures that sat behind the real rows are gone with lib/demo.ts. They
+ * existed to show the built half of a page whose table did not exist yet; the
+ * table exists, so the honest empty page is now also the useful one, and
+ * scripts/seed-drafts.ts is how a populated account gets made.
  */
 export async function getRiffs(user: {
   id: string
@@ -505,25 +396,7 @@ export async function getRiffs(user: {
       })),
   }))
 
-  if (!isDemoAccount(user.email)) return real
-
-  // A demo account sees its own riffs first and the fixtures behind them.
-  // Their real material outranks the story we tell about the product.
-  return [
-    ...real,
-    ...DEMO_RIFFS.map((fixture) => ({
-      ...fixture,
-      angles: fixture.angles.map((angle) =>
-        draftedHooks.has(angle.hook)
-          ? {
-              ...angle,
-              status: "drafted" as const,
-              ...(draftedHooks.get(angle.hook) ? { fellBack: true } : {}),
-            }
-          : angle
-      ),
-    })),
-  ]
+  return real
 }
 
 /**

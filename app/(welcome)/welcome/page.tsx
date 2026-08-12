@@ -80,10 +80,10 @@ export default async function WelcomePage() {
           wiring: state,
           corpusItems: corpus.items,
           circlebackConnected: circleback?.verified === true,
-          // The row, not the fixture. `getSourceConnections` returns demo
-          // fixtures for the addresses in lib/demo.ts, and reading one here
-          // made Install unreachable for exactly the accounts that would
-          // install first.
+          // The row, not the fixture. `getSourceConnections` once merged demo
+          // fixtures for an allowlist of addresses, and reading one here made
+          // Install unreachable for exactly the accounts that would install
+          // first. The fixtures are gone; reading the row is the habit.
           githubConnected: github?.connected === true,
           // Out to github.com, so it survives first run's redirect gate. Null
           // when the deployment has no App configured, which renders as a

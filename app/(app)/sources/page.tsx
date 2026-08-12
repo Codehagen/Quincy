@@ -120,10 +120,11 @@ export default async function SourcesPage({
   /**
    * The row, not the fixture. See `GithubSetup.connected`.
    *
-   * `connections` carries demo fixtures for the addresses in lib/demo.ts, and
-   * one of them claims GitHub has been arriving since yesterday. Reading it here
-   * made the Install button unreachable for every demo account — which is every
-   * account that would install first.
+   * `connections` once carried demo fixtures for an allowlist of addresses,
+   * one of which claimed GitHub had been arriving since yesterday. Reading it
+   * here made the Install button unreachable for every allowlisted account —
+   * which was every account that would install first. The fixtures are gone
+   * and this still reads the row, because the row is the fact.
    */
   const githubConnected = githubSetup?.connected === true
 
