@@ -1,12 +1,23 @@
 import type { UIMessage } from "ai"
 
 /**
- * Ceilings on the chat route, per AGENTS.md "Money": every spending path
- * gets a ceiling. These bound the request and the day; the entitlement
- * gate (who may spend at all) lives in lib/entitlement.ts.
+ * Ceilings on the streaming model routes, per AGENTS.md "Money": every
+ * spending path gets a ceiling. These bound the request and the day; the
+ * entitlement gate (who may spend at all) lives in lib/entitlement.ts.
  *
- * Defaults are deliberately generous — tripwires, not walls. Both move via
- * env without a deploy.
+ * Two routes use them — `/api/chat` and the editor agent at
+ * `/api/editor/projects/[id]/agent`. The editor was the owed follow-up to the
+ * plan that added this file, and it is the hungrier of the two: it is a
+ * tool-calling loop, so one request can be eight model calls rather than one.
+ * The day ceiling is deliberately shared rather than per-route, because it
+ * bounds a person's spending and a wallet does not care which page emptied it.
+ *
+ * The `CHAT_` prefix on the variables is kept for the same reason it is worth
+ * a comment: renaming an environment variable that is already set in
+ * production trades a tidier name for a silently unbounded day.
+ *
+ * Defaults are deliberately generous — tripwires, not walls. All three move
+ * via env without a deploy.
  */
 
 // A plausible conversation runs to a few dozen turns. 200 is well past any

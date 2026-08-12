@@ -27,8 +27,9 @@ import {
   paywallResponse,
   resolveEntitlementForRequest,
 } from "@/lib/entitlement"
+import { ceilingVerdict, inputVerdict } from "@/lib/chat-guards"
 import { getSession } from "@/lib/session"
-import { recordUsage } from "@/lib/usage"
+import { recordUsage, summariseUsage } from "@/lib/usage"
 
 /**
  * Cutting by prompt.
@@ -117,6 +118,41 @@ export async function POST(
   }
 
   const messages = body.messages ?? []
+
+  /**
+   * The same two ceilings /api/chat carries, and this route needs them more.
+   *
+   * `MAX_STEPS` below bounds one run's *tool* loop and nothing else: it says a
+   * request may call the model eight times, not that a day may hold a hundred
+   * such requests. Until now the only thing between this endpoint and an
+   * unbounded bill was the entitlement check, which asks whether you may spend
+   * and never how much — so a trialling account with a script could spend a
+   * day's worth of a paid plan in a few minutes, eight calls at a time.
+   *
+   * Ordered like the chat route, cheapest first: the input verdict is free and
+   * in-process, the ceiling is one aggregate query. Both sit above `getProject`
+   * and above the lock, because a request that is not allowed to spend must not
+   * take the document hostage on its way to being refused.
+   */
+  const verdict = inputVerdict(messages)
+  if (!verdict.ok) {
+    return Response.json({ error: verdict.error }, { status: 413 })
+  }
+
+  // Rolling 24 hours rather than the calendar day, so a session either side of
+  // midnight cannot spend the ceiling twice. Counts every model call the
+  // account made, this route's and the chat's alike — see lib/chat-guards.ts.
+  const spent = await summariseUsage(
+    session.user.id,
+    new Date(Date.now() - 24 * 60 * 60 * 1000)
+  )
+  const ceiling = ceilingVerdict(spent.costMicros)
+  if (!ceiling.ok) {
+    return Response.json(
+      { error: ceiling.error, state: "ceiling" },
+      { status: 429 }
+    )
+  }
 
   const project = await getProject(id, session.user.id)
   if (!project) {
