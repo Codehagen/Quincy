@@ -17,6 +17,7 @@ import {
   DiscardVersion,
   DuplicateNotice,
   Fold,
+  HookNotice,
   useFocusOnAppear,
   useModifier,
   useRow,
@@ -81,6 +82,14 @@ export type GutterRowProps = {
   takeFocus: boolean
   /** The label of a sibling with byte-identical text, when there is one. */
   twin?: string
+  /**
+   * The angle this piece was drafted from, when it came from one.
+   *
+   * Only used to recognise a body that is the hook repeated back — see `isHook`
+   * in `useRow`. Absent for a piece with no angle behind it, which is a state
+   * and not a failure.
+   */
+  hook?: string
   onApprove: (text: string) => void
   onDiscard: () => void
   onReopen: () => void
@@ -93,11 +102,12 @@ export function GutterRow({
   isLast,
   takeFocus,
   twin,
+  hook,
   onApprove,
   onDiscard,
   onReopen,
 }: GutterRowProps) {
-  const editor = useRow(version, draftId)
+  const editor = useRow(version, draftId, hook)
   const modifier = useModifier()
   const approved = version.state === "approved"
 
@@ -145,7 +155,9 @@ export function GutterRow({
    * a press was sitting underneath the button it was trying to stop. The fold
    * line is placed on the same argument and has been all along.
    */
-  const notice = twin ? <DuplicateNotice twin={twin} label={version.label} /> : null
+  const notice = twin ? (
+    <DuplicateNotice twin={twin} label={version.label} />
+  ) : null
 
   return (
     <div
@@ -160,7 +172,11 @@ export function GutterRow({
           whatever the channel is called. */}
       <div className="flex w-28 shrink-0 flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <SourceMark id={version.channel} label={version.label} className="size-5" />
+          <SourceMark
+            id={version.channel}
+            label={version.label}
+            className="size-5"
+          />
           {/* h3 under the piece's h2. The channel is the name of the thing this
               row contains, which is what a heading is for. */}
           <h3
@@ -202,7 +218,11 @@ export function GutterRow({
             )}
           >
             <p className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">
-              <HugeiconsIcon aria-hidden="true" icon={Tick02Icon} className="size-3.5" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                icon={Tick02Icon}
+                className="size-3.5"
+              />
               Approved
             </p>
           </div>
@@ -216,7 +236,7 @@ export function GutterRow({
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col gap-2",
-          "border-t border-border pt-6 [border-top-width:var(--border-hairline)]",
+          "border-t [border-top-width:var(--border-hairline)] border-border pt-6",
           "group-first/row:border-t-0 group-first/row:pt-0"
         )}
       >
@@ -289,6 +309,13 @@ export function GutterRow({
             <label htmlFor={editor.id} className="sr-only">
               {version.label} version of “{idea}”
             </label>
+            {/* Above the text, not below it: this says what the text *is*, so it
+                has to be read before the text rather than discovered under it.
+                The over-limit and fold annotations sit below because they
+                describe writing you have already read. Editing only — an
+                approved version was read and accepted by a person, and saying
+                this afterwards second-guesses a decision they already made. */}
+            {editor.isHook ? <HookNotice id={editor.hookId} /> : null}
             <Clamp text={editor.text}>
               {({ onFocus }) =>
                 committing ? (
@@ -327,11 +354,18 @@ export function GutterRow({
               }
             </Clamp>
 
-            <Fold text={editor.text} channel={version.channel} id={editor.foldId} />
+            <Fold
+              text={editor.text}
+              channel={version.channel}
+              id={editor.foldId}
+            />
             {notice}
 
             <div className="flex items-center gap-2">
-              <Button type="submit" aria-label={`Approve the ${version.label} version`}>
+              <Button
+                type="submit"
+                aria-label={`Approve the ${version.label} version`}
+              >
                 Approve
               </Button>
               {/* Rendered, not hidden in a tooltip a keyboard cannot reach. */}

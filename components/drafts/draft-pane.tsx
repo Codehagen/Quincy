@@ -10,7 +10,12 @@ import type { ApprovalPlacement } from "@/lib/scheduling"
 import { Button } from "@/components/ui/button"
 import { SourceMark } from "@/components/sources/source-mark"
 
-import { Clamp, DuplicateNotice, PieceHeader, useFocusOnAppear } from "./draft-parts"
+import {
+  Clamp,
+  DuplicateNotice,
+  PieceHeader,
+  useFocusOnAppear,
+} from "./draft-parts"
 import { GutterRow } from "./gutter-row"
 
 /**
@@ -125,7 +130,9 @@ export function WorkingPane({
           <div
             key={v.channel}
             className="group/row flex flex-col gap-1.5"
-            style={nameRows ? { viewTransitionName: `pane-row-${i}` } : undefined}
+            style={
+              nameRows ? { viewTransitionName: `pane-row-${i}` } : undefined
+            }
           >
             <GutterRow
               version={v}
@@ -134,6 +141,10 @@ export function WorkingPane({
               isLast={draft.versions.length === 1}
               takeFocus={focusChannel === v.channel}
               twin={twins[v.channel]}
+              // Already loaded on every piece — `getDrafts` selects it so a
+              // draft can say what it is downstream of — so recognising a
+              // failed drafting call costs a comparison and no query.
+              hook={draft.from.riffHook}
               onApprove={(text) => onApprove(v.channel, text)}
               onDiscard={() => onDiscard(v.channel)}
               onReopen={() => onReopen(v.channel)}
@@ -166,7 +177,11 @@ function when(
   placement?: ApprovalPlacement
 ): { text: string; muted: boolean; placeable: boolean } {
   if (version.goingOut) {
-    return { text: `Going out ${version.goingOut}`, muted: false, placeable: false }
+    return {
+      text: `Going out ${version.goingOut}`,
+      muted: false,
+      placeable: false,
+    }
   }
 
   if (placement?.scheduled) {
@@ -248,12 +263,16 @@ function PublishedVersion({
   const reopenRef = useFocusOnAppear<HTMLButtonElement>(takeFocus)
 
   return (
-    <article className="flex gap-4 border-t border-border pt-6 [border-top-width:var(--border-hairline)] first:border-t-0 first:pt-0">
+    <article className="flex gap-4 border-t [border-top-width:var(--border-hairline)] border-border pt-6 first:border-t-0 first:pt-0">
       {/* The same 7rem margin as the working pane, so the left edge is
           continuous between the two states of the page. */}
       <div className="flex w-28 shrink-0 flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <SourceMark id={version.channel} label={version.label} className="size-5" />
+          <SourceMark
+            id={version.channel}
+            label={version.label}
+            className="size-5"
+          />
           <h3 className="text-card-title">{version.label}</h3>
         </div>
         <p className="font-mono text-caption text-muted-foreground tabular-nums">
@@ -274,7 +293,9 @@ function PublishedVersion({
 
         <Clamp text={version.text}>
           {() => (
-            <p className="text-body text-pretty whitespace-pre-wrap">{version.text}</p>
+            <p className="text-body text-pretty whitespace-pre-wrap">
+              {version.text}
+            </p>
           )}
         </Clamp>
 
@@ -399,7 +420,11 @@ export function DonePane({
         render={<Link href="/lineup" />}
       >
         Open Lineup
-        <HugeiconsIcon aria-hidden="true" data-icon="inline-end" icon={ArrowRight01Icon} />
+        <HugeiconsIcon
+          aria-hidden="true"
+          data-icon="inline-end"
+          icon={ArrowRight01Icon}
+        />
       </Button>
     </Pane>
   )

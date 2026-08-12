@@ -2,7 +2,11 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowDown01Icon, Delete02Icon } from "@hugeicons/core-free-icons"
+import {
+  Alert01Icon,
+  ArrowDown01Icon,
+  Delete02Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import type { Draft, Version } from "@/lib/drafts"
@@ -164,22 +168,54 @@ export function useFocusOnAppear<T extends HTMLElement>(active: boolean) {
  * re-render the pane on every keystroke to serve a value nothing else reads
  * until you commit it.
  */
-export function useRow(version: Version, draftId: string) {
+export function useRow(version: Version, draftId: string, hook?: string) {
   const [text, setText] = React.useState(version.text)
   const id = `row-${draftId}-${version.channel}`
   const overId = `${id}-over`
   const foldId = `${id}-fold`
+  const hookId = `${id}-hook`
   const { used, limit, over } = measurePost(text, version.channel)
   const hidden = splitAtFold(text, version.channel).hidden.trim()
 
-  // Both annotations describe the field, and both are conditional — an id
+  /**
+   * The body is the angle's hook, verbatim — so the model never wrote it.
+   *
+   * `draftAngle` falls back to writing the hook into every channel body when
+   * its model call fails, deliberately, so you get a line you can work from
+   * rather than an error and nothing. /riffs says so on the angle card. /drafts
+   * did not, and /drafts is where it is actually met: on 2026-08-08 a Substack
+   * version whose whole body was an 89-character hook sat in this editor
+   * looking like something Quincy had written.
+   *
+   * Compared against `text`, not `version.text`. The notice is about what is in
+   * the field right now, so it clears itself on the first keystroke — once you
+   * have written anything it is no longer your hook sitting there, and a notice
+   * that outlived the condition would be the more annoying bug.
+   */
+  const isHook =
+    hook !== undefined && hook.trim() !== "" && text.trim() === hook.trim()
+
+  // Every annotation describes the field, and all are conditional — an id
   // pointing at an element that is not rendered is worse than no id, because a
   // screen reader announces nothing and reports no error.
   const describedBy =
-    [over > 0 ? overId : null, hidden ? foldId : null].filter(Boolean).join(" ") ||
-    undefined
+    [over > 0 ? overId : null, hidden ? foldId : null, isHook ? hookId : null]
+      .filter(Boolean)
+      .join(" ") || undefined
 
-  return { text, setText, id, overId, foldId, used, limit, over, describedBy }
+  return {
+    text,
+    setText,
+    id,
+    overId,
+    foldId,
+    hookId,
+    isHook,
+    used,
+    limit,
+    over,
+    describedBy,
+  }
 }
 
 /**
@@ -229,7 +265,11 @@ export function Clamp({
   return (
     <>
       <div
-        className={cn("flex min-h-0 flex-col", clamped && "overflow-hidden", className)}
+        className={cn(
+          "flex min-h-0 flex-col",
+          clamped && "overflow-hidden",
+          className
+        )}
         style={
           clamped
             ? {
@@ -309,7 +349,9 @@ export function Counter({
   className?: string
 }) {
   return (
-    <div className={cn("flex min-h-5 flex-wrap items-baseline gap-x-2", className)}>
+    <div
+      className={cn("flex min-h-5 flex-wrap items-baseline gap-x-2", className)}
+    >
       <p
         className={cn(
           // `whitespace-nowrap` is load-bearing: in a narrow margin "251 / 280"
@@ -370,7 +412,10 @@ export function Fold({
   const after = hidden.slice(0, 16).replace(/\s\S*$/, "")
 
   return (
-    <p id={id} className="max-w-[60ch] text-caption text-pretty text-muted-foreground">
+    <p
+      id={id}
+      className="max-w-[60ch] text-caption text-pretty text-muted-foreground"
+    >
       {midWord ? "Feed cuts mid-word" : "Feed cuts"} after{" "}
       <span className="text-foreground">
         “…{before}
@@ -454,8 +499,8 @@ export function DiscardVersion({
           <AlertDialogDescription>
             {isLast ? (
               <>
-                This is the only version left, so the whole piece goes with it. “
-                {idea}” is deleted and cannot be brought back.
+                This is the only version left, so the whole piece goes with it.
+                “{idea}” is deleted and cannot be brought back.
               </>
             ) : (
               <>
@@ -574,10 +619,47 @@ export function PieceHeader({ draft }: { draft: Draft }) {
  * decision you are allowed to make, it just should not be one you make without
  * noticing. See `duplicates` in lib/drafts.ts for what counts as the same.
  */
-export function DuplicateNotice({ twin, label }: { twin: string; label: string }) {
+export function DuplicateNotice({
+  twin,
+  label,
+}: {
+  twin: string
+  label: string
+}) {
   return (
     <p className="max-w-[60ch] text-caption text-pretty text-destructive">
       Identical to the {twin} version — this one was not adapted for {label}.
+    </p>
+  )
+}
+
+/**
+ * This version is the angle's hook, because the drafting call failed.
+ *
+ * Muted rather than destructive, and that is the judgment in it: nothing is
+ * broken and nothing was lost. There is a draft, it is one line, and the line
+ * is yours — `text-destructive` would report a fault where the product made a
+ * deliberate choice to hand you something usable. `DuplicateNotice` above is
+ * red because two channels carrying identical text *is* a fault.
+ *
+ * The wording differs from the /riffs version of this sentence on purpose.
+ * There it reads "The draft is your hook, waiting for you", because the reader
+ * is deciding whether to open it; here the reader is looking straight at the
+ * text, so the promise is redundant and the instruction is not.
+ */
+export function HookNotice({ id }: { id: string }) {
+  return (
+    <p
+      id={id}
+      className="inline-flex max-w-[60ch] items-start gap-1.5 text-caption text-pretty text-muted-foreground"
+    >
+      <HugeiconsIcon
+        aria-hidden="true"
+        icon={Alert01Icon}
+        className="mt-px size-3.5 shrink-0"
+      />
+      Quincy could not write this one — this is your hook. Rewrite it and it is
+      yours.
     </p>
   )
 }
@@ -602,7 +684,11 @@ export function NoDrafts() {
         </p>
       </div>
       {/* A real link, because /riffs is a real page. */}
-      <Button nativeButton={false} variant="outline" render={<Link href="/riffs" />}>
+      <Button
+        nativeButton={false}
+        variant="outline"
+        render={<Link href="/riffs" />}
+      >
         Go to Riffs
       </Button>
     </div>
@@ -640,7 +726,12 @@ export function AllClear({
   className?: string
 }) {
   return (
-    <p className={cn("text-caption text-pretty text-muted-foreground", className)}>
+    <p
+      className={cn(
+        "text-caption text-pretty text-muted-foreground",
+        className
+      )}
+    >
       {withoutTime === 0 ? (
         "Nothing is waiting on you. Every approved version has a time on Lineup."
       ) : (
