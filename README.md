@@ -87,14 +87,9 @@ Contributions are welcome. Here is how:
 - Follow the [contributing guide](CONTRIBUTING.md) and make a [pull request](https://github.com/Codehagen/Quincy/pulls) to add new features, make quality-of-life improvements, or fix bugs.
 - Found a security issue? Follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
-<!--
 ## Repo Activity
 
-Generate the embed at https://repobeats.axiom.co (sign in with GitHub, pick
-Codehagen/Quincy), put the hash in the URL below, and uncomment this section.
-
-![Quincy repo activity](https://repobeats.axiom.co/api/embed/HASH.svg "Repobeats analytics image")
--->
+![Quincy repo activity](https://repobeats.axiom.co/api/embed/7ea555a19076e9dfcb733eb5b78c5fb63f2ad7f8.svg "Repobeats analytics image")
 
 ## License
 
