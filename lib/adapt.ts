@@ -6,6 +6,7 @@ import {
   unwrapStringifiedObject,
   usageAccumulator,
 } from "./structured-output"
+import { REASONING } from "./model-options"
 
 /**
  * Somebody else's post in, one of yours out. See plans/016.
@@ -311,6 +312,7 @@ function buildSchema(targets: AdaptTarget[]) {
 export const generateAdaptation: Adapter = async (input) => {
   const { object: raw, usage } = await generateObject({
     model: MODEL,
+    providerOptions: REASONING,
     schema: buildSchema(input.channels),
     system: buildSystemPrompt(input.brain),
     prompt: buildAdaptPrompt(input),
@@ -574,6 +576,7 @@ export const generateAngles: AngleGenerator = async (input) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: buildAnglesSchema(input.shapes),
         system: input.brain
           ? `${ANGLES_IDENTITY}\n\n${anglesRules(input.shapes)}\n\n${input.brain}`
@@ -705,6 +708,7 @@ export const generateAnglesFromSaid: SaidAngleGenerator = async (input) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         // The same schema as `generateAngles`, deliberately: the output of
         // both is a riff angle, and a second schema able to drift from this
         // one would give `riff_angle` two shapes to store.
@@ -790,6 +794,7 @@ export const generateChannelAngle: ChannelAngleGenerator = async (input) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         // `ANGLES_SCHEMA` again rather than a one-angle schema. The output is a
         // riff angle and it lands in `riff_angle`; a second schema able to
         // drift from this one would give that table two shapes to store — the
@@ -939,6 +944,7 @@ export const selectAdaptable: Selector = async ({
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: SELECTION_SCHEMA,
         system: brain ? `${SELECT_PROMPT}\n\n${brain}` : SELECT_PROMPT,
         prompt: [

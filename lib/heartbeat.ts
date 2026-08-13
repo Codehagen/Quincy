@@ -13,6 +13,7 @@ import {
   type StructuredUsage,
 } from "./structured-output"
 import { recordUsage } from "./usage"
+import { REASONING } from "./model-options"
 
 /**
  * Heartbeat: the maintenance loop. See docs/brain.md.
@@ -126,6 +127,7 @@ const modelExtractor: Extractor = async (captures) => {
     async () => {
       const { object, usage } = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: EXTRACTION_SCHEMA,
         system: EXTRACT_PROMPT,
         prompt: captures.map((c) => `- ${c}`).join("\n"),

@@ -9,6 +9,7 @@ import {
   usageAccumulator,
   usageFromError,
 } from "./structured-output"
+import { REASONING } from "./model-options"
 
 /**
  * The model call that writes a draft. See plans/015.
@@ -326,6 +327,7 @@ export const generateDraft: DraftGenerator = async (input) => {
       try {
         result = await generateObject({
           model: MODEL,
+          providerOptions: REASONING,
           schema: buildSchema(input.channels),
           system: buildSystemPrompt(input.brain),
           prompt: buildUserPrompt(input),

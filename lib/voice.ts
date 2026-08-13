@@ -1,7 +1,13 @@
 import { generateObject, jsonSchema } from "ai"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
-import { appendEvent, getPage, putPage, RULE_CAP, type StoryData } from "./brain"
+import {
+  appendEvent,
+  getPage,
+  putPage,
+  RULE_CAP,
+  type StoryData,
+} from "./brain"
 import { db } from "./db"
 import { sourceItem, type SourceItemSource } from "./schema-app"
 import {
@@ -10,6 +16,7 @@ import {
   usageAccumulator,
 } from "./structured-output"
 import { recordUsage } from "./usage"
+import { REASONING } from "./model-options"
 
 /**
  * The voice compile: corpus in, brain pages out. See plans/011.
@@ -154,6 +161,7 @@ const modelExtractor: VoiceExtractor = async (posts) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: EXTRACTION_SCHEMA,
         system: EXTRACT_PROMPT,
         prompt: posts

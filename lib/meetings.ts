@@ -6,6 +6,7 @@ import {
   usageAccumulator,
   type StructuredUsage,
 } from "./structured-output"
+import { REASONING } from "./model-options"
 
 /**
  * A recorded call becomes at most one riff. See plans/019.
@@ -378,6 +379,7 @@ export const selectMeetingMoment: MomentSelector = async (input) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: SELECTION_SCHEMA,
         system: input.brain
           ? `${SELECT_IDENTITY}\n\n${SELECT_RULES}\n\n${input.brain}`

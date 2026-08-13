@@ -6,6 +6,7 @@ import {
   usageAccumulator,
   type StructuredUsage,
 } from "./structured-output"
+import { REASONING } from "./model-options"
 
 /**
  * A merged pull request becomes at most one riff. See plans/021.
@@ -63,7 +64,11 @@ export const SHIPPED_MODEL = MODEL
  * `commits` is the count, not the messages; the messages arrive on `push`,
  * which is a different event and a different rhythm.
  */
-const DELIBERATELY_UNREAD = ["diff_url", "patch_url", "merge_commit_sha"] as const
+const DELIBERATELY_UNREAD = [
+  "diff_url",
+  "patch_url",
+  "merge_commit_sha",
+] as const
 
 void DELIBERATELY_UNREAD
 
@@ -165,8 +170,7 @@ export function parseShippedPayload(body: unknown): ShippedPayload | null {
 /* ── The gates ────────────────────────────────────────────────────────────── */
 
 export type ShippedGate =
-  | { ok: true }
-  | { ok: false; reason: string; detail: string }
+  { ok: true } | { ok: false; reason: string; detail: string }
 
 /**
  * Should this merge become anything at all?
@@ -545,6 +549,7 @@ export const selectShippedPassage: ShippedSelector = async (input) => {
     async () => {
       const result = await generateObject({
         model: MODEL,
+        providerOptions: REASONING,
         schema: SELECTION_SCHEMA,
         system: input.brain
           ? `${SELECT_IDENTITY}\n\n${SELECT_RULES}\n\n${input.brain}`

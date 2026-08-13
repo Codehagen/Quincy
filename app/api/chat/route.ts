@@ -21,6 +21,7 @@ import { renderBrainForUser } from "@/lib/brain"
 import { saveTurn } from "@/lib/conversations"
 import { captureTurn } from "@/lib/heartbeat"
 import { recordUsage, summariseUsage } from "@/lib/usage"
+import { REASONING } from "@/lib/model-options"
 
 /**
  * A hundred and twenty, and the number is measured rather than picked.
@@ -164,6 +165,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: MODEL,
+    providerOptions: REASONING,
     system: brain ? `${BASE_PROMPT}\n\n${brain}` : BASE_PROMPT,
     messages: await convertToModelMessages(messages),
     /**

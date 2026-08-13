@@ -84,17 +84,28 @@ describe("formatMicros", () => {
 describe("a model with its own rate", () => {
   const FLASH = "deepseek/deepseek-v4-flash-0731"
 
+  it("prices Luna from the gateway's rate", () => {
+    // $0.20 in / $1.20 out per million.
+    expect(
+      estimateCostMicros("openai/gpt-5.6-luna", {
+        inputTokens: 1_000_000,
+        cachedInputTokens: 0,
+        outputTokens: 1_000_000,
+      })
+    ).toBe(1_400_000)
+  })
+
   it("prices DeepSeek at its own rate, not at the fallback", () => {
-    // 1M input + 1M output at $0.08 / $0.15 = $0.23 = 230_000 micros.
-    // Priced through the fallback it would be $12.00, which is the number that
-    // would silently lock a user out of a $10 day.
+    // 1M input + 1M output at the gateway's $0.20 / $0.40 = $0.60 = 600_000
+    // micros. Priced through the fallback it would be $12.00, which is the
+    // number that would silently lock a user out of a $10 day.
     expect(
       estimateCostMicros(FLASH, {
         inputTokens: 1_000_000,
         cachedInputTokens: 0,
         outputTokens: 1_000_000,
       })
-    ).toBe(230_000)
+    ).toBe(600_000)
   })
 
   it("prices the floating alias the same as the pinned one", () => {
