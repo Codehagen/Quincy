@@ -133,6 +133,31 @@ describe("read_riffs", () => {
   })
 })
 
+it("says a lost riff is lost instead of offering it", async () => {
+  getRiffs.mockResolvedValue([
+    {
+      id: "rif_1",
+      scrap: "I dont know, you tell me",
+      sourceId: "voice",
+      sourceLabel: "Voice notes",
+      capturedAt: "2 days ago",
+      state: "working",
+      failure: "",
+      stuck: true,
+      adaptedFrom: null,
+      angles: [],
+    },
+  ])
+
+  const out = await run("read_riffs")
+
+  // A stuck riff has no angles and never will, so draft_angle has no id to
+  // take. Without this the model offers to write from it and cannot.
+  expect(out).toMatch(/lost this one/)
+  expect(out).toMatch(/recording again/)
+  expect(out).not.toMatch(/No angles yet/)
+})
+
 describe("read_drafts", () => {
   it("counts pieces and versions separately", async () => {
     getDrafts.mockResolvedValue([

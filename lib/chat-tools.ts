@@ -106,9 +106,24 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
             )
             .join("\n")
 
+          /**
+           * A riff that never finished, said plainly.
+           *
+           * `stuck` means the run that was reading it died — no angles came and
+           * none are coming. Without this line the model sees a scrap with an
+           * empty angle list and offers to write from it, which is an offer it
+           * cannot keep: `draft_angle` needs an angle id and there is none. The
+           * honest answer is that this one has to be recorded again.
+           */
+          const state = riff.stuck
+            ? "  - Quincy lost this one; the run that was reading it stopped. It needs recording again."
+            : riff.state === "failed"
+              ? `  - This one failed${riff.failure ? `: ${riff.failure}` : "."}`
+              : angles || "  - No angles yet; Quincy is still reading it."
+
           return [
             `From ${riff.sourceLabel}, ${riff.capturedAt}: “${riff.scrap.slice(0, 400)}”`,
-            angles || "  - No angles yet.",
+            state,
           ].join("\n")
         })
 

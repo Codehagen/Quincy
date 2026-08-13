@@ -41,6 +41,15 @@ type RiffLike = {
   scrap: string
   capturedAt: string
   state: string
+  /**
+   * `working` for longer than `RIFF_STUCK_AFTER_MS`, computed by lib/riffs.ts.
+   *
+   * Optional because the field is derived rather than stored, so a caller that
+   * builds a `RiffLike` by hand does not have to answer for it. Absent means
+   * "not stuck", which is the safe default: it can only make the greeting
+   * offer more, never less.
+   */
+  stuck?: boolean
 }
 
 /**
@@ -80,10 +89,28 @@ export function composeStudioGreeting({
 }): StudioGreeting {
   const first = name.trim().split(/\s+/)[0] ?? ""
 
-  // A failed riff is not material on the desk; greeting someone with their
-  // own failure would be a status report. `working` stays — Quincy holding a
-  // scrap it has not finished reading is still a scrap it was handed.
-  const usable = riffs.filter((riff) => riff.state !== "failed")
+  /**
+   * A failed riff is not material on the desk; greeting someone with their
+   * own failure would be a status report. `working` stays — Quincy holding a
+   * scrap it has not finished reading is still a scrap it was handed.
+   *
+   * **A stuck one does not stay**, and that is the correction. `working` means
+   * "not finished reading it yet", which is true for the first four minutes and
+   * a lie after that: the run is gone, nothing will retry it, and no angle is
+   * coming. Measured on the real account on 2026-08-13 — one riff, `working`
+   * since 2026-08-11, and the greeting was still saying "There is material on
+   * the desk. Say the word and I draft from it" about a scrap Quincy had lost
+   * 42 hours earlier. Offering to draft from it is the worst of the two
+   * outcomes: the desk is not quiet, it is holding a corpse.
+   *
+   * Excluded rather than described. "I lost that one" is what the riff card
+   * already says, in the place that can also do something about it; repeating
+   * it in the opening line would make the first thing Quincy says be an
+   * apology for its own plumbing.
+   */
+  const usable = riffs.filter(
+    (riff) => riff.state !== "failed" && riff.stuck !== true
+  )
   const newest = usable[0]
 
   if (!newest) {
