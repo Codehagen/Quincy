@@ -20,6 +20,13 @@ pnpm install
 cp .env.example .env.local
 ```
 
+`pnpm install` will report that it skipped `@aiforui/lapse`, and that is
+expected rather than a broken clone. It is an animation inspector on a private
+registry, listed as an optional dependency so the install survives not being
+able to fetch it. Nothing in the product uses it; when it is absent the panel
+in `components/lapse-panel.tsx` renders nothing and the import that would pull
+it in is dropped at build time.
+
 Fill in `.env.local`. Every variable is documented in
 [`.env.example`](../.env.example); the minimum to boot the app is:
 

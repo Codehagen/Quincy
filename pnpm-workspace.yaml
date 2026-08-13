@@ -57,6 +57,17 @@ allowBuilds:
   cbor-extract: true
 
 minimumReleaseAgeExclude:
+  # Not a version pin like the entries below it — this one is here because the
+  # package lives on a private registry (see .npmrc) that answers 401 to anyone
+  # without a token. The age check has to fetch metadata to do its job, so for
+  # this package it cannot, and a check that cannot run fails the whole install.
+  #
+  # Paired with `optionalDependencies` in package.json: this gets the lockfile
+  # past the policy, and that lets the 401 on the tarball be survivable. Both
+  # are needed, and neither works alone — verified by installing with the token
+  # withheld. See components/lapse-panel.tsx for what happens after it is
+  # missing.
+  - '@aiforui/lapse@0.19.0'
   - '@workflow/astro@4.0.17'
   - '@workflow/builders@4.1.7'
   - '@workflow/cli@4.3.6'

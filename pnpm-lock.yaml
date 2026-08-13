@@ -140,9 +140,6 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      '@aiforui/lapse':
-        specifier: ^0.19.0
-        version: 0.19.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@react-email/ui':
         specifier: 6.9.1
         version: 6.9.1(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -200,6 +197,10 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@20.19.43)(vite@8.2.0(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
+    optionalDependencies:
+      '@aiforui/lapse':
+        specifier: ^0.19.0
+        version: 0.19.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
 packages:
 
@@ -6797,6 +6798,7 @@ snapshots:
     optionalDependencies:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
+    optional: true
 
   '@alloc/quick-lru@5.2.0': {}
 

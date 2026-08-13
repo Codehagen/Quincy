@@ -1,5 +1,40 @@
+import { createRequire } from "node:module"
+
 import type { NextConfig } from "next"
 import { withWorkflow } from "workflow/next"
+
+/**
+ * Whether the Lapse inspector is installed on this machine.
+ *
+ * Lapse is an optional dependency served from a private registry, so it is
+ * present for whoever has the token in their `~/.npmrc` and absent for CI, for
+ * anyone who cloned the public repository, and for the production build. That
+ * is deliberate — it is a development tool and nothing in the product needs it
+ * — but "absent" has to mean *nothing refers to it*, because a bundler resolves
+ * a dynamic import at build time and a missing target is a build error, not a
+ * caught exception.
+ *
+ * So the answer is computed here, once, and handed to the client as a literal.
+ * `components/lapse-panel.tsx` reads it in a condition; Next inlines
+ * `NEXT_PUBLIC_*` at build time, the condition folds to `false`, and the whole
+ * branch — the `import()` with it — is dropped before resolution is attempted.
+ * That is the same mechanism the `NODE_ENV` guard in that file already relies
+ * on, and the comment there records how it was verified.
+ *
+ * Detected rather than configured. A `NEXT_PUBLIC_LAPSE=1` in `.env.local`
+ * would work identically and would be one more thing to remember on a machine
+ * that already answers the question by having the package or not.
+ */
+const require_ = createRequire(import.meta.url)
+
+function hasLapse(): boolean {
+  try {
+    require_.resolve("@aiforui/lapse")
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Renamed surfaces keep their old paths working. Deliberately temporary (307)
@@ -22,6 +57,10 @@ const RENAMED_ROUTES: Array<[from: string, to: string]> = [
 ]
 
 const nextConfig: NextConfig = {
+  // Read by components/lapse-panel.tsx and nothing else. Empty rather than
+  // "0" so the branch folds on a falsy literal either way.
+  env: { NEXT_PUBLIC_LAPSE: hasLapse() ? "1" : "" },
+
   /**
    * Partial prerendering. The marketing surfaces are static pages wearing a
    * dynamic header: the only per-request read on them is the session that
