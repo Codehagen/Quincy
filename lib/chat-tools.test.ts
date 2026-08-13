@@ -23,6 +23,7 @@ const getDrafts = vi.hoisted(() => vi.fn())
 const getLineup = vi.hoisted(() => vi.fn())
 const listConnections = vi.hoisted(() => vi.fn())
 const getSourceConnections = vi.hoisted(() => vi.fn())
+const corpusSummary = vi.hoisted(() => vi.fn())
 const draftAngle = vi.hoisted(() => vi.fn())
 const captureToRiff = vi.hoisted(() => vi.fn())
 
@@ -37,6 +38,7 @@ vi.mock("./lineup", async () => {
 })
 vi.mock("./channels", () => ({ listConnections }))
 vi.mock("./sources", () => ({ getSourceConnections }))
+vi.mock("./corpus-x", () => ({ corpusSummary }))
 vi.mock("@/app/(app)/riffs/actions", () => ({ draftAngle, captureToRiff }))
 
 const { chatTools } = await import("./chat-tools")
@@ -207,7 +209,7 @@ describe("read_lineup", () => {
 describe("read_channels", () => {
   it("says plainly that a revoked channel cannot publish", async () => {
     listConnections.mockResolvedValue([
-      { channel: "x", handle: "codehagen", state: "active" },
+      { channel: "x", handle: "@codehagen", state: "active" },
       { channel: "linkedin", handle: null, state: "needs_reauth" },
     ])
 
@@ -273,6 +275,47 @@ describe("capture_riff", () => {
     expect(captureToRiff).toHaveBeenCalledWith({
       text: "  their exact words  ",
     })
+  })
+})
+
+describe("read_channels and read_sources", () => {
+  it("does not double the @ on a handle that already has one", async () => {
+    listConnections.mockResolvedValue([
+      { channel: "x", handle: "@CodeHagen", state: "active" },
+    ])
+
+    // "@@CodeHagen" reached a real conversation. The one sentence whose job is
+    // to name the account correctly must name it correctly.
+    const out = await run("read_channels")
+    expect(out).toContain("@CodeHagen")
+    expect(out).not.toContain("@@")
+  })
+
+  it("says the corpus is empty and what fills it", async () => {
+    getSourceConnections.mockResolvedValue({})
+    corpusSummary.mockResolvedValue({ items: 0, newestPostedAt: null })
+
+    const out = await run("read_sources")
+
+    // Asked what it could see, Quincy said "the connected X account" and
+    // stopped — true and useless. Connecting a channel and reading the corpus
+    // are two different things, and only one of them teaches it a voice.
+    expect(out).toMatch(/read none of your own published posts/)
+    expect(out).toMatch(/Read my posts/)
+    expect(out).toMatch(/sources/)
+  })
+
+  it("reports how much it has read once there is a corpus", async () => {
+    getSourceConnections.mockResolvedValue({})
+    corpusSummary.mockResolvedValue({
+      items: 200,
+      newestPostedAt: new Date("2026-08-01T10:00:00Z"),
+    })
+
+    const out = await run("read_sources")
+
+    expect(out).toMatch(/200 of your own posts/)
+    expect(out).toContain("2026-08-01")
   })
 })
 

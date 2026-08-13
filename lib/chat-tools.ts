@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { captureToRiff, draftAngle } from "@/app/(app)/riffs/actions"
 import { listConnections } from "./channels"
+import { corpusSummary } from "./corpus-x"
 import { countWaiting, getDrafts } from "./drafts"
 import { countQueued, getLineup } from "./lineup"
 import { getRiffs } from "./riffs"
@@ -93,6 +94,39 @@ const LIST_LIMIT = 8
 /** "3 things" / "1 thing", without a stray plural in the model's mouth. */
 function count(n: number, singular: string, plural = `${singular}s`) {
   return `${n} ${n === 1 ? singular : plural}`
+}
+
+/**
+ * What Quincy has read of this person's own published writing.
+ *
+ * Appended to `read_sources` rather than given a tool of its own, because the
+ * question it answers is the one somebody is already asking when they ask what
+ * Quincy can see.
+ *
+ * **This is the sentence that was missing on 2026-08-13.** Asked whether it
+ * could see his past posts, Quincy answered that it had access to the connected
+ * X account and stopped there — true, and useless. It had read none of it, and
+ * one button on /sources would have changed that. A connected channel and a
+ * read corpus are two different things: the first buys the right to publish,
+ * the second buys the material and the voice. Nothing in the chat said so.
+ *
+ * The import is deliberately *not* a tool. It is a real purchase — X charges
+ * about half a cent a post and the default is 200 — and this product puts a
+ * spend of that size behind a button with a receipt rather than behind a
+ * sentence a model decided to act on.
+ */
+async function corpusLine(userId: string): Promise<string> {
+  const { items, newestPostedAt } = await corpusSummary(userId)
+
+  if (items === 0) {
+    return "\n\nQuincy has read none of your own published posts. That is a separate step from connecting a channel: press “Read my posts” on /sources and it reads your X timeline, which is what teaches it your voice. It costs about half a cent a post."
+  }
+
+  const newest = newestPostedAt
+    ? `, the newest from ${newestPostedAt.toISOString().slice(0, 10)}`
+    : ""
+
+  return `\n\nQuincy has read ${count(items, "of your own posts", "of your own posts")}${newest}. Read my posts on /sources picks up anything newer.`
 }
 
 export function chatTools(user: ChatUser): Record<string, Tool> {
@@ -228,7 +262,13 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         }
 
         const lines = connections.map((connection) => {
-          const who = connection.handle ? ` (@${connection.handle})` : ""
+          /**
+           * The handle is stored with its `@` already on it — `@CodeHagen`,
+           * not `CodeHagen`. Adding another produced `@@CodeHagen` in the one
+           * sentence whose whole job is to name the account correctly, and it
+           * reached a real conversation before anybody noticed.
+           */
+          const who = connection.handle ? ` (${connection.handle})` : ""
           const state =
             connection.state === "active"
               ? "connected"
@@ -251,7 +291,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         const entries = Object.entries(connections)
 
         if (entries.length === 0) {
-          return "No source is connected, so no raw material arrives on its own. Sources are connected on /sources; a post can also be pasted straight into /riffs."
+          return `No source is connected, so no raw material arrives on its own. Sources are connected on /sources; a post can also be pasted straight into /riffs.${await corpusLine(user.id)}`
         }
 
         const lines = entries.map(([source, connection]) => {
@@ -267,7 +307,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
           }
         })
 
-        return `${count(entries.length, "source")} connected.\n${lines.join("\n")}`
+        return `${count(entries.length, "source")} connected.\n${lines.join("\n")}${await corpusLine(user.id)}`
       },
     }),
 
