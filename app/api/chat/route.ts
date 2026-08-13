@@ -23,18 +23,27 @@ import { captureTurn } from "@/lib/heartbeat"
 import { recordUsage, summariseUsage } from "@/lib/usage"
 
 /**
- * Sixty, not thirty.
+ * A hundred and twenty, and the number is measured rather than picked.
  *
- * It was thirty when a turn was one model call. A turn is now up to
- * `MAX_CHAT_STEPS` calls with database reads between them, and `draft_angle`
- * makes a model call of its own inside one of those steps — so the old ceiling
- * would cut a working turn off mid-draft, after the money was spent and before
- * the user was told what happened.
+ * It was thirty when a turn was one model call, and sixty once the tools
+ * landed. Sixty was still wrong, and the first real capture proved it: on
+ * 2026-08-13 a turn read the riffs, read the drafts, decided, and then called
+ * `capture_riff` on a five-thousand-character script — four model calls, the
+ * last of which generates angles and is the slowest thing this route can do.
+ * Vercel ended the function while that call was in flight. The user saw a tool
+ * that started and never finished.
  *
- * Still well under the editor agent's 120: that one edits video and this one
- * writes sentences.
+ * Two model calls of headroom past the worst turn observed, which is the same
+ * margin the editor agent gives itself at the same number. That one edits
+ * video; this one now embeds a full generation inside a step, so they cost
+ * about the same.
+ *
+ * **The ceiling is not the real defence, and must not be treated as one.** A
+ * longer budget makes a kill rarer, never impossible, so nothing inside a tool
+ * may leave a half-finished row behind when it happens — see
+ * `createRiffFromSaid`, which writes nothing until the work is done.
  */
-export const maxDuration = 60
+export const maxDuration = 120
 
 /**
  * Model id is a Vercel AI Gateway slug, not a provider SDK. The gateway

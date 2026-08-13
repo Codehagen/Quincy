@@ -822,6 +822,127 @@ export async function startSpokenRiff(
   return id
 }
 
+export type CreateSaidRiffResult =
+  | { ok: true; riffId: string; angles: number; groundedIn: string }
+  | { ok: false; message: string }
+
+/**
+ * The user's own words, straight to a finished riff.
+ *
+ * **Angles first, row second, and that ordering is the whole point.** The
+ * spoken path does the opposite — `startSpokenRiff` writes a `working` row and
+ * `completeSpokenRiff` fills it in — and that is right where it is used: a
+ * voice note runs inside a Workflow step that retries, and the transcript is
+ * unrepeatable because the audio is deleted, so storing it before asking for
+ * angles is what stops a walk being lost.
+ *
+ * Neither of those holds for text typed into the chat. Nothing retries it, and
+ * the words are still sitting in the conversation the user can see. So the
+ * expensive, unrepeatable artifact this ordering has to protect does not exist,
+ * and what is left is the cost: a function killed mid-generation leaves a row
+ * in `working` that nothing will ever finish.
+ *
+ * That is not hypothetical. On 2026-08-13 at 11:53 the first real capture from
+ * the chat — a nine-thousand-character episode script — created exactly that
+ * row: scrap stored, zero angles, no usage recorded, `working` forever. It was
+ * the second riff on that account to end up in the state, and the first one had
+ * already sat there for two days.
+ *
+ * Written this way, a kill at any point before the insert leaves nothing at
+ * all, and the user simply sends the text again.
+ */
+export async function createRiffFromSaid({
+  userId,
+  text,
+  sourceId,
+  sourceLabel,
+  deps = { angles: generateAnglesFromSaid },
+}: {
+  userId: string
+  text: string
+  sourceId: string
+  sourceLabel: string
+  deps?: { angles: SaidAngleGenerator }
+}): Promise<CreateSaidRiffResult> {
+  const scrap = text.trim().slice(0, MAX_TRANSCRIPT_CHARS)
+
+  if (!scrap) {
+    return { ok: false, message: "There is nothing here to capture." }
+  }
+
+  let generation: Awaited<ReturnType<SaidAngleGenerator>>
+  try {
+    generation = await deps.angles({
+      scrap,
+      brain: await renderBrainForUser(userId),
+      note: "",
+      shapes: await publishableShapes(userId),
+    })
+  } catch (cause) {
+    console.error("[riffs] said angle generation failed:", cause)
+    return {
+      ok: false,
+      message: "Quincy could not find an angle in that one.",
+    }
+  }
+
+  // Metered whatever the answer was. A "found nothing" reply cost the same as
+  // a good one, and the cooldown counts attempts rather than successes.
+  if (generation.usage) {
+    try {
+      await recordUsage({
+        userId,
+        model: ADAPT_MODEL,
+        conversationId: ADAPT_SPEND,
+        inputTokens: generation.usage.inputTokens,
+        cachedInputTokens: generation.usage.cachedInputTokens,
+        outputTokens: generation.usage.outputTokens,
+      })
+    } catch (cause) {
+      console.error("[riffs] could not record usage:", cause)
+    }
+  }
+
+  if (generation.angles.length === 0) {
+    return {
+      ok: false,
+      message: "Quincy could not find an angle in that one.",
+    }
+  }
+
+  const id = newRiffId()
+
+  await db.insert(riff).values({
+    id,
+    userId,
+    scrap,
+    sourceId,
+    sourceLabel,
+    // `ready` immediately, like `createRiffFromPost`: the angles go in beside
+    // it, so there is no window in which this renders as a skeleton and no
+    // state for a dead run to leave behind.
+    state: "ready",
+  })
+
+  await db.insert(riffAngle).values(
+    generation.angles.map((angle, position) => ({
+      id: `${id}-a${position}`,
+      riffId: id,
+      hook: angle.hook.trim(),
+      shape: angle.shape,
+      why: angle.why.trim(),
+      position,
+    }))
+  )
+
+  return {
+    ok: true,
+    riffId: id,
+    angles: generation.angles.length,
+    groundedIn: generation.groundedIn,
+  }
+}
+
 /**
  * When a voice riff has been waiting long enough to call it stuck.
  *

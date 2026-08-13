@@ -21,14 +21,12 @@ import {
   CHANNEL_LABELS,
   MAX_TRANSCRIPT_CHARS,
   CHANNELS_FOR_SHAPE,
-  completeSpokenRiff,
   createRiffFromPost,
-  failSpokenRiff,
+  createRiffFromSaid,
   getOwnedAngle,
   getOwnedRiff,
   newAngleId,
   shapesForChannel,
-  startSpokenRiff,
   type Angle,
   type Riff,
 } from "@/lib/riffs"
@@ -619,11 +617,12 @@ export type CaptureResult =
  * built for the user talking — a voice note, a passage from a meeting, and now
  * something they wrote in the chat. The numbers in it are theirs to keep.
  *
- * **The riff is never left working.** `completeSpokenRiff` is written for a
- * workflow step that Workflow retries; here there is no retry, so a failure
- * that returned would leave a row in `working` forever — the exact state that
- * had one of Christer's riffs sitting on the desk for 42 hours. A failure is
- * marked as one before this returns.
+ * **No row exists until the angles do**, which is `createRiffFromSaid`'s whole
+ * shape and the reason this does not call `completeSpokenRiff`. The first real
+ * capture from the chat, on 2026-08-13, was killed mid-generation and left a
+ * `working` row with the script in it and nothing else — the second riff on
+ * that account to end up stranded. Nothing retries a chat tool, so the only
+ * safe ordering is the one where a kill leaves nothing behind.
  */
 export async function captureToRiff(input: {
   /** Their words, verbatim. */
@@ -672,26 +671,14 @@ export async function captureToRiff(input: {
   // `notes`/`Pasted`, matching what `adaptPostToRiff` writes for a paste with
   // no URL behind it. The tile says where the words came from, and these came
   // from the person.
-  const riffId = await startSpokenRiff(session.user.id, {
-    id: "notes",
-    label: "Pasted",
-  })
-
-  const result = await completeSpokenRiff({
-    riffId,
+  const result = await createRiffFromSaid({
     userId: session.user.id,
-    transcript: text,
-    emptyMessage: "There is nothing here to capture.",
+    text,
+    sourceId: "notes",
+    sourceLabel: "Pasted",
   })
 
   if (!result.ok) {
-    // See the doc comment: no retry stands behind this, so the row is resolved
-    // here or it is stuck forever.
-    await failSpokenRiff({
-      riffId,
-      userId: session.user.id,
-      message: result.message,
-    })
     return { ok: false, message: result.message }
   }
 
@@ -699,7 +686,7 @@ export async function captureToRiff(input: {
 
   return {
     ok: true,
-    riffId,
+    riffId: result.riffId,
     angles: result.angles,
     groundedIn: result.groundedIn,
   }
