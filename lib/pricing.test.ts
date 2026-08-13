@@ -80,3 +80,47 @@ describe("formatMicros", () => {
     expect(formatMicros(0)).toBe("$0.00")
   })
 })
+
+describe("a model with its own rate", () => {
+  const FLASH = "deepseek/deepseek-v4-flash-0731"
+
+  it("prices DeepSeek at its own rate, not at the fallback", () => {
+    // 1M input + 1M output at $0.08 / $0.15 = $0.23 = 230_000 micros.
+    // Priced through the fallback it would be $12.00, which is the number that
+    // would silently lock a user out of a $10 day.
+    expect(
+      estimateCostMicros(FLASH, {
+        inputTokens: 1_000_000,
+        cachedInputTokens: 0,
+        outputTokens: 1_000_000,
+      })
+    ).toBe(230_000)
+  })
+
+  it("prices the floating alias the same as the pinned one", () => {
+    const usage = {
+      inputTokens: 10_000,
+      cachedInputTokens: 0,
+      outputTokens: 2_000,
+    }
+
+    // Pinning or unpinning the date must not also be a pricing change.
+    expect(estimateCostMicros("deepseek/deepseek-v4-flash", usage)).toBe(
+      estimateCostMicros(FLASH, usage)
+    )
+  })
+
+  it("falls back to the dearest rate for a model nobody priced", () => {
+    const usage = {
+      inputTokens: 1_000,
+      cachedInputTokens: 0,
+      outputTokens: 1_000,
+    }
+
+    // Of the two ways to be wrong, only over-reporting is recoverable: it
+    // trips the ceiling early and loudly instead of spending quietly.
+    expect(estimateCostMicros("someone/unpriced-model", usage)).toBe(
+      estimateCostMicros("anthropic/claude-sonnet-5", usage)
+    )
+  })
+})

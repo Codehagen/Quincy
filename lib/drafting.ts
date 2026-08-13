@@ -25,7 +25,25 @@ import {
  * already draw.
  */
 
-const MODEL = process.env.CHAT_MODEL ?? "anthropic/claude-sonnet-5"
+/**
+ * The model that writes the posts, and its own variable.
+ *
+ * Every other call site in this product reads `CHAT_MODEL`, which meant one
+ * string decided both how the chat thinks and how the writing reads. Those are
+ * not the same decision. Measured on 2026-08-13, drafting and the background
+ * jobs are 70% of all spend, so the pressure to reach for a cheaper model lands
+ * here first — and this is also the one output a person publishes under their
+ * own name. A knob that trades those against each other silently is the wrong
+ * knob.
+ *
+ * Falls through to `CHAT_MODEL` and then to Sonnet, so nothing changes until
+ * somebody sets it deliberately. Moving the chat to a cheap model is now one
+ * variable; moving the writing is a second, separate act.
+ */
+const MODEL =
+  process.env.DRAFTING_MODEL ??
+  process.env.CHAT_MODEL ??
+  "anthropic/claude-sonnet-5"
 
 /** Exported so the call site can pass the same string to `recordUsage`. */
 export const DRAFTING_MODEL = MODEL
