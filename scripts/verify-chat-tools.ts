@@ -23,12 +23,13 @@
  * Signs in as the @quincy.test dev account, the same guard
  * scripts/dev-account.ts enforces. Run that first if sign-in fails.
  *
- * Teardown deletes only the conversation it created; messages cascade.
+ * Teardown deletes only what it created — the conversation, and the riff the
+ * capture turn makes. Messages and angles cascade.
  */
 import { eq } from "drizzle-orm"
 
 import { db } from "../lib/db"
-import { conversation } from "../lib/schema-app"
+import { conversation, riff } from "../lib/schema-app"
 import { user } from "../lib/schema"
 import { requireTestTarget } from "./target-guard"
 
@@ -71,6 +72,21 @@ async function main() {
    */
   const trialWas = account.trialEndsAt
 
+  /**
+   * Every riff this account already had. The capture check asserts on what is
+   * new, so a dev account with history does not fail it — and teardown removes
+   * only rows this run is responsible for.
+   */
+  const existingRiffIds = new Set(
+    (
+      await db
+        .select({ id: riff.id })
+        .from(riff)
+        .where(eq(riff.userId, account.id))
+    ).map((row) => row.id)
+  )
+  let createdRiffIds: string[] = []
+
   try {
     await db
       .update(user)
@@ -104,22 +120,92 @@ async function main() {
     check(namedTheEmptyState, "the empty state reached the answer")
 
     // The invariant. Nothing in this product may tell a user something posted.
-    const claimedToPublish = /\b(i (have )?)?(published|posted|scheduled) (it|your|the)/i.test(
-      stream.body
-    )
+    const claimedToPublish =
+      /\b(i (have )?)?(published|posted|scheduled) (it|your|the)/i.test(
+        stream.body
+      )
     check(!claimedToPublish, "nothing in the reply claims to have published")
+
+    /**
+     * The loop that makes the chat a front door rather than a window.
+     *
+     * On 2026-08-13 the user pasted a script into the chat and got a correct
+     * refusal: draft_angle needs an angle id, and pasted text has none. The
+     * model then offered to write the post inside the conversation, which is
+     * the failure this checks against — writing that never becomes a draft
+     * never reaches /drafts and can never be published.
+     */
+    const captured = await ask(
+      cookie,
+      "Capture this so we can work on it. We killed per-seat pricing this " +
+        "week. The reason is that per-seat charges a customer more for " +
+        "adopting the product, which is backwards: the moment a tool starts " +
+        "working, the invoice punishes you for it. We watched a team keep " +
+        "three people off an account they had already decided to use, purely " +
+        "so the bill stayed flat, and that is the whole argument. One price " +
+        "for the team now. Revenue per account went down about eleven per " +
+        "cent in the first month and adoption inside each account roughly " +
+        "doubled, which is the trade we wanted."
+    )
+
+    check(
+      captured.status === 200,
+      `capture answered 200 (got ${captured.status})`
+    )
+    check(
+      /capture_riff/.test(captured.body),
+      "the model captured the material instead of answering around it"
+    )
+
+    // The row is the proof. A tool call in the stream that wrote nothing would
+    // pass the check above and fail the product.
+    const rows = await db
+      .select({ id: riff.id, state: riff.state })
+      .from(riff)
+      .where(eq(riff.userId, account.id))
+    const fresh = rows.filter((row) => !existingRiffIds.has(row.id))
+
+    if (fresh.length !== 1) {
+      /**
+       * The tool's own refusal, surfaced.
+       *
+       * "0 riffs" alone sends the reader to the wrong place: a lapsed trial, a
+       * cooldown and text over the ceiling all look identical from the row
+       * count, and only one of them is a bug.
+       */
+      const refusal = captured.body.match(/Not captured:[^"\\]*/)?.[0]
+      console.log(`     tool said: ${refusal ?? "(no refusal in the stream)"}`)
+    }
+
+    check(
+      fresh.length === 1,
+      `exactly one riff was created (got ${fresh.length})`
+    )
+    check(
+      fresh[0]?.state === "ready",
+      `the new riff is ready, not stuck (state ${fresh[0]?.state ?? "none"})`
+    )
+
+    createdRiffIds = fresh.map((row) => row.id)
   } finally {
     await db
       .update(user)
       .set({ trialEndsAt: trialWas })
       .where(eq(user.id, account.id))
-    console.log(`\n  restored trial_ends_at to ${trialWas?.toISOString() ?? "null"}`)
+    console.log(
+      `\n  restored trial_ends_at to ${trialWas?.toISOString() ?? "null"}`
+    )
 
     const removed = await db
       .delete(conversation)
       .where(eq(conversation.id, CONVERSATION_ID))
       .returning({ id: conversation.id })
     console.log(`  removed ${removed.length} conversation(s)`)
+
+    for (const id of createdRiffIds) {
+      await db.delete(riff).where(eq(riff.id, id))
+    }
+    console.log(`  removed ${createdRiffIds.length} riff(s)`)
   }
 }
 

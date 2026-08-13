@@ -12,18 +12,23 @@ import { recentlyWritten } from "@/lib/drafts"
 import { measurePost } from "@/lib/post-length"
 import {
   ADAPT_MODEL,
+  ADAPT_SPEND,
   generateChannelAngle,
   parseSourceInput,
 } from "@/lib/adapt"
 import {
   channelGaps,
   CHANNEL_LABELS,
+  MAX_TRANSCRIPT_CHARS,
   CHANNELS_FOR_SHAPE,
+  completeSpokenRiff,
   createRiffFromPost,
+  failSpokenRiff,
   getOwnedAngle,
   getOwnedRiff,
   newAngleId,
   shapesForChannel,
+  startSpokenRiff,
   type Angle,
   type Riff,
 } from "@/lib/riffs"
@@ -511,7 +516,7 @@ export async function askForChannelAngle(input: {
   // press on either of these two can hold both for 15s. Acceptable: they
   // spend from the same budget, and this is the "found nothing" gap this
   // whole cooldown exists to close.
-  const cooldown = await spendCooldown(session.user.id, [ADAPT_MODEL], 15_000)
+  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
   if (!cooldown.ready) {
     return {
       ok: false,
@@ -544,6 +549,10 @@ export async function askForChannelAngle(input: {
       await recordUsage({
         userId: session.user.id,
         model: ADAPT_MODEL,
+        // Same tag as `createRiffFromPost`, because the two share one
+        // cooldown — see ADAPT_SPEND. A spend that is rate-limited together
+        // has to be counted together.
+        conversationId: ADAPT_SPEND,
         inputTokens: generation.usage.inputTokens,
         cachedInputTokens: generation.usage.cachedInputTokens,
         outputTokens: generation.usage.outputTokens,
@@ -590,6 +599,112 @@ export async function askForChannelAngle(input: {
  * Money patterns are plan 012's, in that order: session, entitlement, spend,
  * then a result object rather than a throw once anything has been spent.
  */
+
+export type CaptureResult =
+  | { ok: true; riffId: string; angles: number; groundedIn: string }
+  | { ok: false; message: string }
+
+/**
+ * The user's own material, typed or pasted, turned into a riff with angles.
+ *
+ * **Not `adaptPostToRiff`, and the difference is the whole point.** That one
+ * runs `generateAngles`, whose system prompt opens "Below is a post somebody
+ * else wrote" and whose rules forbid reusing the source's numbers — correct
+ * for a stranger's post, and exactly wrong for your own. Given a person's own
+ * account of their own decision it has nothing to adapt, so it honestly returns
+ * no angles. Measured on 2026-08-13: a nine-sentence paste with a number in it
+ * came back empty twice through that path.
+ *
+ * This one runs `generateAnglesFromSaid` through `completeSpokenRiff`, which is
+ * built for the user talking — a voice note, a passage from a meeting, and now
+ * something they wrote in the chat. The numbers in it are theirs to keep.
+ *
+ * **The riff is never left working.** `completeSpokenRiff` is written for a
+ * workflow step that Workflow retries; here there is no retry, so a failure
+ * that returned would leave a row in `working` forever — the exact state that
+ * had one of Christer's riffs sitting on the desk for 42 hours. A failure is
+ * marked as one before this returns.
+ */
+export async function captureToRiff(input: {
+  /** Their words, verbatim. */
+  text: string
+}): Promise<CaptureResult> {
+  const session = await getSession()
+  if (!session) {
+    return { ok: false, message: "Not signed in." }
+  }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return {
+      ok: false,
+      message:
+        entitlement.state === "lapsed"
+          ? "Your subscription is no longer active."
+          : "Your free day is over.",
+    }
+  }
+
+  // The same family and the same window as the two adapt calls: all three are
+  // one model call started by one press, and a person capturing twice in ten
+  // seconds is a double submit rather than a second thought.
+  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
+  if (!cooldown.ready) {
+    return {
+      ok: false,
+      message: `Give Quincy a moment — ${cooldown.secondsLeft}s before the next one.`,
+    }
+  }
+
+  const text = input.text.trim()
+
+  if (!text) {
+    return { ok: false, message: "There is nothing here to capture." }
+  }
+
+  if (text.length > MAX_TRANSCRIPT_CHARS) {
+    return {
+      ok: false,
+      message: `That is ${text.length} characters. Send at most ${MAX_TRANSCRIPT_CHARS} — the transferable idea is never in the last thousand.`,
+    }
+  }
+
+  // `notes`/`Pasted`, matching what `adaptPostToRiff` writes for a paste with
+  // no URL behind it. The tile says where the words came from, and these came
+  // from the person.
+  const riffId = await startSpokenRiff(session.user.id, {
+    id: "notes",
+    label: "Pasted",
+  })
+
+  const result = await completeSpokenRiff({
+    riffId,
+    userId: session.user.id,
+    transcript: text,
+    emptyMessage: "There is nothing here to capture.",
+  })
+
+  if (!result.ok) {
+    // See the doc comment: no retry stands behind this, so the row is resolved
+    // here or it is stuck forever.
+    await failSpokenRiff({
+      riffId,
+      userId: session.user.id,
+      message: result.message,
+    })
+    return { ok: false, message: result.message }
+  }
+
+  revalidatePath("/riffs")
+
+  return {
+    ok: true,
+    riffId,
+    angles: result.angles,
+    groundedIn: result.groundedIn,
+  }
+}
+
 export type AdaptPostResult =
   | {
       ok: true
@@ -626,7 +741,7 @@ export async function adaptPostToRiff(input: {
   // Shared across the adapt-model family with `askForChannelAngle` — see the
   // comment there. A pasted post with no URL was not deduplicated at all
   // before this; the cooldown is the backstop for that gap.
-  const cooldown = await spendCooldown(session.user.id, [ADAPT_MODEL], 15_000)
+  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
   if (!cooldown.ready) {
     return {
       ok: false,

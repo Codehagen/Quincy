@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, gte, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
@@ -81,10 +81,25 @@ export async function summariseUsage(
 }
 
 /**
- * Has this user triggered a generation on any of these models inside the
- * window? The metering row is the attempt log — written whether or not the
- * result was kept, which is exactly what a cooldown must count (a "found
- * nothing" answer still spent).
+ * Has this user triggered a generation *in this feature* inside the window?
+ * The metering row is the attempt log — written whether or not the result was
+ * kept, which is exactly what a cooldown must count (a "found nothing" answer
+ * still spent).
+ *
+ * **Keyed on the feature, not on the model, and that is a fix rather than a
+ * preference.** It took a model id, which worked only while each feature had
+ * its own model. `ADAPT_MODEL` and `CHAT_MODEL` both resolve to
+ * `anthropic/claude-sonnet-5`, so every chat turn wrote a row that the adapt
+ * cooldown counted as an adapt: talking to Quincy and then pressing "Adapt
+ * this post" inside fifteen seconds was refused, and so was capturing material
+ * from inside the chat itself — which is the flow that found this on
+ * 2026-08-13. A rate limit on one button must not be trippable by a different
+ * button that happens to bill the same model.
+ *
+ * The tag is `usage_event.conversation_id`, which is already doing this job
+ * elsewhere: the chat writes the conversation id and the editor agent writes
+ * `project:{id}`. There is no foreign key on the column for exactly this
+ * reason.
  *
  * Read-then-act, deliberately: two presses landing inside one round trip
  * both pass, which bounds the race at 2 where there was no bound at all.
@@ -93,14 +108,14 @@ export async function summariseUsage(
  */
 export async function spendCooldown(
   userId: string,
-  models: string[],
+  feature: string,
   cooldownMs: number
 ): Promise<{ ready: true } | { ready: false; secondsLeft: number }> {
   const [recent] = await db
     .select({ createdAt: usageEvent.createdAt })
     .from(usageEvent)
     .where(
-      and(eq(usageEvent.userId, userId), inArray(usageEvent.model, models))
+      and(eq(usageEvent.userId, userId), eq(usageEvent.conversationId, feature))
     )
     .orderBy(desc(usageEvent.createdAt))
     .limit(1)

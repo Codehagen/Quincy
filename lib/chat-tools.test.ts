@@ -24,6 +24,7 @@ const getLineup = vi.hoisted(() => vi.fn())
 const listConnections = vi.hoisted(() => vi.fn())
 const getSourceConnections = vi.hoisted(() => vi.fn())
 const draftAngle = vi.hoisted(() => vi.fn())
+const captureToRiff = vi.hoisted(() => vi.fn())
 
 vi.mock("./riffs", () => ({ getRiffs }))
 vi.mock("./drafts", async () => {
@@ -36,7 +37,7 @@ vi.mock("./lineup", async () => {
 })
 vi.mock("./channels", () => ({ listConnections }))
 vi.mock("./sources", () => ({ getSourceConnections }))
-vi.mock("@/app/(app)/riffs/actions", () => ({ draftAngle }))
+vi.mock("@/app/(app)/riffs/actions", () => ({ draftAngle, captureToRiff }))
 
 const { chatTools } = await import("./chat-tools")
 
@@ -216,6 +217,62 @@ describe("read_channels", () => {
     // The consequence, not the state name — "needs_reauth" means nothing to
     // the person being told about it.
     expect(out).toMatch(/cannot publish until it is/)
+  })
+})
+
+describe("capture_riff", () => {
+  it("points at the next step rather than stopping at 'done'", async () => {
+    captureToRiff.mockResolvedValue({
+      ok: true,
+      riffId: "rif_1",
+      angles: 3,
+      groundedIn: "a post about pricing",
+    })
+
+    const out = await run("capture_riff", { text: "Episode 02 script..." })
+
+    // The tool that captures is useless on its own: the ids it created live in
+    // read_riffs, and the model has to go and get them.
+    expect(out).toMatch(/3 angles/)
+    expect(out).toMatch(/read_riffs/)
+    expect(out).toMatch(/draft_angle/)
+    // Still the invariant: capturing is not writing.
+    expect(out).toMatch(/Nothing is written until they choose/)
+  })
+
+  it("passes a refusal through with the reason intact", async () => {
+    // The ceiling is MAX_TRANSCRIPT_CHARS in lib/riffs.ts. A model that
+    // reports "could not capture" leaves the user with no idea that trimming
+    // the text is the fix.
+    captureToRiff.mockResolvedValue({
+      ok: false,
+      message:
+        "That is 9214 characters. Send at most 5760 — the transferable idea is never in the last thousand.",
+    })
+
+    expect(await run("capture_riff", { text: "x".repeat(9214) })).toContain(
+      "Send at most 5760"
+    )
+  })
+
+  it("sends the words on unchanged", async () => {
+    captureToRiff.mockResolvedValue({
+      ok: true,
+      riffId: "rif_1",
+      angles: 1,
+      groundedIn: "",
+    })
+
+    await run("capture_riff", {
+      text: "  their exact words  ",
+      note: "keep it short",
+    })
+
+    // Their material, not a summary of it. A model that paraphrases here would
+    // put its own writing into the riff and ground every later draft on it.
+    expect(captureToRiff).toHaveBeenCalledWith({
+      text: "  their exact words  ",
+    })
   })
 })
 

@@ -1,7 +1,7 @@
 import { tool, type Tool } from "ai"
 import { z } from "zod"
 
-import { draftAngle } from "@/app/(app)/riffs/actions"
+import { captureToRiff, draftAngle } from "@/app/(app)/riffs/actions"
 import { listConnections } from "./channels"
 import { countWaiting, getDrafts } from "./drafts"
 import { countQueued, getLineup } from "./lineup"
@@ -20,22 +20,34 @@ import { getSourceConnections } from "./sources"
  * called tools was the video editor's (lib/editor/agent.ts), which is the shape
  * this follows.
  *
- * ## Reads are the whole surface, and one write is the exception
+ * ## Reads are most of the surface, and two writes complete a loop
  *
- * Six tools read. One drafts. Nothing approves, schedules or publishes, and
- * that is not an oversight to be fixed later — it is the product's single
- * invariant. `docs/vision.md`: **Quincy drafts, you send.** A tool that could
- * schedule would make the chat the one place in the app where writing goes out
- * without a person pressing Approve, and it would do it in the surface where
- * the user is least able to see what was decided on their behalf.
+ * Five tools read. Two write: one captures material, one drafts from it.
+ * Nothing approves, schedules or publishes, and that is not an oversight to be
+ * fixed later — it is the product's single invariant. `docs/vision.md`:
+ * **Quincy drafts, you send.** A tool that could schedule would make the chat
+ * the one place in the app where writing goes out without a person pressing
+ * Approve, and it would do it in the surface where the user is least able to
+ * see what was decided on their behalf.
  *
- * The drafting tool is not a hole in that rule; it is the rule working. A draft
- * lands in /drafts unapproved, exactly where "Draft this" on /riffs puts it,
- * and waits.
+ * Neither write is a hole in that rule; both are the rule working. A captured
+ * riff is material waiting for a decision, and a draft lands in /drafts
+ * unapproved, exactly where "Draft this" on /riffs puts it.
  *
- * ## Why the write tool is a call into the server action
+ * **`capture_riff` is what makes the chat the front door it claims to be.**
+ * Without it the read tools could describe the desk and nothing could put
+ * anything on it: on 2026-08-13 the user pasted a video script into the chat
+ * and Quincy correctly answered that it could not act on it, because
+ * `draft_angle` needs an angle id and pasted text has none. The model then
+ * offered to write the post directly in the conversation — which is the wrong
+ * fix, and the reason this tool exists rather than a looser drafting one.
+ * Writing that never becomes a draft never reaches /drafts, is never approved,
+ * is never scheduled, and is never metered against the piece it belongs to.
+ * Material has to enter the product through the same door on every surface.
  *
- * `draftAngle` already owns the hard parts: it proves the angle belongs to this
+ * ## Why both writes are calls into server actions
+ *
+ * `captureToRiff` and `draftAngle` already own the hard parts: it proves the angle belongs to this
  * user rather than trusting an id, refuses a second charge for a draft that
  * already exists, checks entitlement, holds a spend cooldown, and meters what
  * the model cost. Reimplementing any of that here would be a second copy of the
@@ -256,6 +268,34 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         })
 
         return `${count(entries.length, "source")} connected.\n${lines.join("\n")}`
+      },
+    }),
+
+    capture_riff: tool({
+      description:
+        "Turn text the user just gave you into a riff with angles, so it becomes material the product can work on. Use when they paste or dictate something — a script, a post, a note, a decision — and want anything done with it. Costs a model call. After this, call read_riffs to get the angle ids, then draft_angle to write one.",
+      inputSchema: z.object({
+        text: z
+          .string()
+          .describe(
+            "The material itself, verbatim. Their words, not your summary of them. Include the source URL if they gave one."
+          ),
+      }),
+      execute: async ({ text }) => {
+        const result = await captureToRiff({ text })
+
+        if (!result.ok) {
+          // The action's own sentence. It knows whether this was a lapsed
+          // trial, a cooldown, an empty paste or text over the ceiling, and
+          // each of those wants a different answer from the user.
+          return `Not captured: ${result.message}`
+        }
+
+        const grounded = result.groundedIn
+          ? ` Quincy leaned on ${result.groundedIn} of yours.`
+          : ""
+
+        return `Captured. ${count(result.angles, "angle")} on it.${grounded} Call read_riffs to see them with their ids, then draft_angle on the one they pick. Nothing is written until they choose.`
       },
     }),
 

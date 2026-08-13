@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 
 import {
   ADAPT_MODEL,
+  ADAPT_SPEND,
   generateAngles,
   generateAnglesFromSaid,
   type AngleGenerator,
@@ -557,6 +558,9 @@ export async function createRiffFromPost({
       await recordUsage({
         userId,
         model: ADAPT_MODEL,
+        // Tags the row as this feature's spend, which is what the cooldown
+        // counts. See ADAPT_SPEND in lib/adapt.ts.
+        conversationId: ADAPT_SPEND,
         inputTokens: generation.usage.inputTokens,
         cachedInputTokens: generation.usage.cachedInputTokens,
         outputTokens: generation.usage.outputTokens,
@@ -797,7 +801,7 @@ export async function startShippedRiff(
   return id
 }
 
-async function startSpokenRiff(
+export async function startSpokenRiff(
   userId: string,
   source: { id: string; label: string }
 ): Promise<string> {
@@ -957,6 +961,9 @@ export async function completeSpokenRiff({
       await recordUsage({
         userId,
         model: ADAPT_MODEL,
+        // Tags the row as this feature's spend, which is what the cooldown
+        // counts. See ADAPT_SPEND in lib/adapt.ts.
+        conversationId: ADAPT_SPEND,
         inputTokens: generation.usage.inputTokens,
         cachedInputTokens: generation.usage.cachedInputTokens,
         outputTokens: generation.usage.outputTokens,
