@@ -32,7 +32,7 @@ import {
 } from "@/lib/riffs"
 import { getSession } from "@/lib/session"
 import { GenerationFailed, hasSpend } from "@/lib/structured-output"
-import { draft, draftVersion, riffAngle } from "@/lib/schema-app"
+import { draft, draftVersion, riff, riffAngle } from "@/lib/schema-app"
 import { recordUsage, spendCooldown } from "@/lib/usage"
 
 /** "Substack", or "LinkedIn or Instagram" — the channels that would unblock a
@@ -225,7 +225,18 @@ export async function draftAngle(input: {
    * path of the other, and the drafting call waits for both.
    */
   const [brain, recent] = await Promise.all([
-    renderBrainForUser(session.user.id),
+    /**
+     * Stories in full, because `generateDraft` has no tools.
+     *
+     * The default index form tells the model to "call the story tool" before
+     * citing anything from a story, and no such tool exists — least of all in a
+     * single `generateObject` call. It was reading four titles it could not
+     * open while being forbidden from inventing anything, and writing around
+     * the subject was the only honest move left to it. Full text costs a few
+     * hundred tokens and is the difference between a post about your week and a
+     * post that quotes it.
+     */
+    renderBrainForUser(session.user.id, { stories: "full" }),
     /**
      * A failed avoid-list must not cost the user their draft. It makes the
      * post less likely to repeat the last one; it is not what makes the post.
@@ -774,4 +785,79 @@ export async function adaptPostToRiff(input: {
     groundedIn: result.groundedIn,
     existing: result.existing,
   }
+}
+
+/**
+ * Discarding, which is the other half of judging.
+ *
+ * **Both of these shipped as dead buttons.** The card has carried a "Discard"
+ * on every angle and a "Nothing here" under the riff since /riffs was built,
+ * and neither had a click handler or an action behind it — the exact thing
+ * /channels and /sources exist not to ship. A triage surface where you can only
+ * say yes is not a triage surface; it is a queue that grows.
+ *
+ * Neither spends, so neither is gated on entitlement or a cooldown. They only
+ * ever remove work, and refusing to let somebody clear their own page because a
+ * trial ended would be indefensible.
+ */
+export type DiscardResult = { ok: true } | { ok: false; message: string }
+
+/**
+ * One angle, gone.
+ *
+ * Deleted rather than archived, and the asymmetry with `archiveRiff` below is
+ * deliberate: an angle is Quincy's suggestion about the material, not the
+ * material. Losing one costs a model call to make again — `askForChannelAngle`
+ * is right there — while losing a scrap costs somebody a thought they cannot
+ * reproduce.
+ *
+ * Scoped through `getOwnedAngle` for the reason `draftAngle` gives: a row id
+ * arriving from a browser proves nothing about who owns it.
+ */
+export async function discardAngle(input: {
+  angleId: string
+}): Promise<DiscardResult> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  const angle = await getOwnedAngle(session.user.id, input.angleId)
+  if (!angle) {
+    // Already gone is the outcome the press was asking for. Saying "no such
+    // angle" to somebody who double-pressed would report a failure that is
+    // indistinguishable from success.
+    revalidatePath("/riffs")
+    return { ok: true }
+  }
+
+  await db.delete(riffAngle).where(eq(riffAngle.id, input.angleId))
+  revalidatePath("/riffs")
+  return { ok: true }
+}
+
+/**
+ * The whole riff, off the page and still in the table.
+ *
+ * `archived` rather than a delete: `getRiffs` filters it out, so the card goes,
+ * and the scrap survives. See `RIFF_STATES` for why those are different things.
+ * That is also what makes this safe without a confirmation dialog — nothing is
+ * destroyed, so there is nothing to warn about.
+ */
+export async function archiveRiff(input: {
+  riffId: string
+}): Promise<DiscardResult> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  const updated = await db
+    .update(riff)
+    .set({ state: "archived", updatedAt: new Date() })
+    .where(and(eq(riff.id, input.riffId), eq(riff.userId, session.user.id)))
+    .returning({ id: riff.id })
+
+  if (updated.length === 0) {
+    return { ok: false, message: "No such riff." }
+  }
+
+  revalidatePath("/riffs")
+  return { ok: true }
 }

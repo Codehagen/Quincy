@@ -917,7 +917,24 @@ export const sourceConnectionRelations = relations(
  * seconds; a skeleton that can become "Quincy could not make this out" and
  * offer a retry is better than both.
  */
-export const RIFF_STATES = ["working", "ready", "failed"] as const
+/**
+ * `archived` is "you decided this was not worth writing", and it keeps the row.
+ *
+ * The riff holds what the person actually said — a typed note, a transcript, a
+ * pull request description. The angles under it are Quincy's suggestions and
+ * cost a model call to make again; the scrap cost somebody a thought and cannot
+ * be reproduced. So "Nothing here" hides the card and destroys nothing, which
+ * is also what makes it safe to press without a confirmation dialog.
+ *
+ * No migration: the column is `text` and this list is a TypeScript narrowing,
+ * so Postgres has always accepted the value.
+ */
+export const RIFF_STATES = [
+  "working",
+  "ready",
+  "failed",
+  "archived",
+] as const
 
 export const riff = pgTable(
   "riff",

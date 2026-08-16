@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation"
 
-import { getGithubSetup, getCirclebackSetup } from "@/app/(app)/sources/actions"
+import { getCirclebackSetup, getGithubSetup } from "@/app/(app)/sources/actions"
 import { corpusSummary } from "@/lib/corpus-x"
 import {
+  corpusReceipt,
   firstNameOf,
-  latestRiffScrap,
+  firstRiffSuggestions,
+  humanAddition,
+  latestRiffId,
+  materialAsk,
   readInterview,
   readWiring,
 } from "@/lib/onboarding"
@@ -37,6 +41,19 @@ export const metadata = constructMetadata({
 // cache. `force-dynamic` used to say that; with cacheComponents the session
 // read below makes the page dynamic on its own, and the segment config is no
 // longer allowed to say it twice.
+//
+// **`?connected=1` is deliberately not read here.** The flag is read in the
+// client, in the one effect that acts on it, which is also the only place that
+// can strip it from the URL afterwards.
+//
+// This route logs the cacheComponents "uncached data" error on every request,
+// because `getSession` is uncached data outside a `<Suspense>` and has to stay
+// that way. All three offered fixes cost something real — `"use cache"` on
+// per-account reads that must never be cached, a `<Suspense>` whose fallback is
+// the whole screen, or `instant = false` — and the error is noise rather than a
+// fault: the page renders correctly in a real browser with it present. Left
+// alone rather than silenced with a config nobody has watched a real first run
+// through.
 
 export default async function WelcomePage() {
   const session = await getSession()
@@ -57,7 +74,7 @@ export default async function WelcomePage() {
   }
 
   const userId = session.user.id
-  const interview = await readInterview(userId, await latestRiffScrap(userId))
+  const interview = await readInterview(userId)
 
   /**
    * The wiring is resolved only once the talking is done, and is handed to the
@@ -69,17 +86,41 @@ export default async function WelcomePage() {
   const wiring = interview.next
     ? null
     : await (async () => {
-        const [state, corpus, circleback, github] = await Promise.all([
-          readWiring(userId),
-          corpusSummary(userId),
-          getCirclebackSetup(),
-          getGithubSetup(),
-        ])
+        const [state, corpus, github, circleback, receipt, suggestions, riffId] =
+          await Promise.all([
+            readWiring(userId),
+            corpusSummary(userId),
+            getGithubSetup(),
+            getCirclebackSetup(),
+            /**
+             * What a previous read learned, so a return visit shows the portrait
+             * instead of offering to read a timeline it has already paid for.
+             * Null on a first arrival, and null for a corpus too thin to compile.
+             */
+            corpusReceipt(userId),
+            // The angles the material ask paid for, read back rather than asked
+            // for again.
+            firstRiffSuggestions(userId),
+            // Whether the material has been given. A riff is the only thing
+            // that answer writes, so its existence is the state.
+            latestRiffId(userId),
+          ])
 
         return {
           wiring: state,
           corpusItems: corpus.items,
-          circlebackConnected: circleback?.verified === true,
+          receipt,
+          suggestions,
+          hasMaterial: riffId !== null,
+          /**
+           * Named by the read where there is one, plain where there is not.
+           * Computed here because it reads the receipt, and the client bundle
+           * must not import the module that produces it.
+           */
+          materialAsk: materialAsk(receipt),
+          // Computed here, not in the client component: `humanAddition` lives
+          // in a module that imports `db`.
+          addition: humanAddition(receipt),
           // The row, not the fixture. `getSourceConnections` once merged demo
           // fixtures for an allowlist of addresses, and reading one here made
           // Install unreachable for exactly the accounts that would install
@@ -89,6 +130,9 @@ export default async function WelcomePage() {
           // when the deployment has no App configured, which renders as a
           // description rather than a dead button.
           githubInstallUrl: github?.installUrl ?? null,
+          // Described rather than offered in first run, but the row still has
+          // to tell the truth about whether it is already set up.
+          circlebackConnected: circleback?.verified === true,
         }
       })()
 
@@ -97,6 +141,8 @@ export default async function WelcomePage() {
       firstName={firstNameOf(session.user.name)}
       answered={interview.answered}
       next={interview.next}
+      // The rail reads the receipt out of this, so it grows when the read
+      // lands rather than needing a prop of its own.
       wiring={wiring}
     />
   )

@@ -29,10 +29,19 @@ export const X_READ_COST_MICROS = 5_000
 export const IMPORT_COOLDOWN_MS = 10 * 60 * 1000
 
 /**
- * 200 posts ≈ $1, and plenty for the first voice compile. Raising it is a
- * caller's decision, made after the output justifies the spend.
+ * 100 posts ≈ $0.50, and plenty for the first voice compile.
+ *
+ * Halved from 200 on 2026-08-16. The portrait and the rules that came back from
+ * a 200-post read were already specific enough to argue with — a dozen rules
+ * and four recurring stories — so the second hundred was buying confidence in
+ * something the first hundred had already established. It also lands inside a
+ * single page: X allows 100 per request, so a first import is now one round
+ * trip rather than two, which takes real seconds off the one wait in first run
+ * long enough to need a shimmer.
+ *
+ * Raising it is a caller's decision, made after the output justifies the spend.
  */
-export const DEFAULT_MAX_POSTS = 200
+export const DEFAULT_MAX_POSTS = 100
 
 /** X allows 5–100 per page. */
 const PAGE_SIZE = 100

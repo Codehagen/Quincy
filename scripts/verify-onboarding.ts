@@ -16,7 +16,7 @@ import { eq } from "drizzle-orm"
 import { getPage, putPage } from "../lib/brain"
 import { resolveReturnTo } from "../lib/channels"
 import { db } from "../lib/db"
-import { latestRiffScrap, QUESTIONS, readInterview } from "../lib/onboarding"
+import { QUESTIONS, readInterview } from "../lib/onboarding"
 import { brainPage, riff, sourceItem } from "../lib/schema-app"
 import { user } from "../lib/schema"
 import { compileVoice } from "../lib/voice"
@@ -60,7 +60,7 @@ async function main() {
 
   console.log("\n=== progress is derived from the brain ===")
 
-  let state = await readInterview(userId, await latestRiffScrap(userId))
+  let state = await readInterview(userId)
   check(
     "a fresh account is asked the first question",
     state.next?.id === "human",
@@ -77,7 +77,7 @@ async function main() {
     provenance: "user",
   })
 
-  state = await readInterview(userId, await latestRiffScrap(userId))
+  state = await readInterview(userId)
   check(
     "answering one moves to the second question",
     state.next?.id === "reader",
@@ -98,7 +98,7 @@ async function main() {
     provenance: "user",
   })
 
-  state = await readInterview(userId, await latestRiffScrap(userId))
+  state = await readInterview(userId)
   check(
     "resuming after a reload lands on the third question",
     state.next?.id === "language",
@@ -119,7 +119,7 @@ async function main() {
     provenance: "user",
   })
 
-  state = await readInterview(userId, await latestRiffScrap(userId))
+  state = await readInterview(userId)
   check(
     "a voice page with no body falls back to its first rule",
     state.answered[2]?.answer === "Write all posts and drafts in English.",
@@ -139,15 +139,15 @@ async function main() {
     provenance: "user",
   })
 
-  state = await readInterview(userId, await latestRiffScrap(userId))
+  state = await readInterview(userId)
   check(
     "the transcript shows the words that were typed, not the rule",
     state.answered[2]?.answer === "English",
     state.answered[2]?.answer ?? "empty"
   )
   check(
-    "the last question is material",
-    state.next?.id === "material",
+    "three questions and the interview is done",
+    state.next === null,
     state.next?.id ?? "none"
   )
 

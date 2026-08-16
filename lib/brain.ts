@@ -431,11 +431,67 @@ function renderStoryIndex(stories: BrainPage[]) {
     .join("\n")
 }
 
+/** The most quotes any one story contributes to a prompt. */
+const QUOTES_PER_STORY = 3
+
+/**
+ * A story with its evidence attached, for a caller that cannot fetch it.
+ *
+ * The index form above is written for the chat route, which *can* go and read a
+ * story when it decides it needs one. Every other consumer is a single
+ * `generateObject` call with no tools at all — so for them the index is a
+ * catalogue of things they are told to cite and given no way to open. See
+ * `renderBrain`'s `stories` option for what that cost.
+ *
+ * Quotes are capped rather than dumped: they are the most token-hungry field on
+ * a story and the third one adds far less than the first. Proof URLs are
+ * included because `DRAFTING_RULES` lets a draft cite what is in the material,
+ * and a link the user actually published is the strongest thing on the page.
+ */
+function renderStoryFull(page: BrainPage): string {
+  const s = page.data as Partial<StoryData>
+  const parts: string[] = [`### ${page.title}`]
+
+  if (s.point?.trim()) parts.push(s.point.trim())
+  if (s.hook?.trim()) parts.push(`Hook they have used: ${s.hook.trim()}`)
+
+  const quotes = (s.quotes ?? []).filter(Boolean).slice(0, QUOTES_PER_STORY)
+  if (quotes.length) {
+    parts.push(
+      `In their own words:\n${quotes.map((q) => `- "${q}"`).join("\n")}`
+    )
+  }
+
+  const proof = (s.proof ?? []).filter(Boolean)
+  if (proof.length) parts.push(`Published proof: ${proof.join(", ")}`)
+
+  if (s.useFor?.length) parts.push(`Use for: ${s.useFor.join(", ")}`)
+
+  return parts.join("\n\n")
+}
+
 /**
  * The brain as a prompt section. Returns "" when the brain is empty, so a new
  * account gets the plain system prompt rather than a page of empty headings.
+ *
+ * **`stories` exists because the index form lied to every tool-less caller.**
+ * It renders each story as a title and a one-line point, then instructs the
+ * model to "call the story tool to read one in full before citing anything from
+ * it" — and there is no story tool anywhere in this codebase. In the chat route
+ * that is merely aspirational; in `generateDraft`, which is a single
+ * `generateObject` with no tools, it is a contradiction: the same prompt names
+ * four stories as the evidence to draw on, forbids inventing anything not in
+ * them, and provides no way to open them. The correct behaviour under those
+ * instructions is to write something short and unspecific, which is exactly
+ * what came back on 2026-08-16.
+ *
+ * `"index"` stays the default so the chat route and anything else built around
+ * a catalogue keeps the shape it expects. Callers with no tools pass `"full"`.
  */
-export function renderBrain(pages: BrainPage[]): string {
+export function renderBrain(
+  pages: BrainPage[],
+  { stories: storyMode = "index" }: { stories?: "index" | "full" } = {}
+): string {
   const of = (kind: BrainKind) => pages.filter((p) => p.kind === kind)
   const sections: string[] = []
 
@@ -487,10 +543,15 @@ export function renderBrain(pages: BrainPage[]): string {
   const stories = of("story")
   if (stories.length) {
     sections.push(
-      `## Story bank\n\n${stories.length} stories are available. Titles and when to use ` +
-        `them are below; call the story tool to read one in full before citing ` +
-        `anything from it. Never invent a detail that is not in the story.\n\n` +
-        renderStoryIndex(stories)
+      storyMode === "full"
+        ? `## Story bank\n\n${stories.length} stories the user keeps returning to, in full. ` +
+            `Use them for specifics — a real quote, a real link, a thing that actually ` +
+            `happened — rather than writing around the subject. Never invent a detail that ` +
+            `is not below.\n\n${stories.map(renderStoryFull).join("\n\n")}`
+        : `## Story bank\n\n${stories.length} stories are available. Titles and when to use ` +
+            `them are below; call the story tool to read one in full before citing ` +
+            `anything from it. Never invent a detail that is not in the story.\n\n` +
+            renderStoryIndex(stories)
     )
   }
 
@@ -502,7 +563,16 @@ export function renderBrain(pages: BrainPage[]): string {
   return sections.join("\n\n")
 }
 
-/** Convenience for the chat route: read and render in one call. */
-export async function renderBrainForUser(userId: string) {
-  return renderBrain(await getBrain(userId))
+/**
+ * Read and render in one call.
+ *
+ * The options pass straight through, so a tool-less caller asks for
+ * `{ stories: "full" }` here rather than reaching for `getBrain` and
+ * `renderBrain` separately and getting the pairing wrong.
+ */
+export async function renderBrainForUser(
+  userId: string,
+  options?: { stories?: "index" | "full" }
+) {
+  return renderBrain(await getBrain(userId), options)
 }

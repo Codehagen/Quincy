@@ -251,3 +251,43 @@ export function githubAppManifest(baseUrl: string, name: string) {
     setup_on_update: false,
   }
 }
+
+/**
+ * An installation access token, for reading a user's repositories.
+ *
+ * **Not `githubInstallationToken` in lib/source-connections.ts.** That one mints
+ * `ghi_<id>` — the string Quincy stores on its own `source_connection` row to
+ * recognise an installation later. This one is a GitHub credential, minted by
+ * GitHub, that authorises API calls on the installation's behalf. The two have
+ * nothing in common but the word "token", and confusing them means sending
+ * `ghi_47` to api.github.com and reading a 401 as "the user has no pull
+ * requests".
+ *
+ * The app JWT can read *about* an installation (`fetchInstallation`) and cannot
+ * read *through* it. Anything touching repositories or pull requests needs this.
+ *
+ * Short-lived by GitHub's design — an hour — so it is minted per use and never
+ * stored. A cached one would be a credential at rest with no rotation story, in
+ * exchange for saving a request on a path that runs once per install.
+ */
+export async function installationAccessToken(
+  installationId: number
+): Promise<string | null> {
+  const response = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${appJwt()}`,
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "quincy",
+      },
+    }
+  )
+
+  if (!response.ok) return null
+
+  const body = (await response.json()) as { token?: string }
+  return typeof body.token === "string" ? body.token : null
+}

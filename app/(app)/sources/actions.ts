@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache"
 
 import { corpusSummary, importXCorpus } from "@/lib/corpus-x"
-import {
-  isEntitled,
-  resolveEntitlementForRequest,
-} from "@/lib/entitlement"
+import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { installUrl } from "@/lib/github-app"
+import {
+  findLastMergedPull,
+  storeBackfilledMerge,
+} from "@/lib/github-backfill"
 import { getSession } from "@/lib/session"
 import {
   connectSource,
@@ -18,6 +19,13 @@ import {
   setSigningSecret,
 } from "@/lib/source-connections"
 import { compileVoice } from "@/lib/voice"
+import { spendCooldown } from "@/lib/usage"
+import { start } from "workflow/api"
+import { runShippedRiffWorkflow } from "@/workflows/run-shipped-riff"
+
+/** One press per ten minutes. Matches `IMPORT_COOLDOWN_MS`: same shape of
+ *  action — a human-triggered read that ends in a model call. */
+const BACKFILL_COOLDOWN_MS = 10 * 60 * 1000
 
 /**
  * The one mutation /sources has: read the user's own X posts and teach the
@@ -355,4 +363,136 @@ export async function disconnectGithub(): Promise<
   revalidatePath("/sources")
 
   return { ok: true }
+}
+
+/**
+ * Read the last pull request this person merged, and turn it into a riff.
+ *
+ * **The empty state's missing verb.** "Connected today — nothing merged yet"
+ * is true and inert: it arrives right after somebody grants something, and
+ * gives them nothing back. Every other connection in Quincy proves itself by
+ * doing work — X's grant buys a read that produces a portrait — and this one
+ * asked for an install and returned a status line.
+ *
+ * Everything downstream of the fetch is the webhook's own path: the same
+ * `descriptionBlocks`, the same `source_item` row, the same
+ * `runShippedRiffWorkflow`. Only the delivery differs, so a backfilled riff and
+ * a merged-this-morning riff are the same object rather than two shapes that
+ * drift.
+ *
+ * The ceilings, in order of what they protect:
+ *
+ * - **One pull request.** `findLastMergedPull` returns the newest merge and
+ *   stops. A history import would spend a model call per merge and bury /riffs.
+ * - **`onConflictDoNothing` on the node id.** A merge already read — by a press
+ *   or by the webhook — produces no second riff and no second bill.
+ * - **A ten-minute cooldown.** A human can press this, and a claim is not a
+ *   cooldown: without one the button is pressable all afternoon.
+ * - **The entitlement gate**, because the workflow behind it spends.
+ */
+export type BackfillResult =
+  | { ok: true; started: true }
+  | { ok: true; started: false; message: string }
+  | { ok: false; message: string }
+
+export async function readLastMergedPull(): Promise<BackfillResult> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return {
+      ok: false,
+      message:
+        entitlement.state === "lapsed"
+          ? "Your subscription is no longer active."
+          : "Your free day is over.",
+    }
+  }
+
+  const cooldown = await spendCooldown(
+    session.user.id,
+    "github:backfill",
+    BACKFILL_COOLDOWN_MS
+  )
+  if (!cooldown.ready) {
+    return {
+      ok: false,
+      message: `Just read that one — ${cooldown.secondsLeft}s before the next.`,
+    }
+  }
+
+  const connection = await getSourceConnection(session.user.id, "github")
+  if (!connection) {
+    return { ok: false, message: "GitHub is not connected." }
+  }
+
+  const meta = readGithubMeta(connection.meta)
+
+  /**
+   * No login, no read — the same refusal `shippedGate` makes on the webhook.
+   * On an organisation install the account name is the org, which is not an
+   * author, and guessing would mean drafting a post about a colleague's work
+   * under this person's name.
+   */
+  if (!meta.login) {
+    return {
+      ok: false,
+      message:
+        "Tell me your GitHub username first — on an organisation I cannot tell which merges are yours.",
+    }
+  }
+
+  const found = await findLastMergedPull({
+    installationId: meta.installationId,
+    login: meta.login,
+  })
+
+  if (!found) {
+    return {
+      ok: true,
+      started: false,
+      message:
+        "I could not find a merged pull request of yours in the repositories you gave me. The next one you merge will arrive on its own.",
+    }
+  }
+
+  const stored = await storeBackfilledMerge({
+    userId: session.user.id,
+    payload: found.payload,
+  })
+
+  if (!stored) {
+    return {
+      ok: true,
+      started: false,
+      message: "I have already read that one — it is in your riffs.",
+    }
+  }
+
+  try {
+    await start(runShippedRiffWorkflow, [
+      {
+        userId: session.user.id,
+        sourceItemId: stored.sourceItemId,
+        repository: found.repository,
+        blocks: stored.blocks,
+      },
+    ])
+  } catch (cause) {
+    /**
+     * The `source_item` stays, exactly as the webhook leaves it on the same
+     * failure. The merge was read and the row is true; nothing on screen claims
+     * to be working, because no riff was created.
+     */
+    console.error("[sources] could not start the backfill workflow:", cause)
+    return {
+      ok: false,
+      message: "I read it but could not start the write. Try again shortly.",
+    }
+  }
+
+  revalidatePath("/riffs")
+  revalidatePath("/sources")
+  return { ok: true, started: true }
 }

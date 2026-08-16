@@ -4,11 +4,19 @@ import { revalidatePath } from "next/cache"
 import { headers as nextHeaders } from "next/headers"
 import { eq } from "drizzle-orm"
 
+import { importFromX } from "@/app/(app)/sources/actions"
 import { auth } from "@/lib/auth"
 import { getPage, putPage, RULE_CAP } from "@/lib/brain"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { db } from "@/lib/db"
-import { isQuestionId, type QuestionId } from "@/lib/onboarding"
+import {
+  corpusReceipt,
+  humanAddition,
+  isQuestionId,
+  isThinMaterial,
+  type CorpusReceipt,
+  type QuestionId,
+} from "@/lib/onboarding"
 import { completeSpokenRiff, startTypedRiff } from "@/lib/riffs"
 import { user } from "@/lib/schema"
 import { getSession } from "@/lib/session"
@@ -29,9 +37,7 @@ import { getSession } from "@/lib/session"
  * one.
  */
 
-export type AnswerResult =
-  | { ok: true }
-  | { ok: false; message: string }
+export type AnswerResult = { ok: true } | { ok: false; message: string }
 
 const MAX_ANSWER_CHARS = 2_000
 
@@ -83,11 +89,6 @@ export async function answerQuestion(
         await writeLanguageRule(userId, text)
         break
 
-      case "material":
-        // The whole session user, not just an id: `resolveEntitlementForRequest`
-        // starts a trial when `trialEndsAt` is absent, so passing `{ id }`
-        // turns every read into a write.
-        return await writeFirstRiff(session.user, text)
     }
   } catch (cause) {
     console.error("[welcome] could not write the answer:", cause)
@@ -121,7 +122,9 @@ async function writeLanguageRule(userId: string, answer: string) {
   // Replace a previous answer to this same question rather than stacking a
   // second language rule beside it. Re-answering happens whenever somebody
   // reloads mid-interview and goes back.
-  const kept = rules.filter((r) => !r.startsWith("Write all posts and drafts in"))
+  const kept = rules.filter(
+    (r) => !r.startsWith("Write all posts and drafts in")
+  )
 
   await putPage({
     userId,
@@ -142,11 +145,105 @@ async function writeLanguageRule(userId: string, answer: string) {
 }
 
 /**
- * Question four's answer becomes the first riff.
+ * The material ask, answered — and the moment the first riff exists.
  *
- * This is the one question that spends: `completeSpokenRiff` calls a model to
- * find angles. It is therefore entitlement-gated like every other spending
- * path, and bounded by that function's own transcript ceiling.
+ * Its own action rather than a fourth case in `answerQuestion`, because it is
+ * no longer one of the questions: it is asked after the corpus read, from the
+ * wiring, and it writes a riff instead of a brain page. Folding it back into
+ * the interview would put a special case in a function whose whole virtue is
+ * that every branch now writes a page.
+ *
+ * **This is where the sequencing fix pays off.** By the time it runs, the brain
+ * holds the portrait, the voice rules and the person's recurring themes — so
+ * `completeSpokenRiff` cuts the angles once, against a Quincy that has read
+ * them. It used to run before any of that existed and then need a second,
+ * paid re-cut afterwards to fix what it produced.
+ */
+export type MaterialResult =
+  | { ok: true }
+  /**
+   * Not a refusal. Quincy has the answer and would like one more sentence, and
+   * `answered` is what it heard — so the screen can show it back as a turn
+   * rather than leaving it in the composer looking rejected.
+   */
+  | { ok: false; reason: "thin"; followUp: string; answered: string }
+  | { ok: false; reason: "failed"; message: string }
+
+export async function answerMaterial(
+  text: string,
+  /**
+   * Send it as it is. Set by "That is all I have", which is the escape from the
+   * follow-up — nobody is ever held on this screen by a word count.
+   */
+  force = false
+): Promise<MaterialResult> {
+  const session = await getSession()
+  if (!session) {
+    return { ok: false, reason: "failed", message: "Not signed in." }
+  }
+
+  const trimmed = text.trim().slice(0, MAX_ANSWER_CHARS)
+  if (!trimmed) {
+    return {
+      ok: false,
+      reason: "failed",
+      message: "Say something and I will work on it.",
+    }
+  }
+
+  /**
+   * **A follow-up, not a rejection — and that distinction cost a real run.**
+   *
+   * This used to refuse a short answer outright and print "what actually
+   * changed, and what was annoying about it?" under the composer. It fired on
+   * "So i just launched Quincy and building it in public", which is a launch,
+   * a theme and a fact — genuinely enough to write from — and the person's
+   * reply was "i didnt understand what you want here". Two failures in one
+   * exchange: it blocked material that was fine, and the sentence meant to
+   * teach taught nothing because it asked two abstract questions at once.
+   *
+   * An interviewer who gets a headline asks one more question. They do not hand
+   * the answer back. So Quincy now says what it heard, asks a single concrete
+   * thing, and leaves the way out open — the answer is already safe by then,
+   * because the caller keeps it and sends it back with the addition.
+   *
+   * `force` is that way out, and it is unconditional. A word count must never
+   * be the reason somebody cannot finish first run.
+   */
+  if (!force && isThinMaterial(trimmed)) {
+    return {
+      ok: false,
+      reason: "thin",
+      answered: trimmed,
+      followUp:
+        "Good — that is the thing, then. One more sentence and I can write it properly: what was the hardest part to get right, or the bit that nearly did not work?",
+    }
+  }
+
+  try {
+    // The whole session user, not just an id: `resolveEntitlementForRequest`
+    // starts a trial when `trialEndsAt` is absent, so passing `{ id }` turns
+    // every read into a write.
+    const written = await writeFirstRiff(session.user, trimmed)
+    return written.ok
+      ? { ok: true }
+      : { ok: false, reason: "failed", message: written.message }
+  } catch (cause) {
+    console.error("[welcome] could not write the first riff:", cause)
+    return {
+      ok: false,
+      reason: "failed",
+      message: "That did not save. Try again.",
+    }
+  }
+}
+
+/**
+ * The material becomes the first riff.
+ *
+ * This is the one part of first run that spends on angles: `completeSpokenRiff`
+ * calls a model to find them. It is therefore entitlement-gated like every
+ * other spending path, and bounded by that function's own transcript ceiling.
  *
  * **A failed model call still counts as answered.** The riff exists before the
  * angles are asked for, so the material is never lost — and returning an error
@@ -190,6 +287,132 @@ async function writeFirstRiff(
     return { ok: true }
   }
 
+  return { ok: true }
+}
+
+/**
+ * The corpus read, and what it learned, in one round trip.
+ *
+ * `importFromX` is called unchanged — it carries the entitlement gate, and
+ * `importXCorpus` behind it carries the ceiling and the ten-minute cooldown. A
+ * copy of it without those, reachable by an account ninety seconds old, is
+ * exactly the cost bug AGENTS.md's money section describes. This wrapper adds
+ * no spending of its own; it only reads back what the compile wrote.
+ *
+ * The receipt is returned rather than re-fetched by the client, because the
+ * screen says one sentence about it the moment it lands and a second round trip
+ * would put a gap in the middle of that sentence.
+ */
+export type CorpusReadResult =
+  | {
+      ok: true
+      postsRead: number
+      /** Null when the corpus was too thin to compile a voice page from. */
+      receipt: CorpusReceipt | null
+      /**
+       * Computed here rather than in the component, because `humanAddition`
+       * lives beside `db` and a client bundle must not import that module for a
+       * value. Returned with the read so the offer can appear in the same beat
+       * as the portrait instead of waiting for a refresh.
+       */
+      addition: string | null
+      truncated: boolean
+    }
+  | { ok: false; message: string }
+
+export async function readCorpus(): Promise<CorpusReadResult> {
+  const session = await getSession()
+  if (!session) {
+    return { ok: false, message: "Not signed in." }
+  }
+
+  const imported = await importFromX()
+  if (!imported.ok) {
+    return { ok: false, message: imported.message }
+  }
+
+  /**
+   * A failed read-back is not a failed import. The posts are stored and the
+   * money is spent by this point, so reporting an error here would tell
+   * somebody the thing they just paid for did not happen. The count is the
+   * fallback receipt.
+   */
+  let receipt: CorpusReceipt | null = null
+  try {
+    receipt = await corpusReceipt(session.user.id)
+  } catch (cause) {
+    console.error("[welcome] could not read the corpus receipt:", cause)
+  }
+
+  /**
+   * No re-cut here any more, and its absence is the point.
+   *
+   * This used to call `recutAngles` — a second, paid angle generation to repair
+   * the first, which had been cut before any of this existed. The material ask
+   * moved after this read instead, so the angles are only ever cut once, and by
+   * then everything the compile just wrote is in the brain. The fix is a
+   * deleted model call rather than an added one.
+   */
+  revalidatePath("/welcome")
+
+  return {
+    ok: true,
+    postsRead: imported.postsRead,
+    receipt,
+    addition: humanAddition(receipt),
+    // No silent caps: `truncated` reaches the copy.
+    truncated: imported.truncated,
+  }
+}
+
+/**
+ * Adds what the read learned to the person's own answer, on their say-so.
+ *
+ * The person's words stay first and the sentence is appended under them, so
+ * nothing they typed is lost or reworded. `provenance: "confirmed"` rather than
+ * `"user"` records the truth of it: they approved a line Quincy drafted. That
+ * is what `confirmPage` in lib/brain.ts means by the word, and using it here
+ * keeps one vocabulary for "a human agreed to this".
+ *
+ * Idempotent by content — pressing twice, or a retry after a dropped response,
+ * cannot stack the same sentence twice.
+ */
+export async function enrichHuman(): Promise<AnswerResult> {
+  const session = await getSession()
+  if (!session) {
+    return { ok: false, message: "Not signed in." }
+  }
+
+  const userId = session.user.id
+
+  try {
+    const [page, receipt] = await Promise.all([
+      getPage(userId, "human"),
+      corpusReceipt(userId),
+    ])
+
+    const addition = humanAddition(receipt)
+    if (!page || !addition) {
+      return { ok: false, message: "There is nothing to add yet." }
+    }
+
+    const existing = (page.body ?? "").trim()
+    if (existing.includes(addition)) return { ok: true }
+
+    await putPage({
+      userId,
+      slug: "human",
+      kind: "identity",
+      title: "My Human",
+      body: existing ? `${existing}\n\n${addition}` : addition,
+      provenance: "confirmed",
+    })
+  } catch (cause) {
+    console.error("[welcome] could not enrich the human page:", cause)
+    return { ok: false, message: "That did not save. Try again." }
+  }
+
+  revalidatePath("/welcome")
   return { ok: true }
 }
 

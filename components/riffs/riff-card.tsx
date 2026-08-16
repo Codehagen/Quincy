@@ -184,7 +184,7 @@ export function RiffCard({
         </>
       )}
 
-      <RiffFooter anyDrafted={anyDrafted} />
+      <RiffFooter riffId={riff.id} anyDrafted={anyDrafted} />
     </article>
   )
 }

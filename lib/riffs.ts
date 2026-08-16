@@ -1,5 +1,5 @@
 import { createIdGenerator } from "ai"
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm"
 
 import {
   ADAPT_MODEL,
@@ -329,7 +329,9 @@ export async function getRiffs(user: {
     db
       .select()
       .from(riff)
-      .where(eq(riff.userId, user.id))
+      // Archived riffs are decided, not deleted — see `RIFF_STATES`. They stay
+      // in the table and leave the page.
+      .where(and(eq(riff.userId, user.id), ne(riff.state, "archived")))
       .orderBy(desc(riff.createdAt)),
     db
       .select({
@@ -367,7 +369,16 @@ export async function getRiffs(user: {
     // formatting a timestamp there produces a different string than the server
     // did in the seconds either side of midnight.
     capturedAt: formatConversationDate(row.createdAt, zone, now),
-    state: row.state,
+    /**
+     * Narrowed, because the query above already excluded `archived`.
+     *
+     * `Riff["state"]` deliberately stays the three states a card can render.
+     * Widening it would push a fourth case into every consumer — the skeleton,
+     * the failure card, `channelGaps` — for a value none of them can ever
+     * receive, and a switch with an unreachable branch is worse documentation
+     * than an assertion next to the filter that makes it true.
+     */
+    state: row.state as Riff["state"],
     failure: row.failure,
     stuck:
       row.state === "working" &&

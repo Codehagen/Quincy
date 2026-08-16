@@ -73,7 +73,9 @@ export async function GET(request: Request) {
    * about a colleague's work under your name.
    */
   const login =
-    installation.accountType === "User" ? installation.account.toLowerCase() : ""
+    installation.accountType === "User"
+      ? installation.account.toLowerCase()
+      : ""
 
   const connected = await connectGithubInstallation(session.user.id, {
     installationId: installation.id,

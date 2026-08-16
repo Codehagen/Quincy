@@ -1,9 +1,12 @@
 "use client"
 
+import * as React from "react"
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 
 import {
   disconnectGithub,
+  readLastMergedPull,
   saveGithubLogin,
   type GithubSetup,
 } from "@/app/(app)/sources/actions"
@@ -157,9 +160,21 @@ export function GithubSourceRow({
               Installed on {setup.account} — say which username is yours
             </p>
           ) : connection?.state === "waiting" ? (
-            <p className="text-caption text-muted-foreground pt-0.5">
-              Connected {connection.since} — nothing merged yet
-            </p>
+            /**
+             * The one empty state on this page with something to do.
+             *
+             * "Connected — nothing merged yet" is accurate and inert, and it
+             * lands the moment somebody has just installed an app and has no
+             * evidence it worked. An empty state should explain *and* act; this
+             * one only explained. The read is bounded to a single pull request
+             * and carries its own cooldown — see `readLastMergedPull`.
+             */
+            <div className="flex flex-col gap-1 pt-0.5">
+              <p className="text-caption text-muted-foreground">
+                Connected {connection.since} — nothing merged yet
+              </p>
+              <ReadLastMerge />
+            </div>
           ) : connection?.state === "arriving" ? (
             <p className="text-caption text-muted-foreground pt-0.5">
               Last merge {connection.lastAt}
@@ -181,7 +196,13 @@ export function GithubSourceRow({
                entirely, and a real anchor is what lets it be opened in a new
                tab, middle-clicked, and read by a screen reader as a
                destination rather than an action. */
-            <Button variant="outline" render={<a href={setup.installUrl} />}>
+            <Button
+              variant="outline"
+              // The rendered element is an anchor, so Base UI needs telling —
+              // without this it warns that native button semantics are gone.
+              nativeButton={false}
+              render={<a href={setup.installUrl} />}
+            >
               Install on GitHub
             </Button>
           ) : (
@@ -296,5 +317,63 @@ export function GithubSourceRow({
         <p className="text-destructive text-caption text-pretty">{error}</p>
       ) : null}
     </li>
+  )
+}
+
+/**
+ * "Do not wait for the next merge — read the last one."
+ *
+ * A text button rather than an outline one: the row already has its primary
+ * control on the right ("Manage"), and a second bordered button under the
+ * status line would make the row read as two decisions. This is an offer, and
+ * it should look like one.
+ *
+ * The outcome is spelled out in place rather than toasted, because two of the
+ * three answers are "nothing happened, and here is why" — a message that
+ * vanishes in four seconds is the wrong home for a reason somebody may want to
+ * read twice.
+ */
+function ReadLastMerge() {
+  const router = useRouter()
+  const [pending, startTransition] = React.useTransition()
+  const [said, setSaid] = React.useState<string | null>(null)
+
+  if (said) {
+    return (
+      <p className="text-caption text-muted-foreground text-pretty">{said}</p>
+    )
+  }
+
+  return (
+    <div>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        className="h-auto px-0 text-muted-foreground underline underline-offset-4"
+        onClick={() =>
+          startTransition(async () => {
+            const result = await readLastMergedPull()
+
+            if (!result.ok) {
+              setSaid(result.message)
+              return
+            }
+
+            if (!result.started) {
+              setSaid(result.message)
+              return
+            }
+
+            setSaid(
+              "Reading it now — the riff will be on /riffs in a moment."
+            )
+            router.refresh()
+          })
+        }
+      >
+        {pending ? "Reading it…" : "Read my last merged pull request"}
+      </Button>
+    </div>
   )
 }

@@ -1,4 +1,9 @@
-import { Image01Icon, Mail01Icon, Mic01Icon } from "@hugeicons/core-free-icons"
+import {
+  Edit01Icon,
+  Image01Icon,
+  Mail01Icon,
+  Mic01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
 import { cn } from "@/lib/utils"
@@ -63,7 +68,21 @@ export function SourceMark({
   className?: string
 }) {
   const mark = SOURCE_MARK[id] ?? id
-  const icon = SOURCE_ICON[id]
+  /**
+   * No id and no label is a riff somebody typed, and it is the one case with
+   * no source at all.
+   *
+   * `TYPED_SOURCE` in lib/riffs.ts is deliberately `{ id: "", label: "" }` —
+   * there is no row in lib/sources.ts for "you typed it", and inventing one
+   * would put a source on /sources that nothing connects to. That is right
+   * about the data and left this component rendering `label[0]` of an empty
+   * string: a filled grey square with nothing in it, which is precisely the
+   * empty box the fallback below was written to prevent.
+   *
+   * A pen, by the same rule the rest of this file follows — a kind of material
+   * takes a generic hugeicon, because there is no logo for "you wrote it here".
+   */
+  const icon = SOURCE_ICON[id] ?? (!id && !label ? Edit01Icon : undefined)
 
   return (
     // Card radius is 20px and the row insets 16px, so the tile derives to

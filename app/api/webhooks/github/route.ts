@@ -4,10 +4,7 @@ import { start } from "workflow/api"
 
 import { db } from "@/lib/db"
 import { isEntitled, resolveEntitlement } from "@/lib/entitlement"
-import {
-  isGithubAppConfigured,
-  verifyGithubSignature,
-} from "@/lib/github-app"
+import { isGithubAppConfigured, verifyGithubSignature } from "@/lib/github-app"
 import { user } from "@/lib/schema"
 import { sourceItem } from "@/lib/schema-app"
 import {

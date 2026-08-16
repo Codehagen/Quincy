@@ -12,7 +12,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 
 import { useRouter } from "next/navigation"
 
-import { draftAngle } from "@/app/(app)/riffs/actions"
+import { archiveRiff, discardAngle, draftAngle } from "@/app/(app)/riffs/actions"
 import type { Angle, Riff } from "@/lib/riffs"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -82,7 +82,12 @@ export function Provenance({
         className="size-6"
       />
       <p id={id} className="text-caption text-muted-foreground">
-        {riff.sourceLabel}
+        {/* A typed riff carries no source — see `TYPED_SOURCE`. Without a
+            fallback the line renders as a bare middot and a date, and the
+            article's accessible name loses the one word saying where the
+            material came from. The label is display-only: nothing is written to
+            `source_id`, so /sources still lists only things you can connect. */}
+        {riff.sourceLabel || "Written here"}
         {dateInGroupHeading ? (
           <span className="sr-only"> {riff.capturedAt}</span>
         ) : (
@@ -539,9 +544,21 @@ export function AngleActions({ angle }: { angle: Angle }) {
           disabled={pending}
           className="ml-auto text-muted-foreground"
           aria-label={`Discard: ${label}`}
+          onClick={() =>
+            startTransition(async () => {
+              setRefused(null)
+              const result = await discardAngle({ angleId: angle.id })
+              if (!result.ok) {
+                setRefused({ reason: "gone", message: result.message })
+                return
+              }
+              // The row is gone server-side; this is what removes the card.
+              router.refresh()
+            })
+          }
         >
           <HugeiconsIcon aria-hidden="true" icon={Delete02Icon} />
-          Discard
+          {pending ? "Discarding…" : "Discard"}
         </Button>
       </div>
     </div>
@@ -653,14 +670,33 @@ export function Steer({ riffId }: { riffId: string }) {
  * is about to do. Ghost and full-width-adjacent rather than destructive-red:
  * dropping a riff loses nothing that was ever written.
  */
-export function RiffFooter({ anyDrafted }: { anyDrafted: boolean }) {
+export function RiffFooter({
+  riffId,
+  anyDrafted,
+}: {
+  riffId: string
+  anyDrafted: boolean
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = React.useTransition()
+
   return (
     <Button
       variant="ghost"
       size="sm"
+      disabled={pending}
       className="self-start text-muted-foreground"
+      onClick={() =>
+        startTransition(async () => {
+          // No confirmation dialog, because nothing is destroyed: `archiveRiff`
+          // sets a state and `getRiffs` filters it. A dialog in front of a
+          // reversible action trains people to dismiss dialogs.
+          await archiveRiff({ riffId })
+          router.refresh()
+        })
+      }
     >
-      {anyDrafted ? "Discard the rest" : "Nothing here"}
+      {pending ? "Clearing…" : anyDrafted ? "Discard the rest" : "Nothing here"}
     </Button>
   )
 }

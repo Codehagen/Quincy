@@ -1,14 +1,14 @@
-import { desc, eq } from "drizzle-orm"
+import { asc, desc, eq } from "drizzle-orm"
 
-import { getPage } from "./brain"
+import { getBrainByKind, getPage } from "./brain"
 import {
   isChannelEnabled,
   isConnectableChannel,
   listConnections,
 } from "./channels"
-import { corpusSummary } from "./corpus-x"
+import { corpusSummary, DEFAULT_MAX_POSTS } from "./corpus-x"
 import { db } from "./db"
-import { riff } from "./schema-app"
+import { riff, riffAngle } from "./schema-app"
 
 /**
  * First run: what to ask next, and what is still unwired. See plans/022.
@@ -50,20 +50,26 @@ import { riff } from "./schema-app"
 export function intro(firstName: string): string[] {
   return [
     `${firstName}. I'm Quincy, and I write in your name.`,
-    "Which is the problem: right now I know nothing about you, so anything I drafted would sound like a model wrote it. Four questions fixes most of that.\n\nA minute, maybe two. You can change any answer later, and none of this publishes anything.",
+    "Which is the problem: right now I know nothing about you, so anything I drafted would sound like a model wrote it. Three questions fixes most of that.\n\nA minute, maybe two. You can change any answer later, and none of this publishes anything.",
   ]
 }
 
 /**
- * What Quincy says once the four are answered, before the wiring appears
+ * What Quincy says once the three are answered, before the wiring appears
  * underneath it.
  *
  * The transition used to be a hard swap — the last answer went in and the
  * screen became a settings page mid-sentence. The conversation stays on
  * screen and this is the turn that hands over.
+ *
+ * **It no longer claims a riff exists.** It used to open "That is in your riffs
+ * now, with a few angles on it", because the fourth question had just made one.
+ * The material ask moved after the read, so at this moment there is nothing in
+ * riffs — and a closing line that describes work Quincy has not done is the one
+ * kind of sentence this product cannot afford.
  */
 export const CLOSING =
-  "Good. That is in your riffs now, with a few angles on it.\n\nThat is the talking done. Two practical things left, and both of them can wait."
+  "That is the talking done, and it is the last of the questions.\n\nOne thing I need from you before I can write anything: somewhere to publish, and permission to read how you already write."
 
 /** The name a person is called, out of whatever they signed up with. */
 export function firstNameOf(name: string | null | undefined): string {
@@ -112,14 +118,59 @@ export const QUESTIONS = [
     chips: ["English", "Norwegian"],
     page: "Voice",
   },
-  {
-    id: "material",
-    slug: null,
-    ask: "Last one. What did you ship or figure out this week? Anything. I will turn it into the first draft.",
-    chips: [],
-    page: "Riffs",
-  },
 ] as const
+
+/**
+ * The material ask, which is no longer one of the questions.
+ *
+ * **It used to be question four, and being fourth was the whole problem.** A
+ * product somebody met sixty seconds ago asked them to produce this week's work
+ * from memory, before it had done a single thing for them. The real answer on
+ * 2026-08-16 was "Shipped about Quincy" — four words — and the angle model
+ * could only hand them back in a full sentence. Nobody should be blamed for
+ * that answer; it is what a cold ask earns.
+ *
+ * It is asked after the corpus read now, and the read is what makes it a
+ * different question. Quincy can name the themes it just found and ask what is
+ * new against them, which is a question somebody wants to answer because the
+ * asker has demonstrably been listening. It also means the angles are cut once,
+ * against a brain that holds the voice — rather than cut cold and re-cut later,
+ * which is the model call this move deletes.
+ *
+ * The plain form is not a fallback for failure. Somebody who never connects X
+ * gets it, and it is the same question minus the evidence.
+ */
+export function materialAsk(receipt: CorpusReceipt | null): string {
+  const themes = receipt?.stories.map((story) => story.title.trim()).filter(Boolean) ?? []
+
+  if (themes.length < 2) {
+    return "So — what did you ship or figure out this week? Tell me what changed and what it was like. The detail is what I write from, so a couple of sentences beats a headline."
+  }
+
+  const last = themes[themes.length - 1]
+  const rest = themes.slice(0, -1)
+
+  return `So — you keep coming back to ${rest.join(", ")} and ${last}. What happened this week? Tell me what changed and what it was like; the detail is what I write from.`
+}
+
+/**
+ * The shortest answer worth spending a model call on.
+ *
+ * Not a style rule — a floor under the input. Below this there is nothing in
+ * the scrap but a topic, and the angle that comes back is the topic again in a
+ * full sentence.
+ *
+ * **Kept, but expected to stop firing.** The guard was written when this was a
+ * cold question and thin answers were the norm; asked after the read it should
+ * be rare. It stays for a release so we can see whether it ever fires. If it
+ * does not, it goes — a validation error that never fires is a rule nobody
+ * needed, and one that fires often would mean the move above did not work.
+ */
+export const MIN_MATERIAL_CHARS = 80
+
+export function isThinMaterial(text: string): boolean {
+  return text.trim().length < MIN_MATERIAL_CHARS
+}
 
 export type Question = (typeof QUESTIONS)[number]
 export type QuestionId = Question["id"]
@@ -146,6 +197,24 @@ export function isQuestionId(value: string): value is QuestionId {
  * hand skips the last question, which is the right outcome: they have given
  * Quincy material.
  */
+/**
+ * The newest riff's id, for the re-cut after the corpus read.
+ *
+ * Same row `latestRiffScrap` reads, and separate rather than widened because
+ * that function is on the interview's hot path and returns exactly what the
+ * transcript renders. A caller wanting the id is asking a different question.
+ */
+export async function latestRiffId(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: riff.id })
+    .from(riff)
+    .where(eq(riff.userId, userId))
+    .orderBy(desc(riff.createdAt))
+    .limit(1)
+
+  return row ? row.id : null
+}
+
 export async function latestRiffScrap(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ scrap: riff.scrap })
@@ -173,15 +242,14 @@ export type InterviewState = {
  * would be three queries anyway, and each of these hits the unique constraint
  * on (user_id, slug). They run concurrently.
  */
-export async function readInterview(
-  userId: string,
-  /**
-   * Question four's answer, or null if it has not been given. It writes a riff
-   * rather than a page, so it cannot be derived from the brain here — the
-   * caller passes it in from `latestRiffScrap`.
-   */
-  material: string | null
-): Promise<InterviewState> {
+/**
+ * **Every question is a brain page again**, which is what moving the material
+ * ask out bought. There used to be a fourth whose answer was a riff, so this
+ * function took it as an argument and broke its own loop on it — progress
+ * derived from two sources with a special case joining them. Now the three
+ * pages are the three answers.
+ */
+export async function readInterview(userId: string): Promise<InterviewState> {
   const [human, reader, voice] = await Promise.all([
     getPage(userId, "human"),
     getPage(userId, "memory/who-you-write-for"),
@@ -195,13 +263,6 @@ export async function readInterview(
   const answered: InterviewState["answered"] = []
 
   for (const question of QUESTIONS) {
-    if (question.id === "material") {
-      if (material !== null) {
-        answered.push({ id: question.id, page: question.page, answer: material })
-      }
-      break
-    }
-
     const page = pages[question.id]
     if (!page) break
 
@@ -246,22 +307,43 @@ export type ChannelState = {
    * and does nothing, which /channels and /sources both exist not to ship.
    */
   connectable: boolean
+  /**
+   * Held back from first run on purpose, whatever the credentials say.
+   *
+   * This is not `!connectable` under another name. That field answers "can this
+   * deployment do it"; this one answers "should first run ask for it yet", and
+   * the two disagree for LinkedIn right now — the credentials exist and the
+   * handshake works, and it is still the wrong second ask. First run has one
+   * job, which is to get X connected so the corpus read can happen and Quincy
+   * can show it knows who you are. A second consent screen before that has paid
+   * off is the ask that gets both refused.
+   *
+   * LinkedIn stays connectable from /channels for anyone who wants it there.
+   */
+  soon?: boolean
 }
 
 const CHANNEL_COPY: Record<
   string,
-  { label: string; grant: string; alsoBuys?: string }
+  { label: string; grant: string; alsoBuys?: string; soon?: boolean }
 > = {
   x: {
     label: "X",
     grant:
       "Quincy will be able to publish posts as you, and read back the ones it published so it can report how they did.",
-    alsoBuys: "Reading your last 200 posts to learn how you write",
+    /**
+     * Interpolated, never typed out. This sentence is the consent somebody
+     * reads before granting X, so it has to state the real cap — and a number
+     * written by hand here would go stale the first time the cap moved, which
+     * it did on 2026-08-16.
+     */
+    alsoBuys: `Reading your last ${DEFAULT_MAX_POSTS} posts to learn how you write`,
   },
   linkedin: {
     label: "LinkedIn",
     grant:
       "Quincy will be able to publish posts as you. It cannot read your feed, your existing posts, or your engagement.",
+    soon: true,
   },
 }
 
@@ -279,6 +361,161 @@ export type WiringState = {
   corpusOfferable: boolean
   /** `source_item` rows already stored. Non-zero means it has been read. */
   corpusItems: number
+}
+
+/**
+ * What the corpus read learned, in a shape the screen can read back.
+ *
+ * This is the answer to "who does Quincy think I am", and it is the whole
+ * reason the read is worth a minute of somebody's first two. The read used to
+ * report a count — "Read 187 posts. I wrote 9 voice rules and 4 stories." — and
+ * a count is a receipt for work done, not evidence that anything was
+ * understood. A person who has just handed over their timeline wants the second
+ * one.
+ *
+ * The three parts are what `compileVoice` writes, read back rather than
+ * re-derived: the portrait is the paragraph on `voice/x`, the rules are its
+ * `data.rules`, and the stories are the `story` pages. Nothing here spends, and
+ * nothing here is generated for the screen — every sentence shown is a sentence
+ * that is now on a brain page the person can open and edit.
+ */
+export type CorpusReceipt = {
+  /** The `voice/x` portrait: who Quincy now thinks it is writing as. */
+  portrait: string
+  rules: string[]
+  stories: { slug: string; title: string; point: string }[]
+}
+
+export async function corpusReceipt(
+  userId: string
+): Promise<CorpusReceipt | null> {
+  const [voice, stories] = await Promise.all([
+    getPage(userId, "voice/x"),
+    getBrainByKind(userId, "story"),
+  ])
+
+  // No `voice/x` means the compile never wrote one — a corpus too thin for any
+  // rule at all. Null rather than an empty receipt, so the caller says "I could
+  // not learn much" instead of rendering three empty headings.
+  if (!voice) return null
+
+  const rules = Array.isArray((voice.data as { rules?: unknown })?.rules)
+    ? (voice.data as { rules: string[] }).rules.filter(Boolean)
+    : []
+
+  return {
+    portrait: (voice.body ?? "").trim(),
+    rules,
+    stories: stories
+      .map((page) => ({
+        slug: page.slug,
+        title: page.title ?? page.slug,
+        point: String((page.data as { point?: unknown } | null)?.point ?? ""),
+      }))
+      // A story with no point is a page mid-write, not something to show off.
+      .filter((story) => story.point.trim().length > 0),
+  }
+}
+
+/**
+ * The angles on the first riff — what Quincy would actually post.
+ *
+ * The read tells somebody Quincy understands them. This is the step that shows
+ * it is *for* something, and it is the last beat of first run before the exits:
+ * a portrait with no proposal is a personality test.
+ *
+ * **Nothing is generated here.** These angles were written when question four
+ * was answered, by the model call `writeFirstRiff` already paid for. Reading
+ * them back costs one query and no money — and generating a fresh set after the
+ * corpus read would spend again to produce a worse list, because the material
+ * has not changed.
+ *
+ * Empty is a real answer, not a failure: the angle call can fail while the riff
+ * survives, which is deliberate (`writeFirstRiff` returns ok so the material is
+ * never lost). The screen says nothing rather than showing an empty heading.
+ */
+export type Suggestion = {
+  id: string
+  hook: string
+  shape: string
+  why: string
+}
+
+export async function firstRiffSuggestions(
+  userId: string
+): Promise<Suggestion[]> {
+  const [newest] = await db
+    .select({ id: riff.id })
+    .from(riff)
+    .where(eq(riff.userId, userId))
+    .orderBy(desc(riff.createdAt))
+    .limit(1)
+
+  if (!newest) return []
+
+  return db
+    .select({
+      id: riffAngle.id,
+      hook: riffAngle.hook,
+      shape: riffAngle.shape,
+      why: riffAngle.why,
+    })
+    .from(riffAngle)
+    .where(eq(riffAngle.riffId, newest.id))
+    .orderBy(asc(riffAngle.position))
+}
+
+/** At most this many themes in the proposed line. Four is a sentence; eight is a list. */
+const THEME_CAP = 4
+
+/**
+ * What the read has learned about *who somebody is*, offered as an addition to
+ * their own answer rather than a replacement for it.
+ *
+ * The first question's answer is often four words — "Im building Quincy" — and
+ * after a 200-post read Quincy knows a great deal more than that. The rail goes
+ * on showing the four words, which is the right default and the wrong resting
+ * place.
+ *
+ * **It appends, and it never overwrites.** `human` is written
+ * `provenance: "user"`, and `compileVoice` skips user-owned pages on purpose —
+ * that rule is why a stated "English" survives a read that could infer
+ * otherwise, and it is not worth trading for a better first paragraph. So this
+ * returns a sentence for a person to accept, their own words stay first, and
+ * the write only happens if they press the button.
+ *
+ * Derived from the story titles rather than composed by a model: the themes are
+ * already the model's own reading of the corpus, and paying for a second call
+ * to rephrase its own output is spend with no new information in it. It is also
+ * visibly derived, which is the honest register for a claim about somebody.
+ *
+ * Null below two themes — one theme is a topic, not a portrait, and a sentence
+ * built on it would overstate what the read found.
+ */
+export function humanAddition(receipt: CorpusReceipt | null): string | null {
+  if (!receipt) return null
+
+  /**
+   * Titles are used exactly as the compile wrote them, capitals and all.
+   *
+   * Lowercasing the first letter reads better mid-sentence, and there is no
+   * rule that can do it safely: "Weekend MVPs" wants it and "Quincy" does not,
+   * and nothing in the string distinguishes a title-cased common word from
+   * somebody's name. Getting a name wrong inside a sentence about who they are
+   * is a worse failure than a capital letter in the middle of one — and left
+   * alone, the capitals read as the theme names they are.
+   */
+  const themes = receipt.stories
+    .map((story) => story.title.trim())
+    .filter(Boolean)
+    .slice(0, THEME_CAP)
+
+  if (themes.length < 2) return null
+
+  const last = themes[themes.length - 1]
+  const rest = themes.slice(0, -1)
+
+  return `Your posts keep coming back to ${rest.join(", ")} and ${last}.`
 }
 
 export async function readWiring(userId: string): Promise<WiringState> {
