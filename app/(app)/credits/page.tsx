@@ -40,7 +40,7 @@ export default async function CreditsPage() {
   // The layout already gates on a session; this is the narrowing, not the
   // gate — the same pattern as /settings/billing.
   if (!session) {
-    redirect("/login")
+    redirect("/login?next=/credits")
   }
 
   // "This month" starts at midnight on the 1st where the reader is, not where
@@ -91,17 +91,15 @@ export default async function CreditsPage() {
             <CardHeader>
               <CardTitle className="text-section">This month</CardTitle>
               <CardDescription className="text-pretty">
-                An estimate, not an invoice — this reaches the model through
-                the Vercel AI Gateway, and the gateway&apos;s own dashboard is
-                the number that actually gets billed.
+                An estimate, not an invoice — this reaches the model through the
+                Vercel AI Gateway, and the gateway&apos;s own dashboard is the
+                number that actually gets billed.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                 <div className="flex flex-col gap-1">
-                  <dt className="text-caption text-muted-foreground">
-                    Turns
-                  </dt>
+                  <dt className="text-caption text-muted-foreground">Turns</dt>
                   <dd className="text-section tabular-nums">
                     {summary.turns.toLocaleString("en-GB")}
                   </dd>
@@ -156,7 +154,7 @@ export default async function CreditsPage() {
                         minute: "2-digit",
                       })}
                     </span>
-                    <span className="tabular-nums text-muted-foreground">
+                    <span className="text-muted-foreground tabular-nums">
                       {turn.inputTokens.toLocaleString("en-GB")} in ·{" "}
                       {turn.outputTokens.toLocaleString("en-GB")} out
                     </span>

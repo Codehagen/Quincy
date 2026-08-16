@@ -40,7 +40,7 @@ export default async function BillingPage() {
   // The layout has already redirected anyone without a session. This is the
   // narrowing, not the gate.
   if (!snapshot) {
-    redirect("/login")
+    redirect("/login?next=/settings/billing")
   }
 
   // The zone matters here for one reason: a period that ends at 23:30 UTC is

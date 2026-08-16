@@ -38,7 +38,7 @@ export default async function SettingsPage() {
   // The layout has already redirected anyone without a session. This is the
   // narrowing, not the gate.
   if (!session) {
-    redirect("/login")
+    redirect("/login?next=/settings")
   }
 
   const now = new Date()
@@ -116,7 +116,7 @@ export default async function SettingsPage() {
   // live cookie. Nothing on this page can be drawn honestly, so send them to
   // sign in rather than render a page about a user that no longer exists.
   if (!account) {
-    redirect("/login")
+    redirect("/login?next=/settings")
   }
 
   const zone = resolveTimeZone(account.timezone)

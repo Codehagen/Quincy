@@ -106,7 +106,36 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (hasSession && AUTH_PAGES.has(pathname)) {
+  /**
+   * Someone with a cookie does not need the login page — unless a real gate
+   * has just told them otherwise.
+   *
+   * **This is where the infinite redirect lived.** `getSessionCookie` reads
+   * presence and nothing else, which Better Auth's own documentation is explicit
+   * about: a cookie with the right name and any contents at all satisfies it. A
+   * session that has expired, been revoked, or was signed with a rotated secret
+   * still leaves that cookie in the browser. So the loop was: the layout
+   * resolves the session for real, finds none, and sends you to /login; this
+   * line sees the stale cookie and sends you straight back; the layout resolves
+   * again. Forever, with no way out but clearing cookies by hand — and the
+   * people it strands are exactly the ones whose session ended, which is
+   * everybody eventually.
+   *
+   * `next` is the tell, and it is not a heuristic: nothing but a server-side
+   * gate that already resolved the session and found none ever puts it there.
+   * When it is present the browser is being *returned* to the login page, and
+   * overriding that is how the cycle closes. Without it — somebody typing
+   * /login with a live session — the bounce is still right.
+   *
+   * The alternative is validating here, which means a Neon round trip in front
+   * of every page load. The comment at the top of this file rejects that, and
+   * Better Auth recommends against it for the same reason.
+   */
+  if (
+    hasSession &&
+    AUTH_PAGES.has(pathname) &&
+    !request.nextUrl.searchParams.has("next")
+  ) {
     return NextResponse.redirect(new URL("/studio", request.url))
   }
 

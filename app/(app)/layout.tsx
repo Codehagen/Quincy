@@ -76,7 +76,7 @@ async function AppShell({
   const session = await getSession()
 
   if (!session) {
-    redirect("/login")
+    redirect("/login?next=/studio")
   }
 
   /**
