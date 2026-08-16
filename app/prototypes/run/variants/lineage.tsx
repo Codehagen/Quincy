@@ -82,10 +82,11 @@ export function Lineage() {
       <StatusFilter active={status} onChange={setStatus} />
 
       {visible.length === 0 ? (
-        <Empty className="bg-card rounded-xl shadow-xs">
+        <Empty className="rounded-xl bg-card shadow-xs">
           <EmptyHeader>
             <EmptyTitle>
-              Nothing from this run is {status ? STATE_LABEL[status].toLowerCase() : "here"}
+              Nothing from this run is{" "}
+              {status ? STATE_LABEL[status].toLowerCase() : "here"}
             </EmptyTitle>
             <EmptyDescription>
               Every piece has moved on. Clear the filter to see the whole run.
@@ -104,7 +105,7 @@ export function Lineage() {
               <div className="flex items-center gap-2 px-3">
                 <NodeChip node={channel} labelled />
                 <h2 className="text-card-title">{NODE_LABEL[channel]}</h2>
-                <span className="text-caption text-muted-foreground font-mono tabular-nums">
+                <span className="font-mono text-caption text-muted-foreground tabular-nums">
                   {pieces.length}
                 </span>
               </div>
@@ -114,7 +115,7 @@ export function Lineage() {
                   once the list is long. */}
               <ul
                 role="list"
-                className="border-border ml-[1.375rem] flex flex-col border-l pl-4"
+                className="ml-[1.375rem] flex flex-col border-l border-border pl-4"
               >
                 {pieces.map((piece) => (
                   <Row key={piece.id} piece={piece} />
@@ -136,7 +137,7 @@ function Row({ piece }: { piece: Piece }) {
         // The ring goes on the row, because the row is what a click acts on.
         // The link carries `outline-none`, so without this there was no focus
         // indicator at all — measured as `outline: none 0px` with no ring.
-        "rounded-sm has-[a:focus-visible]:ring-ring/50 has-[a:focus-visible]:ring-2"
+        "rounded-sm has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring/50"
       )}
     >
       {/* flex-1 so Views lands on one edge down the whole list.
@@ -146,7 +147,7 @@ function Row({ piece }: { piece: Piece }) {
         {/* Clamped to two lines rather than truncated to one. The hook is the
             variable under comparison down this column; cutting it at the first
             ellipsis hides the thing the page exists to show. */}
-        <p className="text-body line-clamp-2 min-w-0">
+        <p className="line-clamp-2 min-w-0 text-body">
           <Link
             href={STATE_HREF[piece.state]}
             className={cn(
@@ -158,7 +159,7 @@ function Row({ piece }: { piece: Piece }) {
             {piece.hook}
           </Link>
         </p>
-        <p className="text-caption text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-muted-foreground">
           {piece.form}
           <StateChip state={piece.state} />
           {piece.at ? <span className="tabular-nums">{piece.at}</span> : null}
@@ -177,14 +178,15 @@ function StatusFilter({
   active: PieceState | null
   onChange: (next: PieceState | null) => void
 }) {
-  const options: { value: PieceState | null; label: string; count: number }[] = [
-    { value: null, label: "All", count: PIECES.length },
-    ...STATUSES.map((s) => ({
-      value: s as PieceState,
-      label: STATE_LABEL[s],
-      count: PIECES.filter((p) => p.state === s).length,
-    })),
-  ]
+  const options: { value: PieceState | null; label: string; count: number }[] =
+    [
+      { value: null, label: "All", count: PIECES.length },
+      ...STATUSES.map((s) => ({
+        value: s as PieceState,
+        label: STATE_LABEL[s],
+        count: PIECES.filter((p) => p.state === s).length,
+      })),
+    ]
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3">
@@ -200,13 +202,13 @@ function StatusFilter({
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1",
               "text-caption transition-[background-color,box-shadow,color] duration-150 ease-out",
-              "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               // 26px chip, 44px hit area, vertical only — the chips sit 8px
               // apart, so growing the width would overlap the next one.
               "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2",
               on
                 ? "bg-foreground text-background"
-                : "bg-card text-muted-foreground hover:text-foreground shadow-2xs"
+                : "bg-card text-muted-foreground shadow-2xs hover:text-foreground"
             )}
           >
             {option.label}

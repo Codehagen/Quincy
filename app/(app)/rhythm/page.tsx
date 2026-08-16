@@ -93,9 +93,7 @@ export default async function RhythmPage() {
   // Reused rather than duplicated. The name says conversation, but the
   // bucketing — Today, Yesterday, N days ago, then a real date — is exactly
   // what a run list wants, and a second copy would drift from this one.
-  const lastRun = runs[0]
-    ? formatConversationDate(runs[0].at, zone, now)
-    : null
+  const lastRun = runs[0] ? formatConversationDate(runs[0].at, zone, now) : null
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-8 py-10">
@@ -119,7 +117,7 @@ export default async function RhythmPage() {
           asks this question after scrolling, not before — and a banner at the
           top would sell the thesis to people who came here to turn something
           on. */}
-      <p className="text-caption text-muted-foreground px-3">
+      <p className="px-3 text-caption text-muted-foreground">
         Grouped by what each rhythm does, never by platform.{" "}
         <Link
           href="/why"

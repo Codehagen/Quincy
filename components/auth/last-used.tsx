@@ -15,7 +15,7 @@ export function LastUsed({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "text-caption text-muted-foreground bg-muted rounded-full px-2 py-0.5",
+        "rounded-full bg-muted px-2 py-0.5 text-caption text-muted-foreground",
         className
       )}
     >

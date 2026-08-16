@@ -5,10 +5,7 @@ import { createIdGenerator } from "ai"
 import { and, eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import {
-  isEntitled,
-  resolveEntitlementForRequest,
-} from "@/lib/entitlement"
+import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { isValidCadence, nextRunAfter } from "@/lib/rhythm-schedule"
 import { runRhythmOnce } from "@/lib/rhythm-run"
 import { DEFAULT_CADENCE, isRunnable, RHYTHMS } from "@/lib/rhythms"
@@ -29,8 +26,7 @@ import { resolveTimeZone } from "@/lib/timezone"
 const newSubscriptionId = createIdGenerator({ prefix: "rs", size: 16 })
 
 export type RhythmActionResult =
-  | { ok: true; message?: string }
-  | { ok: false; message: string }
+  { ok: true; message?: string } | { ok: false; message: string }
 
 type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>
 

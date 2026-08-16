@@ -60,13 +60,20 @@ export function NodeChip({
         "flex size-6 shrink-0 items-center justify-center rounded-xs",
         // Named properties only.
         "transition-[background-color,color] duration-150 ease-out",
-        live ? "bg-signal text-primary-foreground" : "bg-muted text-muted-foreground"
+        live
+          ? "bg-signal text-primary-foreground"
+          : "bg-muted text-muted-foreground"
       )}
     >
       {hasPlatformMark(node) ? (
         <PlatformMark platform={node} size={12} />
       ) : icon ? (
-        <HugeiconsIcon aria-hidden="true" icon={icon} size={13} strokeWidth={1.8} />
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={icon}
+          size={13}
+          strokeWidth={1.8}
+        />
       ) : (
         <span aria-hidden="true" className="text-[10px] font-medium">
           {(NODE_LABEL[node] ?? node).slice(0, 1).toUpperCase()}
@@ -113,7 +120,7 @@ export function Flow({ rhythm }: { rhythm: Rhythm }) {
             aria-hidden="true"
             icon={ArrowRight01Icon}
             size={13}
-            className="text-muted-foreground/60 shrink-0"
+            className="shrink-0 text-muted-foreground/60"
           />
         </>
       ) : null}
@@ -128,7 +135,7 @@ export function Flow({ rhythm }: { rhythm: Rhythm }) {
           <NodeChip key={n} node={n} live={rhythm.enabled} />
         ))}
         {rhythm.to.length > MAX_CHIPS ? (
-          <span className="text-caption text-muted-foreground shrink-0 font-mono tabular-nums">
+          <span className="shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
             +{rhythm.to.length - MAX_CHIPS}
           </span>
         ) : null}
@@ -144,7 +151,7 @@ export function Flow({ rhythm }: { rhythm: Rhythm }) {
  */
 export function TriggerLabel({ trigger }: { trigger: Trigger }) {
   return (
-    <span className="text-caption text-muted-foreground font-mono whitespace-nowrap tabular-nums">
+    <span className="font-mono text-caption whitespace-nowrap text-muted-foreground tabular-nums">
       {trigger.label}
     </span>
   )
@@ -153,7 +160,7 @@ export function TriggerLabel({ trigger }: { trigger: Trigger }) {
 /** Ours, not theirs. Worth marking while that is still true. */
 export function NovelBadge() {
   return (
-    <span className="text-caption text-signal-foreground bg-signal-surface ring-signal-border inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 ring-1">
+    <span className="inline-flex items-center gap-1 rounded-full bg-signal-surface px-1.5 py-0.5 text-caption text-signal-foreground ring-1 ring-signal-border">
       <HugeiconsIcon aria-hidden="true" icon={SparklesIcon} size={11} />
       New
     </span>

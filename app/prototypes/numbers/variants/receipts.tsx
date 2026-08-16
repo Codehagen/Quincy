@@ -2,7 +2,11 @@
 
 import * as React from "react"
 
-import { ArrowDown01Icon, Comment01Icon, ViewIcon } from "@hugeicons/core-free-icons"
+import {
+  ArrowDown01Icon,
+  Comment01Icon,
+  ViewIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { cn } from "@/lib/utils"
@@ -56,7 +60,9 @@ export function Receipts() {
       </PageHeader>
 
       <section className="px-3">
-        <DistributionStrip posts={[...POSTS].sort((a, b) => a.at.localeCompare(b.at))} />
+        <DistributionStrip
+          posts={[...POSTS].sort((a, b) => a.at.localeCompare(b.at))}
+        />
         <p className="mt-2 text-xs text-muted-foreground">
           57 posts, oldest to newest. The line is your median.
         </p>

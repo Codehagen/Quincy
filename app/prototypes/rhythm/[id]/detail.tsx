@@ -65,13 +65,38 @@ type Run = { date: string; source: string; made: number; published: number }
 const RUNS_BY_RHYTHM: Record<string, Run[]> = {
   atomize: [
     { date: "Sun 2 Aug", source: "The quiet months", made: 17, published: 9 },
-    { date: "Sun 26 Jul", source: "What a year of posting taught me", made: 19, published: 11 },
-    { date: "Sun 19 Jul", source: "The three-opinion rule", made: 21, published: 9 },
+    {
+      date: "Sun 26 Jul",
+      source: "What a year of posting taught me",
+      made: 19,
+      published: 11,
+    },
+    {
+      date: "Sun 19 Jul",
+      source: "The three-opinion rule",
+      made: 21,
+      published: 9,
+    },
   ],
   repurpose: [
-    { date: "Thu 31 Jul", source: "Why I stopped batching my content", made: 4, published: 3 },
-    { date: "Fri 25 Jul", source: "The hire I got wrong", made: 4, published: 2 },
-    { date: "Mon 14 Jul", source: "Three miles and my mind is clear", made: 3, published: 3 },
+    {
+      date: "Thu 31 Jul",
+      source: "Why I stopped batching my content",
+      made: 4,
+      published: 3,
+    },
+    {
+      date: "Fri 25 Jul",
+      source: "The hire I got wrong",
+      made: 4,
+      published: 2,
+    },
+    {
+      date: "Mon 14 Jul",
+      source: "Three miles and my mind is clear",
+      made: 3,
+      published: 3,
+    },
   ],
   "voice-capture": [
     { date: "Today 08:12", source: "Voice note, 0:41", made: 2, published: 0 },
@@ -79,11 +104,21 @@ const RUNS_BY_RHYTHM: Record<string, Run[]> = {
   ],
   meetings: [
     { date: "Yesterday", source: "Call with Nadia", made: 2, published: 1 },
-    { date: "Tue 28 Jul", source: "Investor update call", made: 1, published: 0 },
+    {
+      date: "Tue 28 Jul",
+      source: "Investor update call",
+      made: 1,
+      published: 0,
+    },
   ],
   shipped: [
     { date: "12m ago", source: "feat: rhythm index", made: 1, published: 0 },
-    { date: "Fri 1 Aug", source: "fix: reset token expiry", made: 1, published: 1 },
+    {
+      date: "Fri 1 Aug",
+      source: "fix: reset token expiry",
+      made: 1,
+      published: 1,
+    },
   ],
   "week-plan": [
     { date: "Sun 2 Aug", source: "Week of 3 August", made: 11, published: 6 },
@@ -91,12 +126,24 @@ const RUNS_BY_RHYTHM: Record<string, Run[]> = {
   ],
   momentum: [
     { date: "5h ago", source: "The hire I got wrong", made: 1, published: 1 },
-    { date: "Wed 30 Jul", source: "Why I stopped batching", made: 1, published: 1 },
+    {
+      date: "Wed 30 Jul",
+      source: "Why I stopped batching",
+      made: 1,
+      published: 1,
+    },
   ],
   opportunity: [
-    { date: "20m ago", source: "DM from a Series A founder", made: 1, published: 0 },
+    {
+      date: "20m ago",
+      source: "DM from a Series A founder",
+      made: 1,
+      published: 0,
+    },
   ],
-  people: [{ date: "4h ago", source: "14 recurring repliers", made: 1, published: 0 }],
+  people: [
+    { date: "4h ago", source: "14 recurring repliers", made: 1, published: 0 },
+  ],
   outliers: [
     { date: "2d ago", source: "The three-opinion rule", made: 1, published: 0 },
   ],
@@ -157,7 +204,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
             <h1 className="text-display text-balance">{rhythm.name}</h1>
             {rhythm.novel ? <NovelBadge /> : null}
           </div>
-          <p className="text-body-lg text-muted-foreground text-pretty">
+          <p className="text-body-lg text-pretty text-muted-foreground">
             {rhythm.promise}
           </p>
         </div>
@@ -179,7 +226,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
           // off-cards; here there is one object and a switch six lines above,
           // so a tinted surface adds no information and tints the block the
           // page exists to have you read.
-          on ? "bg-card ring-signal-border ring-1" : "bg-card shadow-xs"
+          on ? "bg-card ring-1 ring-signal-border" : "bg-card shadow-xs"
         )}
       >
         <p className="text-body text-pretty">{rhythm.how}</p>
@@ -188,7 +235,9 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
 
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[7rem_1fr]">
           <Field term="When">
-            <span className="font-mono tabular-nums">{rhythm.trigger.label}</span>
+            <span className="font-mono tabular-nums">
+              {rhythm.trigger.label}
+            </span>
           </Field>
 
           {rhythm.from.length > 0 ? (
@@ -215,7 +264,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-1 px-3">
             <h2 className="text-section">Shape per channel</h2>
-            <p className="text-caption text-muted-foreground text-pretty">
+            <p className="text-caption text-pretty text-muted-foreground">
               Each channel gets its own shape. Turn one off and {rhythm.name}{" "}
               skips it without stopping.
             </p>
@@ -223,7 +272,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
 
           <ul
             role="list"
-            className="bg-card divide-border divide-y overflow-hidden rounded-xl shadow-xs"
+            className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
           >
             {rhythm.to.map((node) => (
               <ChannelRow key={node} node={node} parentOn={on} />
@@ -235,7 +284,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1 px-3">
           <h2 className="text-section">Recent runs</h2>
-          <p className="text-caption text-muted-foreground text-pretty">
+          <p className="text-caption text-pretty text-muted-foreground">
             The only honest reason to leave a rhythm on.
           </p>
         </div>
@@ -244,7 +293,7 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
             of invented numbers under it is the one thing a prototype used for
             decisions must not do. `lastRun` is the marker. */}
         {runs.length === 0 ? (
-          <Empty className="bg-card rounded-xl shadow-xs">
+          <Empty className="rounded-xl bg-card shadow-xs">
             <EmptyHeader>
               <EmptyTitle>Has not run yet</EmptyTitle>
               <EmptyDescription>
@@ -254,39 +303,39 @@ function Detail({ rhythm }: { rhythm: (typeof RHYTHMS)[number] }) {
             </EmptyHeader>
           </Empty>
         ) : (
-        <ul
-          role="list"
-          className="bg-card divide-border divide-y overflow-hidden rounded-xl shadow-xs [&>li]:has-[a:focus-visible]:ring-ring/50 [&>li]:has-[a:focus-visible]:ring-2 [&>li]:has-[a:focus-visible]:ring-inset"
-        >
-          {runs.map((run) => (
-            <li
-              key={run.date}
-              className="group/run relative flex items-center gap-4 px-4 py-3"
-            >
-              <span className="text-caption text-muted-foreground w-24 shrink-0 font-mono tabular-nums">
-                {run.date}
-              </span>
-              {/* A row that reads like a link now is one. The overlay covers
+          <ul
+            role="list"
+            className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs [&>li]:has-[a:focus-visible]:ring-2 [&>li]:has-[a:focus-visible]:ring-ring/50 [&>li]:has-[a:focus-visible]:ring-inset"
+          >
+            {runs.map((run) => (
+              <li
+                key={run.date}
+                className="group/run relative flex items-center gap-4 px-4 py-3"
+              >
+                <span className="w-24 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
+                  {run.date}
+                </span>
+                {/* A row that reads like a link now is one. The overlay covers
                   the row; the accessible name is the source, not the whole
                   line of numbers. */}
-              <p className="text-body min-w-0 flex-1 truncate">
-                <Link
-                  href="/prototypes/run"
-                  className={cn(
-                    "after:absolute after:inset-0",
-                    "underline-offset-4 group-hover/run:underline",
-                    "outline-none"
-                  )}
-                >
-                  {run.source}
-                </Link>
-              </p>
-              <span className="text-caption text-muted-foreground shrink-0 font-mono tabular-nums">
-                {run.made} made · {run.published} published
-              </span>
-            </li>
-          ))}
-        </ul>
+                <p className="min-w-0 flex-1 truncate text-body">
+                  <Link
+                    href="/prototypes/run"
+                    className={cn(
+                      "after:absolute after:inset-0",
+                      "underline-offset-4 group-hover/run:underline",
+                      "outline-none"
+                    )}
+                  >
+                    {run.source}
+                  </Link>
+                </p>
+                <span className="shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
+                  {run.made} made · {run.published} published
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </div>
@@ -303,7 +352,7 @@ function Field({
   return (
     <>
       <dt className="text-caption text-muted-foreground">{term}</dt>
-      <dd className="text-body min-w-0">{children}</dd>
+      <dd className="min-w-0 text-body">{children}</dd>
     </>
   )
 }
@@ -331,7 +380,7 @@ function ChannelRow({ node, parentOn }: { node: Node; parentOn: boolean }) {
 
       <div className="flex min-w-0 flex-col gap-0.5">
         <p className="text-card-title">{NODE_LABEL[node] ?? node}</p>
-        <p className="text-caption text-muted-foreground truncate">
+        <p className="truncate text-caption text-muted-foreground">
           {CHANNEL_FORM[node] ?? "Adapted for this channel"}
         </p>
       </div>

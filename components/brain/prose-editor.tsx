@@ -98,7 +98,7 @@ export function ProseEditor({
       }
       aside={
         isCompiled ? (
-          <p className="text-caption text-muted-foreground max-w-[60ch] text-pretty">
+          <p className="max-w-[60ch] text-caption text-pretty text-muted-foreground">
             {/* Where it came from is different per kind, and saying
                 "conversations" on a story distilled from a published post is
                 the notice being wrong about the one fact it exists to give. */}
@@ -137,22 +137,20 @@ export function ProseEditor({
               "min-h-[26rem] w-full resize-none leading-[1.75]",
               "border-transparent bg-transparent px-0 shadow-none",
               "focus-visible:border-transparent focus-visible:ring-0",
-              "focus-visible:outline-ring/50 focus-visible:outline-2 focus-visible:outline-offset-8"
+              "focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-ring/50"
             )}
           />
         ) : form.value.trim() ? (
           <Markdown>{form.value}</Markdown>
         ) : (
-          <p className="text-body text-muted-foreground">
-            Nothing here yet.
-          </p>
+          <p className="text-body text-muted-foreground">Nothing here yet.</p>
         )}
 
         {editing && cap !== undefined && near ? (
           <div className="flex justify-end">
             <span
               className={cn(
-                "text-caption tabular",
+                "tabular text-caption",
                 over ? "text-destructive" : "text-muted-foreground"
               )}
             >

@@ -76,18 +76,18 @@ export default async function ConversationsPage() {
         // Rows with hairline separators rather than cards — the same call the
         // Rhythm list made. Twenty cards of identical weight say nothing about
         // which one you want.
-        <div className="divide-border/60 divide-y">
+        <div className="divide-y divide-border/60">
           {conversations.map((item) => (
             <Link
               key={item.id}
               href={`/c/${item.id}`}
-              className="ring-ring hover:bg-accent/50 flex items-baseline justify-between gap-6 rounded-md px-3 py-3 outline-hidden focus-visible:ring-2"
+              className="flex items-baseline justify-between gap-6 rounded-md px-3 py-3 ring-ring outline-hidden hover:bg-accent/50 focus-visible:ring-2"
             >
-              <span className="text-body truncate">
+              <span className="truncate text-body">
                 {item.title ?? "Untitled"}
               </span>
               {/* tabular-nums so the dates form a column instead of jittering. */}
-              <span className="text-caption text-muted-foreground shrink-0 tabular-nums">
+              <span className="shrink-0 text-caption text-muted-foreground tabular-nums">
                 {formatConversationDate(item.updatedAt, zone)}
               </span>
             </Link>

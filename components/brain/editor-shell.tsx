@@ -78,14 +78,18 @@ export function EditorShell({
               Saved
             </span>
 
-            <Button type="submit" size="sm" disabled={!dirty || state === "saving"}>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!dirty || state === "saving"}
+            >
               {state === "saving" ? "Saving" : "Save"}
             </Button>
           </div>
         </div>
 
         {description ? (
-          <p className="text-body text-muted-foreground max-w-[60ch] text-pretty">
+          <p className="max-w-[60ch] text-body text-pretty text-muted-foreground">
             {description}
           </p>
         ) : null}
@@ -98,7 +102,7 @@ export function EditorShell({
         // what to do. The invariants write these for a person on purpose.
         <p
           role="alert"
-          className="text-body text-destructive border-destructive/30 flex items-start gap-2 rounded-md border px-3 py-2"
+          className="flex items-start gap-2 rounded-md border border-destructive/30 px-3 py-2 text-body text-destructive"
         >
           <HugeiconsIcon icon={Alert02Icon} className="mt-0.5 shrink-0" />
           <span className="text-pretty">{error}</span>
@@ -117,7 +121,10 @@ export function EditorShell({
  * page loaded with, so saving and then undoing your edit correctly leaves the
  * button disabled.
  */
-export function useBrainForm<T>(initial: T, save: (value: T) => Promise<{ ok: boolean; error?: string }>) {
+export function useBrainForm<T>(
+  initial: T,
+  save: (value: T) => Promise<{ ok: boolean; error?: string }>
+) {
   const [value, setValue] = React.useState(initial)
   const [committed, setCommitted] = React.useState(initial)
   const [state, setState] = React.useState<SaveState>("idle")

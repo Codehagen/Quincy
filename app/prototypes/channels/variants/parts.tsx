@@ -57,7 +57,7 @@ export function LiveLabel({ live }: { live: boolean }) {
   return (
     <p
       className={cn(
-        "text-caption inline-flex items-center gap-1.5 font-mono tabular-nums",
+        "inline-flex items-center gap-1.5 font-mono text-caption tabular-nums",
         // Same 150ms ease-out as PlatformTile. The tile, the dot and this word
         // are one indicator split across three elements — give them different
         // timing and pausing a channel reads as the page glitching rather than

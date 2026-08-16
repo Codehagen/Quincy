@@ -1,10 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  MagicWand01Icon,
-  Mic01Icon,
-} from "@hugeicons/core-free-icons"
+import { MagicWand01Icon, Mic01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import type { Riff } from "@/lib/riffs"
@@ -61,7 +58,7 @@ export function DeskFrame({
           <PageHeaderTitle className="text-section">Riffs</PageHeaderTitle>
         </PageHeaderContent>
         {open.angles > 0 ? (
-          <p className="text-caption text-muted-foreground shrink-0">
+          <p className="shrink-0 text-caption text-muted-foreground">
             {/* Singular matters here: the count reaches one on the way down
                 every single time, so "1 angles waiting on you" is a state every
                 user passes through on their last decision. Caught by the Faults
@@ -89,17 +86,17 @@ export function DeskFrame({
  */
 function ProtoInstrument() {
   return (
-    <div className="bg-card flex flex-col gap-4 rounded-xl p-5 shadow-xs sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-xs sm:flex-row sm:items-center">
       <div
         aria-hidden="true"
-        className="bg-signal-surface text-signal-foreground flex size-11 shrink-0 items-center justify-center rounded-lg select-none"
+        className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-signal-surface text-signal-foreground select-none"
       >
         <HugeiconsIcon icon={Mic01Icon} className="size-5" />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <h2 className="text-card-title">Say what happened</h2>
-        <p className="text-caption text-muted-foreground max-w-[60ch] text-pretty">
+        <p className="max-w-[60ch] text-caption text-pretty text-muted-foreground">
           However it comes out. Quincy reads through the false starts, and you
           hear the take back before anything is sent.
         </p>
@@ -147,7 +144,7 @@ export function Queue({
         <section key={day} aria-labelledby={`day-${day}`}>
           <h2
             id={`day-${day}`}
-            className="text-eyebrow text-muted-foreground px-3 pb-3 uppercase"
+            className="px-3 pb-3 text-eyebrow text-muted-foreground uppercase"
           >
             {day}
           </h2>
@@ -188,7 +185,7 @@ export function ExchangeCard({
   return (
     <article
       aria-labelledby={nameId}
-      className="bg-card flex flex-col gap-4 rounded-xl p-4 shadow-xs"
+      className="flex flex-col gap-4 rounded-xl bg-card p-4 shadow-xs"
     >
       <Provenance riff={riff} id={nameId} dateInGroupHeading />
 

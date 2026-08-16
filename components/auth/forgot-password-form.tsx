@@ -73,16 +73,19 @@ export function ForgotPasswordForm() {
           {/* Deliberately conditional, matching the server's own response:
               "If this email exists in our system…". The account may not exist,
               and this message must not let this screen say otherwise. */}
-          <p className="text-body text-muted-foreground text-pretty">
+          <p className="text-body text-pretty text-muted-foreground">
             If an account exists for{" "}
-            <span className="text-foreground font-medium">{sentTo}</span>, we
+            <span className="font-medium text-foreground">{sentTo}</span>, we
             sent a link to reset the password.
           </p>
         </div>
 
-        <p className="text-caption text-muted-foreground text-center">
+        <p className="text-center text-caption text-muted-foreground">
           Remember it after all?{" "}
-          <Link href="/login" className="text-foreground underline underline-offset-3">
+          <Link
+            href="/login"
+            className="text-foreground underline underline-offset-3"
+          >
             Log in
           </Link>
         </p>
@@ -94,7 +97,7 @@ export function ForgotPasswordForm() {
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-section">Reset your password</h1>
-        <p className="text-body text-muted-foreground text-pretty">
+        <p className="text-body text-pretty text-muted-foreground">
           Enter your email and we will send you a link to choose a new one.
         </p>
       </div>
@@ -114,7 +117,7 @@ export function ForgotPasswordForm() {
       {formError ? (
         <p
           role="alert"
-          className="text-destructive text-caption flex items-start gap-2 text-pretty"
+          className="flex items-start gap-2 text-caption text-pretty text-destructive"
         >
           <HugeiconsIcon
             icon={Alert02Icon}
@@ -129,9 +132,12 @@ export function ForgotPasswordForm() {
         {isSubmitting ? "Sending…" : "Send reset link"}
       </Button>
 
-      <p className="text-caption text-muted-foreground text-center">
+      <p className="text-center text-caption text-muted-foreground">
         Remember your password?{" "}
-        <Link href="/login" className="text-foreground underline underline-offset-3">
+        <Link
+          href="/login"
+          className="text-foreground underline underline-offset-3"
+        >
           Log in
         </Link>
       </p>

@@ -61,9 +61,7 @@ export async function GET(
    * published literals, so an unknown or hostile value becomes null and the
    * callback falls back to /channels/<channel>.
    */
-  const next = resolveReturnTo(
-    new URL(request.url).searchParams.get("next")
-  )
+  const next = resolveReturnTo(new URL(request.url).searchParams.get("next"))
 
   const { url, handshake } = await beginConnect(channel, next)
 

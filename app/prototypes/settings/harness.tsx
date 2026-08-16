@@ -133,7 +133,7 @@ export function Harness() {
       <SidebarProvider defaultOpen className="h-svh">
         <AppSidebar conversations={CONVERSATIONS} user={USER} />
         <SidebarInset className="min-h-0 overflow-hidden">
-          <div className="bg-background flex h-12 shrink-0 items-center gap-2 px-3">
+          <div className="flex h-12 shrink-0 items-center gap-2 bg-background px-3">
             <SidebarTrigger />
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">

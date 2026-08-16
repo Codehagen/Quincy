@@ -101,21 +101,22 @@ export function ResendVerification({
       {hasSent && !error ? (
         <p
           role="status"
-          className="text-caption text-muted-foreground flex items-start gap-2 text-pretty"
+          className="flex items-start gap-2 text-caption text-pretty text-muted-foreground"
         >
           <HugeiconsIcon
             icon={Tick02Icon}
             className="mt-px size-4 shrink-0"
             aria-hidden="true"
           />
-          Sent to {email}. The link is good for {EMAIL_VERIFICATION_LIFETIME_LABEL}.
+          Sent to {email}. The link is good for{" "}
+          {EMAIL_VERIFICATION_LIFETIME_LABEL}.
         </p>
       ) : null}
 
       {error ? (
         <p
           role="alert"
-          className="text-destructive text-caption flex items-start gap-2 text-pretty"
+          className="flex items-start gap-2 text-caption text-pretty text-destructive"
         >
           {error}
         </p>

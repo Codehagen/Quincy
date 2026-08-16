@@ -57,7 +57,7 @@ function Inline({
       aria-label={label}
       aria-expanded={open}
       onClick={onToggle}
-      className="decoration-muted-foreground/50 hover:decoration-foreground focus-visible:ring-ring/50 focus-visible:border-ring rounded-xs underline decoration-dotted underline-offset-4 transition-[text-decoration-color] duration-150 ease-out focus-visible:ring-3 focus-visible:outline-none motion-reduce:transition-none"
+      className="rounded-xs underline decoration-muted-foreground/50 decoration-dotted underline-offset-4 transition-[text-decoration-color] duration-150 ease-out hover:decoration-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none"
     >
       {children}
     </button>
@@ -67,7 +67,7 @@ function Inline({
 /** The editor a sentence opens, indented under the line it belongs to. */
 function Drawer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="animate-in fade-in slide-in-from-top-1 border-foreground/10 mt-4 mb-2 max-w-sm border-l pl-5 duration-200 ease-out motion-reduce:animate-none">
+    <div className="mt-4 mb-2 max-w-sm animate-in border-l border-foreground/10 pl-5 duration-200 ease-out fade-in slide-in-from-top-1 motion-reduce:animate-none">
       {children}
     </div>
   )
@@ -114,7 +114,7 @@ export function Briefing() {
       <div className="flex flex-col gap-6 px-1">
         {/* Name ------------------------------------------------------- */}
         <div>
-          <p className="text-body max-w-prose text-pretty">
+          <p className="max-w-prose text-body text-pretty">
             You are{" "}
             <Inline
               label="Change your name"
@@ -163,7 +163,7 @@ export function Briefing() {
 
         {/* Time zone -------------------------------------------------- */}
         <div>
-          <p className="text-body max-w-prose text-pretty">
+          <p className="max-w-prose text-body text-pretty">
             I draw your day in{" "}
             <Inline
               label="Change your time zone"
@@ -191,7 +191,9 @@ export function Briefing() {
                   <FieldLabel htmlFor="briefing-zone">Time zone</FieldLabel>
                   <Select
                     value={zone.value}
-                    onValueChange={(value) => zone.setValue(value ?? zone.value)}
+                    onValueChange={(value) =>
+                      zone.setValue(value ?? zone.value)
+                    }
                   >
                     <SelectTrigger id="briefing-zone" className="w-full">
                       <SelectValue>
@@ -223,10 +225,9 @@ export function Briefing() {
 
         {/* Sign-in ---------------------------------------------------- */}
         <div>
-          <p className="text-body max-w-prose text-pretty">
-            You sign in at{" "}
-            <span className="break-all">{ACCOUNT.email}</span>, which is
-            verified, with{" "}
+          <p className="max-w-prose text-body text-pretty">
+            You sign in at <span className="break-all">{ACCOUNT.email}</span>,
+            which is verified, with{" "}
             <Inline
               label="Change your password"
               open={open === "password"}
@@ -235,8 +236,7 @@ export function Briefing() {
               a password
             </Inline>
             . Moving the address is something I cannot do yet — write to us and
-            we will move it.{" "}
-            <SavedNote state={password.state} />
+            we will move it. <SavedNote state={password.state} />
           </p>
 
           {open === "password" ? (
@@ -326,7 +326,7 @@ export function Briefing() {
 
         {/* Sessions --------------------------------------------------- */}
         <div>
-          <p className="text-body max-w-prose text-pretty">
+          <p className="max-w-prose text-body text-pretty">
             {count === 1 ? (
               <>This browser is the only one signed in.</>
             ) : (
@@ -348,37 +348,39 @@ export function Briefing() {
             <Drawer>
               <div className="flex flex-col gap-3">
                 <ul className="flex flex-col">
-                  {SESSIONS.filter((s) => !sessions.isRevoked(s.id)).map((s) => (
-                    <li
-                      key={s.id}
-                      className="border-foreground/8 flex items-center gap-3 border-b py-2.5 last:border-b-0"
-                    >
-                      <div className="flex min-w-0 flex-col">
-                        <span className="text-body truncate">
-                          {s.browser}
-                          {s.current ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · this one
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="text-caption text-muted-foreground truncate">
-                          {s.place} · {s.lastSeen}
-                        </span>
-                      </div>
-                      {s.current ? null : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="ml-auto"
-                          onClick={() => sessions.revoke(s.id)}
-                        >
-                          Sign out
-                        </Button>
-                      )}
-                    </li>
-                  ))}
+                  {SESSIONS.filter((s) => !sessions.isRevoked(s.id)).map(
+                    (s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-center gap-3 border-b border-foreground/8 py-2.5 last:border-b-0"
+                      >
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate text-body">
+                            {s.browser}
+                            {s.current ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · this one
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="truncate text-caption text-muted-foreground">
+                            {s.place} · {s.lastSeen}
+                          </span>
+                        </div>
+                        {s.current ? null : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-auto"
+                            onClick={() => sessions.revoke(s.id)}
+                          >
+                            Sign out
+                          </Button>
+                        )}
+                      </li>
+                    )
+                  )}
                 </ul>
                 {sessions.others.length > 0 ? (
                   <div>
@@ -399,11 +401,11 @@ export function Briefing() {
 
       {/* Leaving ------------------------------------------------------ */}
       <div className="flex flex-col gap-3 px-1 pt-6">
-        <div className="bg-foreground/8 h-px" role="presentation" />
-        <h2 className="text-eyebrow text-muted-foreground pt-4">
+        <div className="h-px bg-foreground/8" role="presentation" />
+        <h2 className="pt-4 text-eyebrow text-muted-foreground">
           If you want out
         </h2>
-        <p className="text-body max-w-prose text-pretty">
+        <p className="max-w-prose text-body text-pretty">
           I will delete the account and everything under it —{" "}
           {DELETION_COVERS.join("; ")}. There is no copy afterwards, and an
           active subscription is cancelled at the same time.

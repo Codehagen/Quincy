@@ -249,7 +249,7 @@ export function TrackRow({
       {last ? null : (
         <span
           aria-hidden="true"
-          className="absolute -bottom-[2.5625rem] -left-[1.8125rem] top-[0.5625rem] w-px bg-border"
+          className="absolute top-[0.5625rem] -bottom-[2.5625rem] -left-[1.8125rem] w-px bg-border"
         >
           {/* In entrance mode the connector draws on the same beat as its own
               row. Because a draw takes longer than the gap between rows, the
@@ -274,7 +274,7 @@ export function TrackRow({
 
       <span
         aria-hidden="true"
-        className="absolute -left-8 top-[0.35rem] size-[0.4375rem] rounded-full"
+        className="absolute top-[0.35rem] -left-8 size-[0.4375rem] rounded-full"
         style={{
           backgroundColor: lit
             ? "var(--color-foreground)"

@@ -254,7 +254,7 @@ export function ConversationRail({ messages }: { messages: UIMessage[] }) {
       <div
         aria-hidden="true"
         className={cn(
-          "bg-popover absolute inset-0 rounded-lg opacity-0 shadow-md",
+          "absolute inset-0 rounded-lg bg-popover opacity-0 shadow-md",
           "group-focus-within/rail:pointer-events-auto group-focus-within/rail:opacity-100",
           "group-hover/rail:pointer-events-auto group-hover/rail:opacity-100",
           REVEAL
@@ -269,7 +269,7 @@ export function ConversationRail({ messages }: { messages: UIMessage[] }) {
       <ol
         ref={listRef}
         role="list"
-        className="no-scrollbar scroll-fade-y relative max-h-[60svh] overflow-y-auto p-2"
+        className="relative no-scrollbar max-h-[60svh] scroll-fade-y overflow-y-auto p-2"
       >
         {items.map((item, index) => {
           const isActive = index === current
@@ -320,7 +320,7 @@ export function ConversationRail({ messages }: { messages: UIMessage[] }) {
                   // anything painted past the row's own edges — an outset ring
                   // survived only as four corner arcs and read as decoration
                   // rather than as focus.
-                  "focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:ring-inset",
+                  "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                   "group-focus-within/rail:pointer-events-auto group-hover/rail:pointer-events-auto"
                 )}
               >
@@ -352,7 +352,7 @@ export function ConversationRail({ messages }: { messages: UIMessage[] }) {
                     // 3.66:1 on the page and 3.97:1 on the open panel. 70% read
                     // as quiet enough but measured 3.01:1, which clears the 3:1
                     // floor for a meaningful graphic by nothing at all.
-                    className="bg-muted-foreground/80 group-data-active/row:bg-foreground h-0.5 w-6 rounded-full transition-colors duration-150"
+                    className="h-0.5 w-6 rounded-full bg-muted-foreground/80 transition-colors duration-150 group-data-active/row:bg-foreground"
                   />
                 </span>
               </button>

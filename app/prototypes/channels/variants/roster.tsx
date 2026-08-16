@@ -38,7 +38,7 @@ export function Roster() {
       </PageHeader>
 
       {/* One elevation token owns the edge — no border alongside it. */}
-      <div className="bg-card divide-border divide-y overflow-hidden rounded-xl shadow-xs">
+      <div className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs">
         {CHANNELS_BY_STATE.map((channel) => (
           <div
             key={channel.platform}
@@ -50,12 +50,12 @@ export function Roster() {
               <p className="text-card-title">{channel.label}</p>
               <p
                 className={cn(
-                  "text-caption truncate",
+                  "truncate text-caption",
                   // Not an alpha derivative: muted-foreground/70 measures
                   // 3.23:1 on the card and fails AA at this size. The solid
                   // token is 6.29:1.
                   channel.handle
-                    ? "text-muted-foreground font-mono"
+                    ? "font-mono text-muted-foreground"
                     : "text-muted-foreground"
                 )}
               >
@@ -98,7 +98,7 @@ export function Roster() {
         ))}
       </div>
 
-      <p className="text-caption text-muted-foreground px-3">
+      <p className="px-3 text-caption text-muted-foreground">
         Disconnecting stops publishing immediately. Drafts already written stay
         in the lineup.
       </p>

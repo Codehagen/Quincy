@@ -54,7 +54,5 @@ export default async function StudioPage() {
     typed: !cookieStore.has(GREETED_COOKIE),
   })
 
-  return (
-    <StudioChat conversationId={newConversationId()} greeting={greeting} />
-  )
+  return <StudioChat conversationId={newConversationId()} greeting={greeting} />
 }

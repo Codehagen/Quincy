@@ -108,7 +108,7 @@ export function StringList({
           // would shift the slash as it ticks between 9 and 10.
           <span
             className={cn(
-              "text-caption text-muted-foreground tabular",
+              "tabular text-caption text-muted-foreground",
               atCap && "text-foreground"
             )}
           >

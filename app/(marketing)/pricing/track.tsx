@@ -125,7 +125,7 @@ export function Track() {
               {last ? null : (
                 <span
                   aria-hidden="true"
-                  className="absolute -bottom-[2.5625rem] -left-[1.8125rem] top-[0.5625rem] w-px bg-border"
+                  className="absolute top-[0.5625rem] -bottom-[2.5625rem] -left-[1.8125rem] w-px bg-border"
                 >
                   {/* Each connector draws on its own row's beat. Because a draw
                       outlasts the gap between rows, the five overlap and read
@@ -171,7 +171,7 @@ export function Track() {
                   striking through the glyph. */}
               <span
                 aria-hidden="true"
-                className="absolute -left-[2.46875rem] -top-[0.11875rem] flex size-[1.375rem] items-center justify-center rounded-full bg-background text-foreground"
+                className="absolute -top-[0.11875rem] -left-[2.46875rem] flex size-[1.375rem] items-center justify-center rounded-full bg-background text-foreground"
               >
                 <HugeiconsIcon icon={step.icon} className="size-4" />
               </span>
@@ -180,7 +180,7 @@ export function Track() {
                   0.06em of tracking for exactly this, since default tracking on
                   capitals clumps. The numeral keeps the order; the icon on the
                   rail is the glanceable half. */}
-              <span className="text-eyebrow uppercase text-muted-foreground">
+              <span className="text-eyebrow text-muted-foreground uppercase">
                 {String(index + 1).padStart(2, "0")}
               </span>
 

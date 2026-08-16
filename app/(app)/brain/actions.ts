@@ -47,7 +47,10 @@ export async function savePage(input: {
       return { ok: false, error: cause.message }
     }
     console.error("[brain] save failed:", cause)
-    return { ok: false, error: "Could not save. The change is still on screen." }
+    return {
+      ok: false,
+      error: "Could not save. The change is still on screen.",
+    }
   }
 }
 
@@ -77,6 +80,9 @@ export async function correctPage(input: {
       return { ok: false, error: cause.message }
     }
     console.error("[brain] correction failed:", cause)
-    return { ok: false, error: "Could not save. The change is still on screen." }
+    return {
+      ok: false,
+      error: "Could not save. The change is still on screen.",
+    }
   }
 }

@@ -54,7 +54,7 @@ export default async function CutsPage() {
                 className="flex items-baseline justify-between gap-4 rounded-lg px-3 py-2.5 transition-colors hover:bg-foreground/[0.04]"
               >
                 <span className="truncate text-sm">{project.title}</span>
-                <span className="shrink-0 text-xs tabular-nums text-foreground/40">
+                <span className="shrink-0 text-xs text-foreground/40 tabular-nums">
                   {/* Revision, not a date: it is the number the save path
                       actually turns on, and seeing it move is the cheapest
                       evidence that optimistic concurrency is working. */}

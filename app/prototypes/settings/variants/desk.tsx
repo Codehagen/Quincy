@@ -186,7 +186,7 @@ export function Desk() {
             />
             {/* Breaks anywhere rather than pushing the card wide: this address
                 has no spaces and is longer than the column. */}
-            <span className="text-body min-w-0 break-all">{ACCOUNT.email}</span>
+            <span className="min-w-0 text-body break-all">{ACCOUNT.email}</span>
             <Badge variant="secondary">Verified</Badge>
           </div>
 
@@ -211,7 +211,7 @@ export function Desk() {
               ) : null}
             </Field>
 
-            <div className="grid gap-4 @md/field-group:grid-cols-2 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 @md/field-group:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="desk-next">New password</FieldLabel>
                 <Input
@@ -259,9 +259,7 @@ export function Desk() {
                 variant="outline"
                 disabled={!password.ready || password.state === "saving"}
               >
-                {password.state === "saving"
-                  ? "Changing…"
-                  : "Change password"}
+                {password.state === "saving" ? "Changing…" : "Change password"}
               </Button>
               <SavedNote state={password.state} />
             </div>
@@ -272,7 +270,9 @@ export function Desk() {
       {/* ── Sessions ────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-section">Where you are signed in</CardTitle>
+          <CardTitle className="text-section">
+            Where you are signed in
+          </CardTitle>
           <CardDescription className="text-pretty">
             Sign a browser out and it needs the password again.
           </CardDescription>
@@ -288,16 +288,16 @@ export function Desk() {
                   aria-hidden="true"
                   icon={ComputerIcon}
                   size={16}
-                  className="text-muted-foreground shrink-0"
+                  className="shrink-0 text-muted-foreground"
                 />
                 <div className="flex min-w-0 flex-col">
-                  <span className="text-body truncate">
+                  <span className="truncate text-body">
                     {s.browser}
                     {s.current ? (
                       <span className="text-muted-foreground"> · this one</span>
                     ) : null}
                   </span>
-                  <span className="text-caption text-muted-foreground truncate">
+                  <span className="truncate text-caption text-muted-foreground">
                     {s.place} · {s.lastSeen}
                   </span>
                 </div>
@@ -331,7 +331,7 @@ export function Desk() {
 
       {/* ── Leaving ─────────────────────────────────────────────────── */}
       <div className="mt-2 flex flex-col gap-3">
-        <h2 className="text-eyebrow text-muted-foreground px-1">Leaving</h2>
+        <h2 className="px-1 text-eyebrow text-muted-foreground">Leaving</h2>
         <Card className="ring-destructive/20">
           <CardHeader>
             <CardTitle className="text-section">Delete your account</CardTitle>
@@ -340,7 +340,7 @@ export function Desk() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <ul className="text-caption text-muted-foreground flex flex-col gap-1">
+            <ul className="flex flex-col gap-1 text-caption text-muted-foreground">
               {DELETION_COVERS.map((line) => (
                 <li key={line} className="flex gap-2">
                   <span aria-hidden="true">—</span>
@@ -351,7 +351,7 @@ export function Desk() {
 
             <div className="flex flex-wrap items-center gap-3">
               {deleted ? (
-                <p className="text-caption text-destructive flex items-center gap-2">
+                <p className="flex items-center gap-2 text-caption text-destructive">
                   <HugeiconsIcon
                     aria-hidden="true"
                     icon={Alert01Icon}

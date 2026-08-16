@@ -86,7 +86,13 @@ export function tickLabel(m: number) {
  * view — so this enhances rather than gates, which is the rule tooltips break
  * most often.
  */
-export function Readout({ post, className }: { post: Post; className?: string }) {
+export function Readout({
+  post,
+  className,
+}: {
+  post: Post
+  className?: string
+}) {
   const m = multiple(post)
   return (
     <div
@@ -109,7 +115,9 @@ export function Readout({ post, className }: { post: Post; className?: string })
           <dd
             className={cn(
               "font-semibold",
-              m >= 1 ? "text-[var(--proto-up-ink)]" : "text-[var(--proto-down-ink)]"
+              m >= 1
+                ? "text-[var(--proto-up-ink)]"
+                : "text-[var(--proto-down-ink)]"
             )}
           >
             {formatMultiple(m)}
@@ -117,7 +125,9 @@ export function Readout({ post, className }: { post: Post; className?: string })
         </div>
         <div className="flex items-baseline gap-1 text-muted-foreground">
           <dt>Views</dt>
-          <dd className="text-foreground">{post.impr.toLocaleString("en-US")}</dd>
+          <dd className="text-foreground">
+            {post.impr.toLocaleString("en-US")}
+          </dd>
         </div>
         <div className="flex items-baseline gap-1 text-muted-foreground">
           <dt>Replies</dt>
@@ -142,16 +152,28 @@ export function TableView({ posts }: { posts: Post[] }) {
         </caption>
         <thead>
           <tr className="border-b border-border text-left">
-            <th scope="col" className="py-2 pr-4 font-medium text-muted-foreground">
+            <th
+              scope="col"
+              className="py-2 pr-4 font-medium text-muted-foreground"
+            >
               Date
             </th>
-            <th scope="col" className="py-2 pr-4 font-medium text-muted-foreground">
+            <th
+              scope="col"
+              className="py-2 pr-4 font-medium text-muted-foreground"
+            >
               Opening line
             </th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium text-muted-foreground">
+            <th
+              scope="col"
+              className="py-2 pr-4 text-right font-medium text-muted-foreground"
+            >
               Views
             </th>
-            <th scope="col" className="py-2 text-right font-medium text-muted-foreground">
+            <th
+              scope="col"
+              className="py-2 text-right font-medium text-muted-foreground"
+            >
               vs median
             </th>
           </tr>
@@ -160,7 +182,10 @@ export function TableView({ posts }: { posts: Post[] }) {
           {posts.map((post) => {
             const m = multiple(post)
             return (
-              <tr key={post.id} className="border-b border-border/60 last:border-0">
+              <tr
+                key={post.id}
+                className="border-b border-border/60 last:border-0"
+              >
                 <td className="tabular py-2 pr-4 align-top whitespace-nowrap text-muted-foreground">
                   {formatDate(post.at)}
                 </td>

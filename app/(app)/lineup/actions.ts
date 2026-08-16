@@ -152,7 +152,11 @@ export async function createSlot(input: {
     throw new Error("Quincy cannot publish to that channel yet")
   }
 
-  if (!Number.isInteger(input.weekday) || input.weekday < 1 || input.weekday > 7) {
+  if (
+    !Number.isInteger(input.weekday) ||
+    input.weekday < 1 ||
+    input.weekday > 7
+  ) {
     throw new Error("Not a weekday")
   }
 

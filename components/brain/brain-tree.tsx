@@ -66,7 +66,7 @@ export function BrainTree({
     <nav
       aria-label="Brain"
       className={cn(
-        "border-sidebar-border bg-sidebar flex shrink-0 flex-col gap-4 overflow-y-auto p-3",
+        "flex shrink-0 flex-col gap-4 overflow-y-auto border-sidebar-border bg-sidebar p-3",
         // Stacked on a phone, not hidden. Hiding it left the small screen on
         // whichever page it loaded with and no way to reach another one, which
         // is a dead end rather than a missing feature. Capped so the editor is
@@ -91,12 +91,16 @@ export function BrainTree({
         // needs no hydration, and it is keyboard-operable without writing any
         // of that. Open when there is something inside, closed when there is
         // not — an empty group should cost one row, not five.
-        <details key={group.label} open={group.items.length > 0} className="group/disclosure">
+        <details
+          key={group.label}
+          open={group.items.length > 0}
+          className="group/disclosure"
+        >
           <summary
             className={cn(
-              "text-body flex cursor-default list-none items-center gap-1.5 rounded-sm px-2 py-1.5",
-              "text-muted-foreground hover:text-foreground transition-colors duration-150",
-              "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
+              "flex cursor-default list-none items-center gap-1.5 rounded-sm px-2 py-1.5 text-body",
+              "text-muted-foreground transition-colors duration-150 hover:text-foreground",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               "[&::-webkit-details-marker]:hidden"
             )}
           >
@@ -117,11 +121,11 @@ export function BrainTree({
             <span className="min-w-0 flex-1 truncate">{group.label}</span>
             {/* Tabular so the column does not shuffle as counts tick between
                 9 and 10. */}
-            <span className="text-caption tabular">{group.items.length}</span>
+            <span className="tabular text-caption">{group.items.length}</span>
           </summary>
 
           {group.items.length === 0 ? (
-            <p className="text-caption text-muted-foreground px-2 pt-1 pb-2 pl-7 text-pretty">
+            <p className="px-2 pt-1 pb-2 pl-7 text-caption text-pretty text-muted-foreground">
               {group.empty}
             </p>
           ) : (
@@ -173,13 +177,13 @@ function TreeLink({
         onSelect(item.slug)
       }}
       className={cn(
-        "text-body flex items-center gap-2 rounded-sm px-2 py-1.5",
+        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-body",
         // Named properties. Weight never changes between states — a semibold
         // active row would shift every label under it by a fraction as you move
         // down the list.
         "transition-colors duration-150",
         "hover:bg-sidebar-accent-subtle",
-        "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         isActive
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-muted-foreground"

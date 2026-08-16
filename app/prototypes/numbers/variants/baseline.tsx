@@ -101,10 +101,18 @@ export function Baseline() {
           aria-label="Chart or table"
         >
           <ToggleGroupItem value="plot" aria-label="Chart">
-            <HugeiconsIcon aria-hidden="true" icon={Chart01Icon} strokeWidth={1.8} />
+            <HugeiconsIcon
+              aria-hidden="true"
+              icon={Chart01Icon}
+              strokeWidth={1.8}
+            />
           </ToggleGroupItem>
           <ToggleGroupItem value="table" aria-label="Table">
-            <HugeiconsIcon aria-hidden="true" icon={Table01Icon} strokeWidth={1.8} />
+            <HugeiconsIcon
+              aria-hidden="true"
+              icon={Table01Icon}
+              strokeWidth={1.8}
+            />
           </ToggleGroupItem>
         </ToggleGroup>
       </PageHeader>
@@ -119,8 +127,8 @@ export function Baseline() {
           <p className="text-display">{MEDIAN.toLocaleString("en-US")}</p>
           <p className="text-sm text-muted-foreground">
             views. Your mean is {MEAN.toLocaleString("en-US")}, which is{" "}
-            {(MEAN / MEDIAN).toFixed(1)}× higher — the gap is{" "}
-            {outliers.length} posts carrying the other {POSTS.length - outliers.length}.
+            {(MEAN / MEDIAN).toFixed(1)}× higher — the gap is {outliers.length}{" "}
+            posts carrying the other {POSTS.length - outliers.length}.
           </p>
         </div>
       </section>
@@ -133,8 +141,8 @@ export function Baseline() {
         <section className="px-3">
           <figure className="m-0">
             <figcaption className="sr-only">
-              Every post against your median, in order of publication. Bars above
-              the line beat the median; bars below fall short.
+              Every post against your median, in order of publication. Bars
+              above the line beat the median; bars below fall short.
             </figcaption>
 
             <div
@@ -164,7 +172,9 @@ export function Baseline() {
                     <span
                       className={cn(
                         "tabular w-8 shrink-0 text-right text-[11px] leading-none",
-                        isBase ? "font-medium text-foreground" : "text-muted-foreground"
+                        isBase
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
                       )}
                     >
                       {tickLabel(tick.m)}
@@ -230,7 +240,9 @@ export function Baseline() {
                         style={{
                           height: drawn,
                           top: up ? PLOT_UP - drawn : PLOT_UP,
-                          background: up ? "var(--proto-up)" : "var(--proto-down)",
+                          background: up
+                            ? "var(--proto-up)"
+                            : "var(--proto-down)",
                           opacity: isActive ? 1 : up ? 0.9 : 0.6,
                         }}
                       />
@@ -294,17 +306,27 @@ export function Baseline() {
 
           <dl className="mt-8 grid gap-6 border-t border-border pt-6 sm:grid-cols-3">
             <div>
-              <dt className="text-sm text-muted-foreground">Cleared {OUTLIER_GATE}×</dt>
+              <dt className="text-sm text-muted-foreground">
+                Cleared {OUTLIER_GATE}×
+              </dt>
               <dd className="tabular mt-1 text-2xl">
                 {outliers.length}
-                <span className="text-base text-muted-foreground"> of {POSTS.length}</span>
+                <span className="text-base text-muted-foreground">
+                  {" "}
+                  of {POSTS.length}
+                </span>
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-muted-foreground">Fell under the line</dt>
+              <dt className="text-sm text-muted-foreground">
+                Fell under the line
+              </dt>
               <dd className="tabular mt-1 text-2xl">
                 {below.length}
-                <span className="text-base text-muted-foreground"> of {POSTS.length}</span>
+                <span className="text-base text-muted-foreground">
+                  {" "}
+                  of {POSTS.length}
+                </span>
               </dd>
             </div>
             <div>

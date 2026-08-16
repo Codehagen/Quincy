@@ -2,7 +2,13 @@
 
 import { PRICE, REFUSALS, SEQUENCE } from "../data"
 import { CallToAction } from "../chrome"
-import { TrackEyebrow, TrackHeading, TrackRow, useWalk, WalkButton } from "../parts"
+import {
+  TrackEyebrow,
+  TrackHeading,
+  TrackRow,
+  useWalk,
+  WalkButton,
+} from "../parts"
 
 /**
  * Round two, variant 3 — **You and it**. Axis: the sequence is itself the
@@ -81,10 +87,10 @@ export function YouAndIt() {
             move and the response. A two-sided row only reads as two-sided if
             the eye can cross it. */}
         <div className="hidden gap-x-12 pb-4 pl-8 md:grid md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-          <span className="text-eyebrow uppercase text-muted-foreground">
+          <span className="text-eyebrow text-muted-foreground uppercase">
             You
           </span>
-          <span className="text-eyebrow uppercase text-muted-foreground">
+          <span className="text-eyebrow text-muted-foreground uppercase">
             Quincy
           </span>
         </div>
@@ -140,7 +146,7 @@ export function YouAndIt() {
       <section className="mt-20" aria-labelledby="refusals-heading">
         <h2
           id="refusals-heading"
-          className="pb-8 text-eyebrow uppercase text-muted-foreground"
+          className="pb-8 text-eyebrow text-muted-foreground uppercase"
         >
           And the things it will never do
         </h2>

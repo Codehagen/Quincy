@@ -16,7 +16,12 @@ type CoverageProps = {
   className?: string
 }
 
-export function Coverage({ drafts, openings, coveredThrough, className }: CoverageProps) {
+export function Coverage({
+  drafts,
+  openings,
+  coveredThrough,
+  className,
+}: CoverageProps) {
   const short = drafts < openings
 
   return (
@@ -27,11 +32,15 @@ export function Coverage({ drafts, openings, coveredThrough, className }: Covera
         className
       )}
     >
-      <Metric value={drafts} label={drafts === 1 ? "draft ready" : "drafts ready"} />
+      <Metric
+        value={drafts}
+        label={drafts === 1 ? "draft ready" : "drafts ready"}
+      />
       <Metric value={openings} label="openings this week" />
       {coveredThrough ? (
         <p className="text-caption text-muted-foreground">
-          Covered through <span className="font-medium text-foreground">{coveredThrough}</span>
+          Covered through{" "}
+          <span className="font-medium text-foreground">{coveredThrough}</span>
         </p>
       ) : null}
       {short ? (

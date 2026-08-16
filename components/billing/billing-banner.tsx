@@ -26,10 +26,10 @@ export function BillingBanner({ entitlement }: { entitlement: Entitlement }) {
   return (
     <div
       role="status"
-      className="bg-muted/60 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-2"
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b bg-muted/60 px-4 py-2"
     >
-      <p className="text-caption text-muted-foreground text-pretty">
-        <span className="text-foreground font-medium">
+      <p className="text-caption text-pretty text-muted-foreground">
+        <span className="font-medium text-foreground">
           {lapsed ? "Payment needed." : "Your free day is over."}
         </span>{" "}
         {lapsed

@@ -103,7 +103,7 @@ export function ConversationList({
           render={
             <Link
               href="/conversations"
-              className="hover:text-sidebar-foreground rounded-md transition-colors duration-150 ease-out"
+              className="rounded-md transition-colors duration-150 ease-out hover:text-sidebar-foreground"
             />
           }
         >
@@ -122,7 +122,7 @@ export function ConversationList({
               // Not a skeleton — there is nothing loading, there is nothing
               // here. Saying so is more use than a shimmering placeholder for
               // rows that will never arrive.
-              <p className="text-caption text-muted-foreground px-2 py-1.5 group-data-[collapsible=icon]:hidden">
+              <p className="px-2 py-1.5 text-caption text-muted-foreground group-data-[collapsible=icon]:hidden">
                 Nothing yet. Ask Quincy something.
               </p>
             ) : (
@@ -160,7 +160,7 @@ export function ConversationList({
           {visible.length >= SIDEBAR_CONVERSATION_LIMIT ? (
             <Link
               href="/conversations"
-              className="text-caption text-muted-foreground hover:text-foreground ring-ring block rounded-md px-2 py-1.5 outline-hidden transition-colors duration-150 ease-out focus-visible:ring-2 group-data-[collapsible=icon]:hidden"
+              className="block rounded-md px-2 py-1.5 text-caption text-muted-foreground ring-ring outline-hidden transition-colors duration-150 ease-out group-data-[collapsible=icon]:hidden hover:text-foreground focus-visible:ring-2"
             >
               See all
             </Link>
@@ -169,7 +169,7 @@ export function ConversationList({
           {deleteError ? (
             <p
               role="alert"
-              className="text-destructive text-caption px-2 py-1.5 text-pretty group-data-[collapsible=icon]:hidden"
+              className="px-2 py-1.5 text-caption text-pretty text-destructive group-data-[collapsible=icon]:hidden"
             >
               {deleteError}
             </p>

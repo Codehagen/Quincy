@@ -137,7 +137,7 @@ export function Assembly() {
               {/* The principle, not a feature list. Capped at a comfortable
                   measure rather than running the full width of a three-column
                   page — 65ch is the ceiling and this sits under it. */}
-              <p className="text-body text-muted-foreground text-pretty">
+              <p className="text-body text-pretty text-muted-foreground">
                 {FAMILY_NOTE[family]}
               </p>
             </div>
@@ -161,7 +161,7 @@ function RhythmCard({ rhythm }: { rhythm: Rhythm }) {
     <Card
       data-live={on || undefined}
       className={cn(
-        "group/rhythm relative h-full ring-0 shadow-xs",
+        "group/rhythm relative h-full shadow-xs ring-0",
         // Named properties, never the shorthand.
         "transition-[box-shadow,background-color] duration-150 ease-out",
         // Hover confirms an affordance that is real: the whole card opens the
@@ -171,7 +171,7 @@ function RhythmCard({ rhythm }: { rhythm: Rhythm }) {
         // The ring goes on the card, not on the link inside it. The click
         // target is the whole card, so a focus indicator around a short word
         // told a keyboard user something different than it told a mouse.
-        "has-[a:focus-visible]:ring-ring/50 has-[a:focus-visible]:ring-2",
+        "has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring/50",
         "data-live:bg-signal-surface"
       )}
     >
@@ -221,10 +221,10 @@ function RhythmCard({ rhythm }: { rhythm: Rhythm }) {
         {/* Promise at full foreground, mechanism muted under it. Two weights of
             the same size rather than two sizes — the card is already dense and
             a third type step would make it noisy. */}
-        <p className="text-caption text-foreground text-pretty">
+        <p className="text-caption text-pretty text-foreground">
           {rhythm.promise}
         </p>
-        <p className="text-caption text-muted-foreground text-pretty">
+        <p className="text-caption text-pretty text-muted-foreground">
           {rhythm.how}
         </p>
       </CardContent>
@@ -232,11 +232,11 @@ function RhythmCard({ rhythm }: { rhythm: Rhythm }) {
       <CardContent className="mt-auto flex items-center justify-between gap-3">
         <TriggerLabel trigger={rhythm.trigger} />
         {rhythm.yield ? (
-          <span className="text-caption text-muted-foreground font-mono tabular-nums">
+          <span className="font-mono text-caption text-muted-foreground tabular-nums">
             {rhythm.yield} pieces
           </span>
         ) : rhythm.lastRun && on ? (
-          <span className="text-caption text-muted-foreground font-mono tabular-nums">
+          <span className="font-mono text-caption text-muted-foreground tabular-nums">
             {rhythm.lastRun}
           </span>
         ) : null}
@@ -273,13 +273,13 @@ function PlatformFilter({
             className={cn(
               "flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1.5",
               "text-caption transition-[background-color,box-shadow,color] duration-150 ease-out",
-              "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               // 24px chip, 44px hit area, vertical only — the chips sit in a
               // row 8px apart, so growing the width would overlap the next one.
               "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2",
               on
                 ? "bg-foreground text-background"
-                : "bg-card text-muted-foreground hover:text-foreground shadow-2xs"
+                : "bg-card text-muted-foreground shadow-2xs hover:text-foreground"
             )}
           >
             <NodeChip node={node} labelled />
@@ -296,7 +296,7 @@ function PlatformFilter({
             "text-caption text-muted-foreground hover:text-foreground",
             "flex items-center gap-1 rounded-full px-2 py-1",
             "transition-colors duration-150 ease-out",
-            "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
+            "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
             "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2"
           )}
         >
@@ -309,7 +309,7 @@ function PlatformFilter({
           when the filtered sections are below the fold. */}
       <p
         aria-live="polite"
-        className="text-caption text-muted-foreground ml-auto font-mono tabular-nums"
+        className="ml-auto font-mono text-caption text-muted-foreground tabular-nums"
       >
         {showing === total ? `${total} rhythms` : `${showing} of ${total}`}
       </p>

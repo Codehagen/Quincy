@@ -6,10 +6,7 @@ import { and, eq, inArray } from "drizzle-orm"
 import { parseSourceInput } from "@/lib/adapt"
 import { createAdaptedDraft } from "@/lib/adapt-draft"
 import { db } from "@/lib/db"
-import {
-  isEntitled,
-  resolveEntitlementForRequest,
-} from "@/lib/entitlement"
+import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { nextFreeSlot, type ApprovalPlacement } from "@/lib/scheduling"
 import { getSession } from "@/lib/session"
 import { draft, draftVersion, scheduledPost } from "@/lib/schema-app"
@@ -333,4 +330,3 @@ export async function adaptPost(input: {
     existing: result.existing,
   }
 }
-

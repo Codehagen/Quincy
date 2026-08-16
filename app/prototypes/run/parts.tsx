@@ -35,8 +35,10 @@ export function StateChip({
   return (
     <span
       className={cn(
-        "text-caption inline-flex items-center gap-1.5 whitespace-nowrap",
-        state === "published" ? "text-signal-foreground" : "text-muted-foreground",
+        "inline-flex items-center gap-1.5 text-caption whitespace-nowrap",
+        state === "published"
+          ? "text-signal-foreground"
+          : "text-muted-foreground",
         className
       )}
     >
@@ -68,7 +70,7 @@ export function Views({ views }: { views?: number }) {
   if (views === undefined) {
     // Reserved, not collapsed — a missing number must not pull the column in.
     return (
-      <span className="text-caption text-muted-foreground/60 w-20 shrink-0 text-right font-mono tabular-nums">
+      <span className="w-20 shrink-0 text-right font-mono text-caption text-muted-foreground/60 tabular-nums">
         —
       </span>
     )
@@ -78,12 +80,12 @@ export function Views({ views }: { views?: number }) {
 
   return (
     <span className="flex w-20 shrink-0 flex-col items-end gap-0.5">
-      <span className="text-caption font-mono tabular-nums">
+      <span className="font-mono text-caption tabular-nums">
         {format(views)}
       </span>
       <span
         className={cn(
-          "text-caption font-mono tabular-nums",
+          "font-mono text-caption tabular-nums",
           ratio >= 1 ? "text-signal-foreground" : "text-muted-foreground"
         )}
       >

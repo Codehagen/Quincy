@@ -70,13 +70,16 @@ export function ResetPasswordForm({
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-section">Password changed</h1>
-          <p className="text-body text-muted-foreground text-pretty">
+          <p className="text-body text-pretty text-muted-foreground">
             You can sign in with it now.
           </p>
         </div>
 
-        <p className="text-caption text-muted-foreground text-center">
-          <Link href="/login" className="text-foreground underline underline-offset-3">
+        <p className="text-center text-caption text-muted-foreground">
+          <Link
+            href="/login"
+            className="text-foreground underline underline-offset-3"
+          >
             Log in
           </Link>
         </p>
@@ -92,7 +95,7 @@ export function ResetPasswordForm({
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-section">This link has expired</h1>
-          <p className="text-body text-muted-foreground text-pretty">
+          <p className="text-body text-pretty text-muted-foreground">
             Reset links only work once and do not last long.{" "}
             <Link
               href="/forgot-password"
@@ -104,9 +107,12 @@ export function ResetPasswordForm({
           </p>
         </div>
 
-        <p className="text-caption text-muted-foreground text-center">
+        <p className="text-center text-caption text-muted-foreground">
           Remembered it?{" "}
-          <Link href="/login" className="text-foreground underline underline-offset-3">
+          <Link
+            href="/login"
+            className="text-foreground underline underline-offset-3"
+          >
             Log in
           </Link>
         </p>
@@ -118,7 +124,7 @@ export function ResetPasswordForm({
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-section">Choose a new password</h1>
-        <p className="text-body text-muted-foreground text-pretty">
+        <p className="text-body text-pretty text-muted-foreground">
           Pick something you have not used here before.
         </p>
       </div>
@@ -139,7 +145,7 @@ export function ResetPasswordForm({
       {formError ? (
         <p
           role="alert"
-          className="text-destructive text-caption flex items-start gap-2 text-pretty"
+          className="flex items-start gap-2 text-caption text-pretty text-destructive"
         >
           <HugeiconsIcon
             icon={Alert02Icon}
@@ -154,9 +160,12 @@ export function ResetPasswordForm({
         {isSubmitting ? "Setting password…" : "Set new password"}
       </Button>
 
-      <p className="text-caption text-muted-foreground text-center">
+      <p className="text-center text-caption text-muted-foreground">
         Remembered it?{" "}
-        <Link href="/login" className="text-foreground underline underline-offset-3">
+        <Link
+          href="/login"
+          className="text-foreground underline underline-offset-3"
+        >
           Log in
         </Link>
       </p>

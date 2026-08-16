@@ -68,7 +68,7 @@ export function ProtoAngleActions({
         variant="ghost"
         size="sm"
         disabled={busy}
-        className="text-muted-foreground ml-auto"
+        className="ml-auto text-muted-foreground"
         aria-label={`Discard: ${angle.hook}`}
         onClick={() => board.discardAngle(angle.id)}
       >
@@ -102,7 +102,7 @@ export function ProtoRiffFooter({
     <Button
       variant="ghost"
       size="sm"
-      className={"text-muted-foreground self-start " + (className ?? "")}
+      className={"self-start text-muted-foreground " + (className ?? "")}
       onClick={() => board.discardRiff(riff.id)}
     >
       {anyDrafted ? "Discard the rest" : "Nothing here"}

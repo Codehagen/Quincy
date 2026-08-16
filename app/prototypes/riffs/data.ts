@@ -27,7 +27,8 @@ export const RIFFS: Riff[] = [
    */
   {
     id: "pricing",
-    scrap: "Per-seat pricing is wrong for us. We are selling something one person uses on behalf of a company — the value does not scale with headcount, it scales with how much gets published. Charging per seat would punish the exact customer we want.",
+    scrap:
+      "Per-seat pricing is wrong for us. We are selling something one person uses on behalf of a company — the value does not scale with headcount, it scales with how much gets published. Charging per seat would punish the exact customer we want.",
     sourceId: "voice",
     sourceLabel: "Voice notes",
     capturedAt: "Today",
@@ -58,14 +59,18 @@ export const RIFFS: Riff[] = [
    */
   {
     id: "sources-split",
-    scrap: "Grunnen til at vi deler Channels og Sources: Channels er hvor skrivingen går ut, Sources er hvor materialet kommer inn. Stanley slår sammen output, input og chat i ett rutenett og ender med 14 oppføringer under X og 1 under Instagram.",
+    scrap:
+      "Grunnen til at vi deler Channels og Sources: Channels er hvor skrivingen går ut, Sources er hvor materialet kommer inn. Stanley slår sammen output, input og chat i ett rutenett og ender med 14 oppføringer under X og 1 under Instagram.",
     sourceId: "slack",
     sourceLabel: "Slack",
     capturedAt: "Today",
     state: "ready",
     failure: "",
     stuck: false,
-    adaptedFrom: { url: "https://x.com/someone/status/1889", handle: "someone" },
+    adaptedFrom: {
+      url: "https://x.com/someone/status/1889",
+      handle: "someone",
+    },
     angles: [
       {
         id: "sources-1",
@@ -82,7 +87,8 @@ export const RIFFS: Riff[] = [
    */
   {
     id: "retreat",
-    scrap: "Når jeg sier at det er en AI som skriver postene dine, nikker folk og slutter å høre etter. Når jeg sier at det er tingen som husker hva som skjedde denne uka så du har noe å skrive om, lener de seg fram. Skrivingen er den enkle delen nå. Å huske hva som var verdt å skrive om er det ingen som har løst.",
+    scrap:
+      "Når jeg sier at det er en AI som skriver postene dine, nikker folk og slutter å høre etter. Når jeg sier at det er tingen som husker hva som skjedde denne uka så du har noe å skrive om, lener de seg fram. Skrivingen er den enkle delen nå. Å huske hva som var verdt å skrive om er det ingen som har løst.",
     sourceId: "voice",
     sourceLabel: "Voice notes",
     capturedAt: "Yesterday",
@@ -107,7 +113,8 @@ export const RIFFS: Riff[] = [
    */
   {
     id: "rhythm-grid",
-    scrap: "Merged #212 — rhythm grid, platform filter in the URL. 24 rhythms grouped by function instead of by platform, nuqs for the filter state so a filtered view is shareable.",
+    scrap:
+      "Merged #212 — rhythm grid, platform filter in the URL. 24 rhythms grouped by function instead of by platform, nuqs for the filter state so a filtered view is shareable.",
     sourceId: "github",
     sourceLabel: "GitHub",
     capturedAt: "Yesterday",
@@ -128,7 +135,8 @@ export const RIFFS: Riff[] = [
 
   {
     id: "onboarding",
-    scrap: "Vi fjernet hele onboarding-touren. Ny bruker lander rett i Riffs med mikrofonen åpen. Aktivering gikk fra 31% til 58% på to uker. Turen forklarte produktet; snarveien leverte det.",
+    scrap:
+      "Vi fjernet hele onboarding-touren. Ny bruker lander rett i Riffs med mikrofonen åpen. Aktivering gikk fra 31% til 58% på to uker. Turen forklarte produktet; snarveien leverte det.",
     sourceId: "voice",
     sourceLabel: "Voice notes",
     capturedAt: "3 days ago",
@@ -160,7 +168,8 @@ export const RIFFS: Riff[] = [
    */
   {
     id: "bug",
-    scrap: "Two cost bugs in one week, both the same shape: we paid for the same work twice because nothing wrote down that it had already been done.",
+    scrap:
+      "Two cost bugs in one week, both the same shape: we paid for the same work twice because nothing wrote down that it had already been done.",
     sourceId: "github",
     sourceLabel: "GitHub",
     capturedAt: "12 Aug",

@@ -159,7 +159,7 @@ export function PolicyEditor({
                 max={100}
                 value={pillar.weight}
                 aria-label={`Pillar ${index + 1} weight, percent`}
-                className="w-20 tabular"
+                className="tabular w-20"
                 onChange={(e) =>
                   patch({
                     pillars: p.pillars.map((x, i) =>
@@ -170,7 +170,7 @@ export function PolicyEditor({
                   })
                 }
               />
-              <span className="text-caption text-muted-foreground w-3">%</span>
+              <span className="w-3 text-caption text-muted-foreground">%</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -204,7 +204,7 @@ export function PolicyEditor({
               being told after pressing Save. */}
           <span
             className={cn(
-              "text-caption tabular",
+              "tabular text-caption",
               p.pillars.length === 0
                 ? "text-muted-foreground"
                 : balanced

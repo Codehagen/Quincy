@@ -56,7 +56,7 @@ export function Ledger() {
         <section aria-labelledby="included-heading" className="md:pr-2">
           <h2
             id="included-heading"
-            className="pb-8 text-eyebrow uppercase text-muted-foreground"
+            className="pb-8 text-eyebrow text-muted-foreground uppercase"
           >
             What it buys
           </h2>
@@ -81,7 +81,7 @@ export function Ledger() {
         >
           <h2
             id="refusals-heading"
-            className="pb-8 text-eyebrow uppercase text-muted-foreground"
+            className="pb-8 text-eyebrow text-muted-foreground uppercase"
           >
             What it will never do
           </h2>

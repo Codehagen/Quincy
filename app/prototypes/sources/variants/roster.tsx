@@ -41,7 +41,7 @@ export function Roster() {
         </PageHeaderContent>
       </PageHeader>
 
-      <p className="text-caption text-muted-foreground px-3 text-pretty">
+      <p className="px-3 text-caption text-pretty text-muted-foreground">
         Your channels are also sources. Quincy reads back what you publish
         there, so there is nothing to connect twice —{" "}
         <Link
@@ -62,13 +62,13 @@ export function Roster() {
           a labelled one runs h1 → nothing → h2, which drops a screen reader
           into seven rows with no idea what they are. */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-eyebrow text-muted-foreground px-3 uppercase">
+        <h2 className="px-3 text-eyebrow text-muted-foreground uppercase">
           Connected
         </h2>
 
         <ul
           role="list"
-          className="bg-card divide-border divide-y overflow-hidden rounded-xl shadow-xs"
+          className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
         >
           {connected.map((source) => (
             <SourceRow
@@ -85,7 +85,7 @@ export function Roster() {
           <h2 className="text-eyebrow text-muted-foreground uppercase">
             Not connectable yet
           </h2>
-          <p className="text-caption text-muted-foreground text-pretty">
+          <p className="text-caption text-pretty text-muted-foreground">
             Quincy will read these once accounts can be connected. Nothing here
             is wired up, and no rhythm runs yet that would read it.
           </p>
@@ -93,7 +93,7 @@ export function Roster() {
 
         <ul
           role="list"
-          className="bg-card divide-border divide-y overflow-hidden rounded-xl shadow-xs"
+          className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
         >
           {available.map((source) => (
             <SourceRow key={source.id} source={source} connection={null} />
@@ -101,7 +101,7 @@ export function Roster() {
         </ul>
       </section>
 
-      <p className="text-caption text-muted-foreground px-3 text-pretty">
+      <p className="px-3 text-caption text-pretty text-muted-foreground">
         Connecting a source will not publish anything. Material arrives, a
         rhythm reads it, and you approve what it writes —{" "}
         <Link

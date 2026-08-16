@@ -52,7 +52,9 @@ import { TableView } from "../parts"
  */
 export function Ledger() {
   const rows = React.useMemo(() => rollupByAngle(), [])
-  const [open, setOpen] = React.useState<string | null>(rows[0]?.angle.id ?? null)
+  const [open, setOpen] = React.useState<string | null>(
+    rows[0]?.angle.id ?? null
+  )
 
   // `Math.max()` with no arguments is -Infinity, which propagates into every
   // bar width as NaN. The `|| 1` is the guard, not decoration: an empty corpus
@@ -89,9 +91,9 @@ export function Ledger() {
           strokeWidth={1.8}
         />
         <p className="max-w-[70ch] text-pretty text-muted-foreground">
-          Inferred, not recorded. Quincy has not published anything yet, so these
-          angles are read off your imported history. Once a riff produces a post,
-          the group becomes the actual angle that drafted it.
+          Inferred, not recorded. Quincy has not published anything yet, so
+          these angles are read off your imported history. Once a riff produces
+          a post, the group becomes the actual angle that drafted it.
         </p>
       </div>
 
@@ -120,7 +122,10 @@ export function Ledger() {
           const width = (Math.abs(Math.log2(row.medianMultiple)) / widest) * 100
 
           return (
-            <div key={row.angle.id} className="border-b border-border last:border-0">
+            <div
+              key={row.angle.id}
+              className="border-b border-border last:border-0"
+            >
               <h2>
                 <button
                   type="button"
@@ -140,7 +145,9 @@ export function Ledger() {
 
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex items-baseline gap-2">
-                      <span className="truncate font-medium">{row.angle.label}</span>
+                      <span className="truncate font-medium">
+                        {row.angle.label}
+                      </span>
                       <span className="tabular shrink-0 text-xs text-muted-foreground">
                         {row.posts.length}
                       </span>
@@ -161,7 +168,9 @@ export function Ledger() {
                       className="h-full rounded-full"
                       style={{
                         width: `${Math.max(4, width)}%`,
-                        background: up ? "var(--proto-up)" : "var(--proto-down)",
+                        background: up
+                          ? "var(--proto-up)"
+                          : "var(--proto-down)",
                       }}
                     />
                   </span>

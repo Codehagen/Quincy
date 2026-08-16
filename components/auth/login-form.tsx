@@ -109,13 +109,14 @@ export function LoginForm({
   // The panel names a specific address and its button resends to that address.
   // Once the field says something else, both are talking about an account the
   // user is no longer trying to reach.
-  const showUnverified = unverified !== null && unverified === email.value.trim()
+  const showUnverified =
+    unverified !== null && unverified === email.value.trim()
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-section">Welcome back</h1>
-        <p className="text-body text-muted-foreground text-pretty">
+        <p className="text-body text-pretty text-muted-foreground">
           Pick up where you and Quincy left off.
         </p>
       </div>
@@ -167,7 +168,7 @@ export function LoginForm({
       {formError ? (
         <p
           role="alert"
-          className="text-destructive text-caption flex items-start gap-2 text-pretty"
+          className="flex items-start gap-2 text-caption text-pretty text-destructive"
         >
           <HugeiconsIcon
             icon={Alert02Icon}
@@ -187,7 +188,10 @@ export function LoginForm({
           breaks the nested-radius rule the whole app follows. */}
       {showUnverified ? (
         <div className="flex flex-col gap-3">
-          <p role="alert" className="text-caption text-muted-foreground flex items-start gap-2 text-pretty">
+          <p
+            role="alert"
+            className="flex items-start gap-2 text-caption text-pretty text-muted-foreground"
+          >
             <HugeiconsIcon
               icon={Mail01Icon}
               className="mt-px size-4 shrink-0"
@@ -195,7 +199,7 @@ export function LoginForm({
             />
             <span>
               Confirm your email before logging in. The link we sent to{" "}
-              <span className="text-foreground font-medium">{unverified}</span>{" "}
+              <span className="font-medium text-foreground">{unverified}</span>{" "}
               may have expired.
             </span>
           </p>
@@ -214,14 +218,17 @@ export function LoginForm({
         ) : null}
       </div>
 
-      <p className="text-caption text-muted-foreground text-center">
+      <p className="text-center text-caption text-muted-foreground">
         No account yet?{" "}
-        <Link href="/#join" className="text-foreground underline underline-offset-3">
+        <Link
+          href="/#join"
+          className="text-foreground underline underline-offset-3"
+        >
           Join the waitlist
         </Link>
       </p>
 
-      <p className="text-caption text-muted-foreground text-center">
+      <p className="text-center text-caption text-muted-foreground">
         <Link
           href="/forgot-password"
           className="text-foreground underline underline-offset-3"

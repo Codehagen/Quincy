@@ -1,16 +1,14 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
-import { ChartHistogramIcon, InformationCircleIcon } from "@hugeicons/core-free-icons"
+import {
+  ChartHistogramIcon,
+  InformationCircleIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { constructMetadata } from "@/lib/metadata"
-import {
-  OUTLIER_GATE,
-  endsOf,
-  formatMultiple,
-  getNumbers,
-} from "@/lib/numbers"
+import { OUTLIER_GATE, endsOf, formatMultiple, getNumbers } from "@/lib/numbers"
 import { getSession } from "@/lib/session"
 import { resolveTimeZone } from "@/lib/timezone"
 import {
@@ -125,11 +123,11 @@ export default async function NumbersPage() {
           </EmptyHeader>
         </Empty>
 
-        <p className="text-caption text-muted-foreground px-3 text-pretty">
+        <p className="px-3 text-caption text-pretty text-muted-foreground">
           Reading a channel back is one press on{" "}
           <Link
             href="/sources"
-            className="decoration-muted-foreground/40 text-foreground underline underline-offset-4 hover:decoration-current"
+            className="text-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
           >
             Sources
           </Link>
@@ -160,8 +158,10 @@ export default async function NumbersPage() {
           Your median post
         </p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <p className="text-display">{numbers.median.toLocaleString("en-US")}</p>
-          <p className="text-muted-foreground max-w-[52ch] text-sm text-pretty">
+          <p className="text-display">
+            {numbers.median.toLocaleString("en-US")}
+          </p>
+          <p className="max-w-[52ch] text-sm text-pretty text-muted-foreground">
             views. Your mean is {numbers.mean.toLocaleString("en-US")}
             {numbers.median > 0 ? (
               <>
@@ -182,7 +182,7 @@ export default async function NumbersPage() {
             Claiming a corpus size larger than the one actually measured is the
             kind of wrong a reader has no way to catch. */}
         {numbers.skipped > 0 ? (
-          <p className="text-caption text-muted-foreground mt-2 max-w-[62ch] text-pretty">
+          <p className="mt-2 max-w-[62ch] text-caption text-pretty text-muted-foreground">
             {numbers.skipped} more{" "}
             {numbers.skipped === 1 ? "post carries" : "posts carry"} no reach
             figures and {numbers.skipped === 1 ? "is" : "are"} left out of every
@@ -199,32 +199,32 @@ export default async function NumbersPage() {
         toAxis={numbers.toAxis}
       />
 
-      <dl className="border-border mx-3 grid gap-6 border-t pt-6 sm:grid-cols-3">
+      <dl className="mx-3 grid gap-6 border-t border-border pt-6 sm:grid-cols-3">
         <div>
-          <dt className="text-muted-foreground text-sm">
+          <dt className="text-sm text-muted-foreground">
             Cleared {OUTLIER_GATE}×
           </dt>
           <dd className="tabular mt-1 text-2xl">
             {numbers.outliers}
-            <span className="text-muted-foreground text-base">
+            <span className="text-base text-muted-foreground">
               {" "}
               of {numbers.scored}
             </span>
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground text-sm">Fell under the line</dt>
+          <dt className="text-sm text-muted-foreground">Fell under the line</dt>
           <dd className="tabular mt-1 text-2xl">
             {numbers.below}
-            <span className="text-muted-foreground text-base">
+            <span className="text-base text-muted-foreground">
               {" "}
               of {numbers.scored}
             </span>
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground text-sm">Best post</dt>
-          <dd className="tabular text-gain-ink mt-1 text-2xl">
+          <dt className="text-sm text-muted-foreground">Best post</dt>
+          <dd className="tabular mt-1 text-2xl text-gain-ink">
             {formatMultiple(numbers.best)}
           </dd>
         </div>
@@ -236,7 +236,7 @@ export default async function NumbersPage() {
           replies" is a fact about nothing. */}
       <section className="px-3">
         <h2 className="text-section">Which angle wins.</h2>
-        <p className="text-muted-foreground mt-1 max-w-[62ch] text-sm text-pretty">
+        <p className="mt-1 max-w-[62ch] text-sm text-pretty text-muted-foreground">
           Not which post.
           {numbers.linkRepliesBelow > 0 ? (
             <>
@@ -254,17 +254,17 @@ export default async function NumbersPage() {
       {/* The caveat, on the page rather than in a comment. It disappears by
           itself the day a riff publishes something. */}
       {numbers.inferred ? (
-        <div className="bg-muted/60 ring-foreground/5 mx-3 flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm ring-1">
+        <div className="mx-3 flex items-start gap-2.5 rounded-lg bg-muted/60 px-3 py-2.5 text-sm ring-1 ring-foreground/5">
           <HugeiconsIcon
             aria-hidden="true"
             icon={InformationCircleIcon}
             strokeWidth={1.8}
-            className="text-muted-foreground mt-0.5 size-4 shrink-0"
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
           />
-          <p className="text-muted-foreground max-w-[70ch] text-pretty">
+          <p className="max-w-[70ch] text-pretty text-muted-foreground">
             Inferred, not recorded. Quincy has not published anything yet, so
-            these angles are read off your imported history. Once a riff produces
-            a post, the group becomes the actual angle that drafted it.
+            these angles are read off your imported history. Once a riff
+            produces a post, the group becomes the actual angle that drafted it.
           </p>
         </div>
       ) : null}
@@ -280,7 +280,7 @@ export default async function NumbersPage() {
           section does not render — an empty paragraph reads as a bug. */}
       {best && worst ? (
         <section className="px-3">
-          <p className="text-muted-foreground max-w-[62ch] text-sm text-pretty">
+          <p className="max-w-[62ch] text-sm text-pretty text-muted-foreground">
             <span className="text-foreground">{best.label}</span> is the angle
             that works, at {formatMultiple(best.medianMultiple)} your median
             across {best.posts.length} posts.{" "}
@@ -289,7 +289,7 @@ export default async function NumbersPage() {
             next{" "}
             <Link
               href="/riffs"
-              className="decoration-muted-foreground/40 text-foreground underline underline-offset-4 hover:decoration-current"
+              className="text-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
             >
               riff
             </Link>{" "}
@@ -297,7 +297,6 @@ export default async function NumbersPage() {
           </p>
         </section>
       ) : null}
-
     </div>
   )
 }

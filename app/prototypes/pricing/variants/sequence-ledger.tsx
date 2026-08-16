@@ -64,7 +64,7 @@ export function SequenceLedger() {
           <div className="flex flex-wrap items-center justify-between gap-4 pb-8">
             <h2
               id="sequence-heading"
-              className="text-eyebrow uppercase text-muted-foreground"
+              className="text-eyebrow text-muted-foreground uppercase"
             >
               What the first day looks like
             </h2>
@@ -113,7 +113,7 @@ export function SequenceLedger() {
         >
           <h2
             id="refusals-heading"
-            className="pb-8 text-eyebrow uppercase text-muted-foreground"
+            className="pb-8 text-eyebrow text-muted-foreground uppercase"
           >
             What it will never do
           </h2>

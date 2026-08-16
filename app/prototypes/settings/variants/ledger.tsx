@@ -58,10 +58,10 @@ function Row({
   return (
     <div className="border-b border-foreground/8 last:border-b-0">
       <div className="flex items-baseline gap-4 py-4">
-        <span className="text-caption text-muted-foreground w-32 shrink-0">
+        <span className="w-32 shrink-0 text-caption text-muted-foreground">
           {label}
         </span>
-        <span className="text-body min-w-0 flex-1 break-words">{value}</span>
+        <span className="min-w-0 flex-1 text-body break-words">{value}</span>
         {onToggle ? (
           <Button
             size="sm"
@@ -76,7 +76,7 @@ function Row({
       </div>
 
       {open && children ? (
-        <div className="animate-in fade-in slide-in-from-top-1 pb-5 pl-36 duration-200 ease-out motion-reduce:animate-none">
+        <div className="animate-in pb-5 pl-36 duration-200 ease-out fade-in slide-in-from-top-1 motion-reduce:animate-none">
           {children}
         </div>
       ) : null}
@@ -106,7 +106,8 @@ export function Ledger() {
 
   // One row at a time. Two open editors in a column this dense read as one
   // form with a stray heading in the middle of it.
-  const toggle = (id: string) => setOpen((current) => (current === id ? null : id))
+  const toggle = (id: string) =>
+    setOpen((current) => (current === id ? null : id))
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-8 py-10">
@@ -339,7 +340,7 @@ export function Ledger() {
                   className="flex items-center gap-3 border-b border-foreground/8 py-2.5 last:border-b-0"
                 >
                   <div className="flex min-w-0 flex-col">
-                    <span className="text-body truncate">
+                    <span className="truncate text-body">
                       {s.browser}
                       {s.current ? (
                         <span className="text-muted-foreground">
@@ -348,7 +349,7 @@ export function Ledger() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-caption text-muted-foreground truncate">
+                    <span className="truncate text-caption text-muted-foreground">
                       {s.place} · {s.lastSeen}
                     </span>
                   </div>
@@ -384,12 +385,12 @@ export function Ledger() {
           empty column above it are the whole separation between a harmless
           list and the one row that ends the account. */}
       <div className="flex flex-col gap-3 px-1 pt-4">
-        <div className="bg-foreground/8 h-px" role="presentation" />
-        <h2 className="text-eyebrow text-muted-foreground pt-4">Leaving</h2>
+        <div className="h-px bg-foreground/8" role="presentation" />
+        <h2 className="pt-4 text-eyebrow text-muted-foreground">Leaving</h2>
         {/* Semicolons, not commas: the first item contains a comma list of its
             own ("voice, rules, strategy and stories"), and joined with commas
             the four items read as one run-on inventory. */}
-        <p className="text-caption text-muted-foreground max-w-prose text-pretty">
+        <p className="max-w-prose text-caption text-pretty text-muted-foreground">
           Deleting cannot be undone and there is no copy. It removes{" "}
           {DELETION_COVERS.join("; ")}. An active subscription is cancelled at
           the same time.

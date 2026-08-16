@@ -132,7 +132,8 @@ export function BrainWorkspace({ userId }: { userId: string }) {
     staleTime: 5 * 60 * 1000,
   })
 
-  const byKind = (kind: BrainPage["kind"]) => pages.filter((p) => p.kind === kind)
+  const byKind = (kind: BrainPage["kind"]) =>
+    pages.filter((p) => p.kind === kind)
   const find = (slug: string) => pages.find((p) => p.slug === slug) ?? null
 
   // The inbox is plumbing: raw captures waiting for Heartbeat, with an empty
@@ -176,7 +177,8 @@ export function BrainWorkspace({ userId }: { userId: string }) {
         label: label(p),
         corrected: p.provenance === "user",
       })),
-      empty: "What Quincy picks up from your conversations, written on Monday night.",
+      empty:
+        "What Quincy picks up from your conversations, written on Monday night.",
     },
   ]
 

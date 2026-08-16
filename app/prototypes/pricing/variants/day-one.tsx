@@ -104,7 +104,7 @@ export function DayOne() {
       <section className="mt-20" aria-labelledby="refusals-heading">
         <h2
           id="refusals-heading"
-          className="pb-8 text-eyebrow uppercase text-muted-foreground"
+          className="pb-8 text-eyebrow text-muted-foreground uppercase"
         >
           And the things it will never do
         </h2>

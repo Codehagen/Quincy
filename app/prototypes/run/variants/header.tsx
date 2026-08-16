@@ -38,7 +38,7 @@ export function RunHeader() {
       <div className="flex flex-col gap-3 px-3">
         <div className="flex flex-wrap items-center gap-2">
           <NodeChip node={RUN.sourceChannel} labelled />
-          <span className="text-caption text-muted-foreground font-mono tabular-nums">
+          <span className="font-mono text-caption text-muted-foreground tabular-nums">
             {NODE_LABEL[RUN.sourceChannel]} · {RUN.sourceWords} words ·{" "}
             {RUN.date}
           </span>
@@ -52,9 +52,9 @@ export function RunHeader() {
         {/* The narrative only. The per-state counts live on the filter chips
             below, because a number that appears in two places drifts in one of
             them the first time the data changes. */}
-        <p className="text-body-lg text-muted-foreground text-pretty">
+        <p className="text-body-lg text-pretty text-muted-foreground">
           One essay became{" "}
-          <span className="text-foreground font-mono tabular-nums">
+          <span className="font-mono text-foreground tabular-nums">
             {PIECES.length} pieces
           </span>
           , adapted for each channel rather than pasted across them.
@@ -65,7 +65,7 @@ export function RunHeader() {
             with nothing on the page saying times what. */}
         <p className="text-caption text-muted-foreground">
           Multipliers below are against your usual first-day reach of{" "}
-          <span className="text-foreground font-mono tabular-nums">
+          <span className="font-mono text-foreground tabular-nums">
             {RUN.median.toLocaleString("en-US")}
           </span>{" "}
           views.

@@ -108,7 +108,9 @@ describe("multiple", () => {
 
 describe("hook", () => {
   it("takes the first line, which is all the algorithm judges", () => {
-    const post = POSTS.find((p) => p.body.startsWith("I built a money printer"))!
+    const post = POSTS.find((p) =>
+      p.body.startsWith("I built a money printer")
+    )!
     expect(hook(post)).toBe("I built a money printer in two days🤯")
   })
 
