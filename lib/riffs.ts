@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm"
 import {
   ADAPT_MODEL,
   ADAPT_SPEND,
+  asAngleKind,
   generateAngles,
   generateAnglesFromSaid,
   type AngleGenerator,
@@ -13,6 +14,7 @@ import {
 import { renderBrainForUser } from "./brain"
 import { listConnections } from "./channels"
 import { db } from "./db"
+import { recentKinds } from "./drafts"
 import { formatConversationDate } from "./format-date"
 import { draft, draftVersion, riff, riffAngle } from "./schema-app"
 import { resolveTimeZone } from "./timezone"
@@ -57,6 +59,14 @@ export type Angle = {
   hook: string
   /** What it would turn into. Shape, not platform: the same angle can travel. */
   shape: "Short post" | "Thread" | "Carousel" | "Essay"
+  /**
+   * What the post *is* — one of `ANGLE_KINDS`, or "" when unknown.
+   *
+   * Not a union type, unlike `shape`. The values live in lib/adapt.ts, and
+   * `riff_angle.kind` can also hold "" for every angle written before the
+   * column existed, so a union here would be a claim the table cannot keep.
+   */
+  kind: string
   /** One line on why this angle is worth writing. Quincy's reasoning, visible. */
   why: string
   /**
@@ -190,6 +200,37 @@ async function publishableShapes(userId: string): Promise<Angle["shape"][]> {
     console.error("[riffs] could not read connections for shapes:", cause)
     return Object.keys(CHANNELS_FOR_SHAPE) as Angle["shape"][]
   }
+}
+
+/**
+ * Everything the three angle generators need to know about the account.
+ *
+ * One function because all three asked the same two questions already and now
+ * ask a third, and three copies of a growing list is three places for one of
+ * them to be forgotten — which here would not throw, it would silently generate
+ * angles with no variety context and look exactly like working.
+ *
+ * Read together rather than in series. They were already sequential awaits
+ * inside an object literal, so the connections read waited on the brain render
+ * for no reason; a third would have made it three round trips deep on the path
+ * a user is watching a spinner on.
+ *
+ * `recentKinds` cannot fail the riff. It steers a tie between two honest
+ * answers — the same posture `recentlyWritten` takes at the drafting call site,
+ * and for the same reason: it makes the set better and it is not what makes
+ * the set.
+ */
+async function angleContext(userId: string) {
+  const [brain, shapes, kinds] = await Promise.all([
+    renderBrainForUser(userId),
+    publishableShapes(userId),
+    recentKinds(userId).catch((cause) => {
+      console.error("[riffs] could not read recent kinds:", cause)
+      return [] as string[]
+    }),
+  ])
+
+  return { brain, shapes, recentKinds: kinds }
 }
 
 /**
@@ -398,6 +439,7 @@ export async function getRiffs(user: {
         id: a.id,
         hook: a.hook,
         shape: a.shape as Angle["shape"],
+        kind: a.kind,
         why: a.why,
         ...(draftedHooks.has(a.hook)
           ? {
@@ -540,9 +582,8 @@ export async function createRiffFromPost({
   try {
     generation = await deps.angles({
       source: { ...source, body: scrap },
-      brain: await renderBrainForUser(userId),
       note,
-      shapes: await publishableShapes(userId),
+      ...(await angleContext(userId)),
     })
   } catch (cause) {
     /**
@@ -610,6 +651,7 @@ export async function createRiffFromPost({
       riffId: id,
       hook: angle.hook.trim(),
       shape: angle.shape,
+      kind: asAngleKind(angle.kind),
       why: angle.why.trim(),
       position,
     }))
@@ -885,9 +927,8 @@ export async function createRiffFromSaid({
   try {
     generation = await deps.angles({
       scrap,
-      brain: await renderBrainForUser(userId),
       note: "",
-      shapes: await publishableShapes(userId),
+      ...(await angleContext(userId)),
     })
   } catch (cause) {
     console.error("[riffs] said angle generation failed:", cause)
@@ -941,6 +982,7 @@ export async function createRiffFromSaid({
       riffId: id,
       hook: angle.hook.trim(),
       shape: angle.shape,
+      kind: asAngleKind(angle.kind),
       why: angle.why.trim(),
       position,
     }))
@@ -1072,9 +1114,8 @@ export async function completeSpokenRiff({
   try {
     generation = await deps.angles({
       scrap,
-      brain: await renderBrainForUser(userId),
       note: "",
-      shapes: await publishableShapes(userId),
+      ...(await angleContext(userId)),
     })
   } catch (cause) {
     console.error("[riffs] voice angle generation failed:", cause)
@@ -1124,6 +1165,7 @@ export async function completeSpokenRiff({
         riffId,
         hook: angle.hook.trim(),
         shape: angle.shape,
+        kind: asAngleKind(angle.kind),
         why: angle.why.trim(),
         position,
       }))
@@ -1241,6 +1283,7 @@ export async function getOwnedRiff(userId: string, riffId: string) {
       id: riffAngle.id,
       hook: riffAngle.hook,
       shape: riffAngle.shape,
+      kind: riffAngle.kind,
       why: riffAngle.why,
     })
     .from(riffAngle)
@@ -1262,6 +1305,7 @@ export async function getOwnedAngle(userId: string, angleId: string) {
       id: riffAngle.id,
       hook: riffAngle.hook,
       shape: riffAngle.shape,
+      kind: riffAngle.kind,
       why: riffAngle.why,
       riffId: riff.id,
       sourceId: riff.sourceId,

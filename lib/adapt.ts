@@ -349,6 +349,8 @@ export type GeneratedAngle = {
   hook: string
   /** Shape, not platform. Must be one of `Angle["shape"]`. */
   shape: string
+  /** What the post *is*. One of `ANGLE_KINDS`; see `describeKinds`. */
+  kind: string
   /** One line, addressed to the user, on why this one is theirs to write. */
   why: string
 }
@@ -373,6 +375,13 @@ export type AngleGenerator = (input: {
    * see `describeShapes`.
    */
   shapes: readonly string[]
+  /**
+   * The kinds of post this user has drafted lately, newest first, from
+   * `recentKinds` in lib/drafts.ts. Context for the choice, never a quota —
+   * see `describeKinds`. Empty is honest for an account that has drafted
+   * nothing, and the rule disappears rather than asking about nothing.
+   */
+  recentKinds?: readonly string[]
 }) => Promise<AngleGeneration>
 
 /** The shapes an angle may take. Mirrors `Angle["shape"]` in lib/riffs.ts,
@@ -437,6 +446,103 @@ export function describeShapes(shapes: readonly string[]): string {
   ].join("\n")
 }
 
+/* ── Kind ─────────────────────────────────────────────────────────────────
+   What a post *is*, which is not what shape it takes.
+
+   `shape` answers "how much room does this need" and decides where it can be
+   published. It cannot tell "we shipped billing" from "here is what broke
+   while we shipped billing" — both are a Short post, and the whole difference
+   between them is the one a reader notices. Nothing in this product modelled
+   that, so nothing could see it.
+
+   Which matters most for the person this is built for. Somebody building in
+   public has gravity toward Announcement: there is always a thing that shipped,
+   it is always the easiest hook, and five of them in a row read as one voice
+   saying one thing even when every individual post is fine. `describeRecent`
+   in lib/drafting.ts guards the surface — do not reuse the opener, the closer,
+   the emoji — and cannot see sameness one level up. Different openers, same
+   shape of thought.
+
+   **Six, and deliberately not thirty.** A long taxonomy makes any two posts
+   differ on paper, which is the same as not measuring variety at all; it also
+   asks a model to make a fine distinction it will make inconsistently. These
+   six are what this product actually produces, and they are far enough apart
+   that "the last four were all Announcements" is a fact rather than an artefact
+   of the labelling.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/** What an angle can be. Stored as text on `riff_angle.kind`, so this list is
+ *  editable in a pull request rather than a migration — the same call
+ *  `RIFF_STATES` and `ANGLE_SHAPES` make. */
+export const ANGLE_KINDS = [
+  "Announcement",
+  "Behind the scenes",
+  "Opinion",
+  "Story",
+  "Teardown",
+  "Question",
+] as const
+
+export type AngleKind = (typeof ANGLE_KINDS)[number]
+
+/**
+ * When each kind is the right one.
+ *
+ * Written as conditions rather than definitions, following `SHAPE_GUIDE` — and
+ * for the reason it was: the one-line rule it replaced named no criteria, and
+ * the model answered by defaulting. A list of six nouns with no test attached
+ * would default to Announcement exactly the way the old shape rule defaulted to
+ * Short post.
+ */
+const KIND_GUIDE: Record<AngleKind, string> = {
+  Announcement:
+    "Announcement — a thing now exists or now works differently. The news is the point, and the reader could act on it today.",
+  "Behind the scenes":
+    "Behind the scenes — how the work actually went. The decision, the mess, the thing that took four times longer than planned. Nothing is being launched.",
+  Opinion:
+    "Opinion — a claim a reasonable person could disagree with. If nobody could argue back, it is not this.",
+  Story:
+    "Story — something that happened, with a beginning and an end. It is carried by the events, not by the conclusion drawn from them.",
+  Teardown:
+    "Teardown — a close reading of something outside themselves: a product, a pattern, a number, a decision somebody else made.",
+  Question:
+    "Question — genuinely asking the reader, and the user would act on the answers. Never a rhetorical question wearing this hat.",
+}
+
+/**
+ * The kind rule, plus what they have been publishing lately.
+ *
+ * **Context, never a quota**, and that distinction is the whole reason this is
+ * one function rather than a post-hoc filter. `describeShapes` already learned
+ * it the expensive way and says so: "If two angles in a set genuinely need the
+ * same shape, give them the same shape — variety for its own sake means one of
+ * them is padding." Kind is more temping to enforce, because unlike shape it
+ * has no downstream constraint to make a wrong answer visible — an angle bent
+ * into `Question` to balance a list is still a publishable angle, just not the
+ * one the material supported. So the recent list steers a genuine tie and is
+ * forbidden from doing anything else.
+ *
+ * Exported for the test.
+ */
+export function describeKinds(recent: readonly string[] = []): string {
+  const lines = [
+    `- "kind" is one of: ${ANGLE_KINDS.join(", ")}. It says what the post *is*, which is a different question from "shape" — shape is how much room it needs. "We shipped it" and "here is what broke while we shipped it" are both a Short post and are not the same kind. Pick by what the angle actually does:`,
+    ...ANGLE_KINDS.map((kind) => `  ${KIND_GUIDE[kind]}`),
+  ]
+
+  // A window rather than the whole history: what they published in March is
+  // not what this set is competing with.
+  const lately = recent.filter(Boolean).slice(0, 6)
+
+  if (lately.length > 0) {
+    lines.push(
+      `- Lately this user has published, newest first: ${lately.join(", ")}. That is context and not a quota. Never bend an angle into a kind it is not in order to balance the list — a mislabelled angle is worse than a repeated one, because the user picks from these believing the label. Where an angle honestly could be more than one kind, or where you are deciding which angles are worth offering at all, prefer what they have not just published.`
+    )
+  }
+
+  return lines.join("\n")
+}
+
 const ANGLES_IDENTITY = `You are Quincy, an AI Head of Content. Below is a post somebody else wrote. The user saw it and thought there was something in it.
 
 Your job is NOT to write anything. It is to find the two to four things *this user* could say off the back of it — each one a direction they could take from their own experience, with the opening line they would open it with. They will pick one, and only then does anything get written.`
@@ -449,13 +555,17 @@ Your job is NOT to write anything. It is to find the two to four things *this us
  * somebody else's number is a claim they approve before ever seeing it written
  * out.
  */
-const anglesRules = (shapes: readonly string[]) => `Rules:
+const anglesRules = (
+  shapes: readonly string[],
+  recentKinds: readonly string[] = []
+) => `Rules:
 - Never reuse the source's specifics. Its numbers, dates, revenue figures, company names, client names, outcomes and personal anecdotes belong to whoever wrote it. They must not appear in a hook or a reason, including approximated or vaguely attributed ("someone I know made $40k").
 - Every angle must be one this user can speak to from what the brain below says they have actually done, believed, or lived through. An angle that anybody could write is not an angle, it is a topic.
 - "hook" is the real opening line, written as they would write it — not a description of one. No "a post about..." and no title case.
 - A hook is a sentence, not a signature. Do not append the user's habitual emoji or sign-off to it, and do not give two angles in the same set the same opening move — an angle exists to be told apart from the others, and four hooks ending in the same emoji are one hook four times.
 - "why" is one short line addressed to the user about what THEY bring to it. Not a summary of the source post.
 ${describeShapes(shapes)}
+${describeKinds(recentKinds)}
 - Return FEWER angles when fewer are real. Two good ones beat four with two of them padding. Returning a single angle is a fine answer.
 - Set "groundedIn" to a short phrase naming what of the user's material these lean on, or an empty string if you found nothing of theirs. An empty string is an acceptable answer and a lie is not.
 - Write in English unless the brain instructs otherwise.`
@@ -476,6 +586,15 @@ ${describeShapes(shapes)}
  * the same condition, and the two must not disagree about what is offered.
  */
 function buildAnglesSchema(shapes: readonly string[]) {
+  /**
+   * `kind` is enumerated but not narrowed per account, unlike `shape`.
+   *
+   * Shape narrows because a shape the account cannot publish is a card that
+   * exists only to be turned down — `targetsFor` refuses to draft it. Kind has
+   * no such constraint: every kind reaches every channel, so there is nothing
+   * to narrow against and nothing an account can be offered here that it cannot
+   * use.
+   */
   const allowed = ANGLE_SHAPES.filter((s) => shapes.includes(s))
   const usable = allowed.length > 0 ? allowed : [...ANGLE_SHAPES]
 
@@ -503,9 +622,10 @@ function buildAnglesSchema(shapes: readonly string[]) {
           properties: {
             hook: { type: "string" },
             shape: { type: "string", enum: usable },
+            kind: { type: "string", enum: [...ANGLE_KINDS] },
             why: { type: "string" },
           },
-          required: ["hook", "shape", "why"],
+          required: ["hook", "shape", "kind", "why"],
           additionalProperties: false,
         },
       },
@@ -579,8 +699,8 @@ export const generateAngles: AngleGenerator = async (input) => {
         providerOptions: REASONING,
         schema: buildAnglesSchema(input.shapes),
         system: input.brain
-          ? `${ANGLES_IDENTITY}\n\n${anglesRules(input.shapes)}\n\n${input.brain}`
-          : `${ANGLES_IDENTITY}\n\n${anglesRules(input.shapes)}`,
+          ? `${ANGLES_IDENTITY}\n\n${anglesRules(input.shapes, input.recentKinds)}\n\n${input.brain}`
+          : `${ANGLES_IDENTITY}\n\n${anglesRules(input.shapes, input.recentKinds)}`,
         prompt: buildAnglesPrompt(input),
       })
 
@@ -601,11 +721,51 @@ export const generateAngles: AngleGenerator = async (input) => {
     // Bounded by code rather than by the prompt, matching `selectAdaptable`.
     // An angle with no hook is not an angle, whatever the schema allowed.
     angles: Array.isArray(object.angles)
-      ? object.angles.filter((a) => a.hook?.trim().length > 0).slice(0, 4)
+      ? object.angles
+          .filter((a) => a.hook?.trim().length > 0)
+          .slice(0, 4)
+          .map(settleKind)
       : [],
     groundedIn: object.groundedIn ?? "",
     usage: spent.total,
   }
+}
+
+/**
+ * An angle whose kind is one of ours, or none at all.
+ *
+ * The schema enumerates `kind`, and the enum is a request rather than a
+ * guarantee — the same reading `buildAnglesSchema` already applies to
+ * `minItems`, and the reason `generateDraft` re-checks `Array.isArray` after
+ * `retryMalformed`. An off-list string here would land in `riff_angle.kind`,
+ * show on the card as a category that does not exist, and then come back as a
+ * phantom entry in the next set's "lately this user has published" line, which
+ * is the kind of fault that teaches the model something wrong about the user.
+ *
+ * Empty rather than a guessed default. `Announcement` is the plausible filler
+ * and it is exactly the one to avoid: the whole point of this field is noticing
+ * that too much is already an Announcement, and quietly labelling unknowns as
+ * one would corrupt the only signal it carries. Empty means "we do not know",
+ * which the card and `recentKinds` both drop rather than count.
+ */
+export function settleKind(angle: GeneratedAngle): GeneratedAngle {
+  return { ...angle, kind: asAngleKind(angle.kind) }
+}
+
+/**
+ * A kind that is one of ours, or "".
+ *
+ * **Applied again at every `riff_angle` insert**, not only here, and that is
+ * not belt-and-braces for its own sake. `settleKind` runs inside the two
+ * default generators — and all three angle paths take an injectable `deps`, so
+ * a caller supplying its own generator writes whatever it returned straight
+ * into the table. Verified on 2026-08-17: a stub returning `"Hot take"` stored
+ * `"Hot take"`. The guard has to sit on the write, because the write is the
+ * thing that has to hold.
+ */
+export function asAngleKind(value: string | undefined | null): string {
+  const kind = value?.trim() ?? ""
+  return (ANGLE_KINDS as readonly string[]).includes(kind) ? kind : ""
 }
 
 /* ── Angles from your own material ────────────────────────────────────────
@@ -639,7 +799,10 @@ Your job is NOT to write anything, and NOT to tidy up what they said. It is to f
  * being told what it is will treat the stumbles as content and write an angle
  * about the user's uncertainty.
  */
-const saidRules = (shapes: readonly string[]) => `Rules:
+const saidRules = (
+  shapes: readonly string[],
+  recentKinds: readonly string[] = []
+) => `Rules:
 - This is the user's OWN material. Its numbers, dates, names, stories and outcomes are theirs — use them. An angle that drops the specifics and keeps only the general point is a topic, not an angle.
 - It is a transcript of speech, not writing. Expect false starts, repetition, filler, and sentences abandoned and restarted. Read through them to the thought underneath. Never treat a stumble as a position, and never quote a disfluency back at them.
 - Do not correct, tidy, or improve what they said. You are not writing yet.
@@ -648,6 +811,7 @@ const saidRules = (shapes: readonly string[]) => `Rules:
 - A hook is a sentence, not a signature. Do not append the user's habitual emoji or sign-off to it, and do not give two angles in the same set the same opening move — an angle exists to be told apart from the others, and four hooks ending in the same emoji are one hook four times.
 - "why" is one short line addressed to the user about why THIS is the part worth publishing. They already know what they said; tell them what you heard in it that they may not have noticed.
 ${describeShapes(shapes)}
+${describeKinds(recentKinds)}
 - Return FEWER angles when fewer are real. A voice note is often one thought said three ways, and three angles for it would be padding. Returning a single angle is a fine answer.
 - Set "groundedIn" to a short phrase naming what the thought rests on. Unlike an adapted post this is nearly always non-empty — they were speaking from their own experience. An empty string is still an acceptable answer and a lie is not.
 - Write in English unless the brain instructs otherwise. The transcript being in another language does not change this — it changes what they will publish, not what you report to them here.`
@@ -690,6 +854,8 @@ export type SaidAngleGenerator = (input: {
   note: string
   /** As `AngleGenerator.shapes`. A voice note can become any shape too. */
   shapes: readonly string[]
+  /** As `AngleGenerator.recentKinds`. */
+  recentKinds?: readonly string[]
 }) => Promise<AngleGeneration>
 
 export const generateAnglesFromSaid: SaidAngleGenerator = async (input) => {
@@ -714,8 +880,8 @@ export const generateAnglesFromSaid: SaidAngleGenerator = async (input) => {
         // one would give `riff_angle` two shapes to store.
         schema: buildAnglesSchema(input.shapes),
         system: input.brain
-          ? `${SAID_IDENTITY}\n\n${saidRules(input.shapes)}\n\n${input.brain}`
-          : `${SAID_IDENTITY}\n\n${saidRules(input.shapes)}`,
+          ? `${SAID_IDENTITY}\n\n${saidRules(input.shapes, input.recentKinds)}\n\n${input.brain}`
+          : `${SAID_IDENTITY}\n\n${saidRules(input.shapes, input.recentKinds)}`,
         prompt: buildSaidPrompt(input),
       })
 
@@ -737,7 +903,10 @@ export const generateAnglesFromSaid: SaidAngleGenerator = async (input) => {
     // The `Array.isArray` guard repeats the predicate above because a second
     // malformed attempt still returns, deliberately — see `retryMalformed`.
     angles: Array.isArray(object.angles)
-      ? object.angles.filter((a) => a.hook?.trim().length > 0).slice(0, 4)
+      ? object.angles
+          .filter((a) => a.hook?.trim().length > 0)
+          .slice(0, 4)
+          .map(settleKind)
       : [],
     groundedIn: object.groundedIn ?? "",
     usage: spent.total,
@@ -773,7 +942,8 @@ const CHANNEL_ANGLE_RULES = `Rules:
 - Use only the user's own material. Never invent a number, a name, a customer or an outcome that is not in what they said.
 - The hook is the opening line they would actually publish, in the language they used.
 - "why" is one line on why this angle earns the channel — what it does that the existing angles do not.
-- Return at most one angle.`
+- Return at most one angle.
+${describeKinds()}`
 
 export type ChannelAngleGenerator = (input: {
   /** The riff's raw material, verbatim. */
@@ -826,6 +996,7 @@ export const generateChannelAngle: ChannelAngleGenerator = async (input) => {
         // `generateAngles` takes towards its own count.
         .filter((a) => input.shapes.includes(a.shape))
         .slice(0, 1)
+        .map(settleKind)
     : []
 
   return {

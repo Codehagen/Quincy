@@ -12,7 +12,11 @@ import { HugeiconsIcon } from "@hugeicons/react"
 
 import { useRouter } from "next/navigation"
 
-import { archiveRiff, discardAngle, draftAngle } from "@/app/(app)/riffs/actions"
+import {
+  archiveRiff,
+  discardAngle,
+  draftAngle,
+} from "@/app/(app)/riffs/actions"
 import type { Angle, Riff } from "@/lib/riffs"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -154,7 +158,7 @@ export function Scrap({ children }: { children: React.ReactNode }) {
           Safe against soft wraps: `flattenMarkdown` in lib/shipped-work.ts
           already collapses newlines *inside* a paragraph, so what reaches here
           is only the breaks between them. */}
-      <p className="max-w-[60ch] text-caption whitespace-pre-line text-pretty">
+      <p className="max-w-[60ch] text-caption text-pretty whitespace-pre-line">
         {children}
       </p>
     </blockquote>
@@ -320,9 +324,22 @@ export function AngleCard({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {/* A tag, not a badge: it names a category rather than counting
             anything. Kept as text on a quiet fill rather than an outlined pill,
-            so it does not compete with the hook above it. */}
+            so it does not compete with the hook above it.
+
+            Kind and shape share one tag rather than taking two, and that is
+            the `SHAPE_NOTE` lesson applied before it could be repeated: a
+            second element on this row is a second thing to read before
+            `angle.why`, which is the line that is actually about the user.
+            They belong together anyway — "Announcement · Short post" is one
+            statement of what this would be, and it reads as one because it is
+            one. Kind first: it is the part a person choosing between angles
+            cares about, where shape mostly decides where it can go.
+
+            Empty kind renders the shape alone, which is every angle written
+            before the column existed. No placeholder and no "Uncategorised" —
+            an unknown is not a category. */}
         <span className="rounded-xs bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">
-          {angle.shape}
+          {angle.kind ? `${angle.kind} · ${angle.shape}` : angle.shape}
         </span>
         {meta}
         {/* What the button does, in three words. The marks beside it say

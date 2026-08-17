@@ -399,6 +399,10 @@ export async function draftAngle(input: {
     // loads, and the idempotency key above. Not decoration — it is the only
     // record that the two are related.
     riffHook: angle.hook,
+    // Carried from the angle rather than joined back to it later. See the
+    // column note: this is what `recentKinds` reads, and it must survive the
+    // riff being archived.
+    kind: angle.kind,
     sourceId: angle.sourceId,
     sourceLabel: angle.sourceLabel,
     // The borrowed half of the chain, carried from the riff so a draft can

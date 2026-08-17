@@ -181,6 +181,46 @@ export async function recentlyWritten(
     .map((body) => body.slice(0, 600))
 }
 
+/** Six drafts is a couple of weeks of posting; further back is not what this
+ *  set is competing with. Matches the window `describeKinds` keeps. */
+const RECENT_KINDS = 6
+
+/**
+ * What kind of post this user has been making lately, newest first.
+ *
+ * The companion to `recentlyWritten` and a different question. That one guards
+ * the surface — do not open the same way, do not close on the same emoji — and
+ * it cannot see the repetition one level up: six posts with six different
+ * openers that are all Announcements read as one voice saying one thing. This
+ * is the only thing in the product that can notice that.
+ *
+ * **Read from `draft`, not from `riff_angle`.** Two reasons, and they point the
+ * same way. A drafted angle is a decision the user made; an angle sitting on a
+ * riff is one Quincy offered and nobody took, and counting those would measure
+ * Quincy's habits rather than theirs. And riffs are archived and deleted, so a
+ * count over them would quietly change as the user tidied up.
+ *
+ * One row per draft rather than per version, unlike `recentlyWritten` — a short
+ * post written for X and LinkedIn is one thing the user decided to say, and
+ * counting it twice would make every two-channel piece look like a streak.
+ *
+ * Empties are dropped rather than reported as a kind. See `settleKind`: "" is
+ * "we do not know", and the honest way to say that here is to say nothing.
+ */
+export async function recentKinds(
+  userId: string,
+  limit = RECENT_KINDS
+): Promise<string[]> {
+  const rows = await db
+    .select({ kind: draft.kind })
+    .from(draft)
+    .where(and(eq(draft.userId, userId), ne(draft.kind, "")))
+    .orderBy(desc(draft.createdAt))
+    .limit(limit)
+
+  return rows.map((r) => r.kind)
+}
+
 export async function getDrafts(user: {
   id: string
   email: string

@@ -135,6 +135,7 @@ const BROKEN: Riff[] = [
         id: "healthy-1",
         hook: "Vi droppet per-seat prising. Her er regnestykket som avgjorde det.",
         shape: "Thread",
+        kind: "Behind the scenes",
         why: "You have the actual numbers, and pricing threads from founders who show the maths get saved rather than liked.",
       },
     ],

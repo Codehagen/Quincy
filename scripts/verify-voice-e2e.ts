@@ -225,11 +225,13 @@ async function main() {
                     {
                       hook: "Per-seat prising straffer kunden du helst vil ha.",
                       shape: "Short post",
+                      kind: "Opinion",
                       why: "You have the arithmetic and nobody else publishes it.",
                     },
                     {
                       hook: "En person som gjør jobben for firma på førti.",
                       shape: "Thread",
+                      kind: "Behind the scenes",
                       why: "The specific ratio is the whole argument.",
                     },
                   ],

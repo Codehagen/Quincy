@@ -294,6 +294,20 @@ export const draft = pgTable(
     idea: text("idea").notNull(),
     /** The angle from the riff this was drafted from, verbatim. */
     riffHook: text("riff_hook").notNull().default(""),
+    /**
+     * What kind of post this is, copied from the angle at draft time.
+     *
+     * Copied rather than joined, and that is the same call the two
+     * `adapted_from_*` columns below make for the same reason: the riff can be
+     * archived or the angle deleted, and what the user actually wrote should
+     * still be able to say what it was. It is also the column `recentKinds`
+     * reads, and that read must not depend on rows the user is free to throw
+     * away.
+     *
+     * Empty for every draft written before this existed, and for one whose
+     * angle had no settled kind.
+     */
+    kind: text("kind").notNull().default(""),
     sourceId: text("source_id").notNull().default(""),
     sourceLabel: text("source_label").notNull().default(""),
     /**
@@ -929,12 +943,7 @@ export const sourceConnectionRelations = relations(
  * No migration: the column is `text` and this list is a TypeScript narrowing,
  * so Postgres has always accepted the value.
  */
-export const RIFF_STATES = [
-  "working",
-  "ready",
-  "failed",
-  "archived",
-] as const
+export const RIFF_STATES = ["working", "ready", "failed", "archived"] as const
 
 export const riff = pgTable(
   "riff",
@@ -1010,6 +1019,19 @@ export const riffAngle = pgTable(
     hook: text("hook").notNull(),
     /** Shape, not platform: "Short post" | "Thread" | "Carousel" | "Essay". */
     shape: text("shape").notNull(),
+    /**
+     * What the post *is*, from `ANGLE_KINDS` in lib/adapt.ts.
+     *
+     * Text with a default rather than an enum, the same call `shape` and
+     * `RIFF_STATES` make: the list is a judgment about content and it will be
+     * revised, and a revision should be a pull request rather than a migration.
+     *
+     * **Empty is a real value.** Every angle written before this column existed
+     * has none, and a model that answers off-list gets emptied rather than
+     * guessed at — see `settleKind`. Readers must treat it as "unknown" and not
+     * as a kind.
+     */
+    kind: text("kind").notNull().default(""),
     /** One line on why this angle is worth writing. Quincy's reasoning, shown. */
     why: text("why").notNull().default(""),
     /** Render order, so the model's ranking survives the round trip. */

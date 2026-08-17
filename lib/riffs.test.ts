@@ -31,16 +31,17 @@ vi.mock("@/lib/db", () => ({
 const { channelGaps, claimVoiceRiff, shapesForChannel, shapesForChannels } =
   await import("./riffs")
 
-function riff(angles: { shape: Riff["angles"][number]["shape"]; drafted?: boolean }[]): Pick<
-  Riff,
-  "state" | "angles"
-> {
+function riff(
+  angles: { shape: Riff["angles"][number]["shape"]; drafted?: boolean }[]
+): Pick<Riff, "state" | "angles"> {
   return {
     state: "ready",
     angles: angles.map((a, i) => ({
       id: `a${i}`,
       hook: `hook ${i}`,
       shape: a.shape,
+      // Not what these tests are about: `channelGaps` reads shape alone.
+      kind: "",
       why: "",
       ...(a.drafted ? { status: "drafted" as const } : {}),
     })),
