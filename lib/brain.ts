@@ -2,6 +2,7 @@ import { createIdGenerator } from "ai"
 import { and, asc, eq } from "drizzle-orm"
 
 import { db } from "./db"
+import { renderHabits, type Habits } from "./voice-habits"
 import {
   brainEvent,
   brainPage,
@@ -32,9 +33,17 @@ export const RULE_CAP = 15
 export const IDENTITY_CAP = 50_000
 
 /** Provenance that is allowed to supply a checkable claim in a published post. */
-const PROOF_BEARING: readonly BrainProvenance[] = ["user", "published", "confirmed"]
+const PROOF_BEARING: readonly BrainProvenance[] = [
+  "user",
+  "published",
+  "confirmed",
+]
 
-export type VoiceData = { rules: string[] }
+/**
+ * `habits` is optional: pages compiled before lib/voice-habits.ts existed have
+ * none, and a hand-written `voice` page has rules with no corpus behind them.
+ */
+export type VoiceData = { rules: string[]; habits?: Habits }
 export type InstructionData = { rules: string[] }
 
 export type PolicyData = {
@@ -267,7 +276,15 @@ export async function appendEvent({
 }) {
   const [row] = await db
     .insert(brainEvent)
-    .values({ id: newEventId(), pageId, kind, source, summary, detail, confidence })
+    .values({
+      id: newEventId(),
+      pageId,
+      kind,
+      source,
+      summary,
+      detail,
+      confidence,
+    })
     .returning()
 
   return row
@@ -381,9 +398,31 @@ export async function confirmPage(userId: string, slug: string) {
    docs/brain.md explains why this beats embeddings at the current size.
    ──────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Rules, then the arithmetic that outranks them.
+ *
+ * A compiled rule is a sentence a model wrote about a corpus, and on
+ * 2026-08-17 two of them were imperatives for habits measured at 17% and 8%
+ * ("open with 🤯", "close most posts with ✨"). Everything downstream read them
+ * as orders, because that is what they are grammatically, and three drafts in
+ * a row carried a frame the user uses in 7% of their posts.
+ *
+ * The counts are written by `measureHabits` at compile time and are not the
+ * model's opinion — see lib/voice-habits.ts. Rendering them *after* the rules
+ * is deliberate: the last thing read about the voice is the measurement, and
+ * `renderHabits` says outright that it wins where the two disagree.
+ *
+ * Absent on any page compiled before this existed, and on a hand-written
+ * `voice` page, which has rules and no corpus behind them. Both render exactly
+ * as they did before.
+ */
 function renderRules(page: BrainPage) {
-  const rules = (page.data as Partial<VoiceData>).rules ?? []
-  return rules.map((rule) => `- ${rule}`).join("\n")
+  const data = page.data as Partial<VoiceData>
+  const rules = data.rules ?? []
+  const listed = rules.map((rule) => `- ${rule}`).join("\n")
+  const measured = data.habits ? renderHabits(data.habits) : ""
+
+  return [listed, measured].filter(Boolean).join("\n\n")
 }
 
 function renderPolicy(page: BrainPage) {
@@ -425,7 +464,9 @@ function renderStoryIndex(stories: BrainPage[]) {
   return stories
     .map((page) => {
       const s = page.data as Partial<StoryData>
-      const useFor = s.useFor?.length ? ` (use for: ${s.useFor.join(", ")})` : ""
+      const useFor = s.useFor?.length
+        ? ` (use for: ${s.useFor.join(", ")})`
+        : ""
       return `- ${page.title} — ${s.point ?? ""}${useFor}`
     })
     .join("\n")
@@ -496,7 +537,8 @@ export function renderBrain(
   const sections: string[] = []
 
   for (const page of of("identity")) {
-    if (page.body.trim()) sections.push(`## Who you write for\n\n${page.body.trim()}`)
+    if (page.body.trim())
+      sections.push(`## Who you write for\n\n${page.body.trim()}`)
   }
 
   /**

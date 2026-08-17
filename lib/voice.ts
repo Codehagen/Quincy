@@ -16,6 +16,7 @@ import {
   usageAccumulator,
 } from "./structured-output"
 import { recordUsage } from "./usage"
+import { measureHabits, describeHabits } from "./voice-habits"
 import { REASONING } from "./model-options"
 
 /**
@@ -157,13 +158,26 @@ const EXTRACTION_KEYS = ["portrait", "rules", "stories"] as const
 const modelExtractor: VoiceExtractor = async (posts) => {
   const spent = usageAccumulator()
 
+  /**
+   * Counted here rather than asked for in the prompt. See lib/voice-habits.ts:
+   * the instruction to count has been in `EXTRACT_PROMPT` since it was written
+   * and produced "close most posts with ✨" for a habit measured at 8%.
+   *
+   * Measured inside the default extractor rather than passed in, so
+   * `VoiceExtractor` keeps its one-argument shape and every injected stub in
+   * the tests and verify scripts goes on working untouched.
+   */
+  const habits = measureHabits(posts.map((p) => p.body))
+
   const { object } = await retryMalformed(
     async () => {
       const result = await generateObject({
         model: MODEL,
         providerOptions: REASONING,
         schema: EXTRACTION_SCHEMA,
-        system: EXTRACT_PROMPT,
+        system: [EXTRACT_PROMPT, describeHabits(habits)]
+          .filter(Boolean)
+          .join("\n\n"),
         prompt: posts
           .map(
             (p) =>
@@ -361,7 +375,20 @@ export async function compileVoice({
       kind: "voice",
       title: "Voice — X",
       body: extraction.portrait.trim(),
-      data: { rules },
+      /**
+       * The measurements ride along with the rules, and that is the half of
+       * this fix that does not depend on the model behaving.
+       *
+       * `describeHabits` gives the extractor the arithmetic and asks it to
+       * write honest rules; this stores the arithmetic itself, so a rule that
+       * overstates anyway sits on the same page as the count that contradicts
+       * it — and `renderRules` tells the drafting prompt which one wins.
+       *
+       * Recomputed rather than returned from `extract`, because the extractor
+       * is injectable and a stub returning fabricated habits would put made-up
+       * percentages on a brain page. These come from the corpus, always.
+       */
+      data: { rules, habits: measureHabits(workingSet.map((i) => i.body)) },
       provenance: "published",
     })
     await appendEvent({
