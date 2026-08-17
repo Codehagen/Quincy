@@ -9,6 +9,7 @@ import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { listConnections } from "@/lib/channels"
 import { renderBrainForUser } from "@/lib/brain"
 import { recentlyWritten } from "@/lib/drafts"
+import { voiceExamples } from "@/lib/voice"
 import { measurePost } from "@/lib/post-length"
 import {
   ADAPT_MODEL,
@@ -224,7 +225,7 @@ export async function draftAngle(input: {
    * been given. Read together, not in series — neither is on the critical
    * path of the other, and the drafting call waits for both.
    */
-  const [brain, recent] = await Promise.all([
+  const [brain, recent, examples] = await Promise.all([
     /**
      * Stories in full, because `generateDraft` has no tools.
      *
@@ -237,6 +238,17 @@ export async function draftAngle(input: {
      * post that quotes it.
      */
     renderBrainForUser(session.user.id, { stories: "full" }),
+    /**
+     * Their own posts, verbatim, as the thing to match.
+     *
+     * Same "must not cost the user their draft" reasoning as the avoid-list
+     * below: without examples the draft is what it has always been, which is
+     * worse and not broken.
+     */
+    voiceExamples({ userId: session.user.id }).catch((cause) => {
+      console.error("[drafting] could not read voice examples:", cause)
+      return [] as string[]
+    }),
     /**
      * A failed avoid-list must not cost the user their draft. It makes the
      * post less likely to repeat the last one; it is not what makes the post.
@@ -300,6 +312,7 @@ export async function draftAngle(input: {
       channels: targets,
       brain,
       recent,
+      examples,
     })
     /**
      * Guarded even though `DraftGeneration` types this as an array.

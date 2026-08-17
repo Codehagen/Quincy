@@ -83,6 +83,13 @@ export type DraftGenerator = (input: {
    * answer for a first draft.
    */
   recent?: string[]
+  /**
+   * Posts the user wrote themselves, verbatim — the ground truth for their
+   * voice. See `voiceExamples` in lib/voice.ts for why a description of a
+   * voice is not a substitute for the voice. Optional, and empty is honest for
+   * an account whose corpus has never been read.
+   */
+  examples?: string[]
 }) => Promise<DraftGeneration>
 
 /**
@@ -190,18 +197,21 @@ export function describeConstraints(targets: DraftTarget[]): string {
 const IDENTITY = `You are Quincy, an AI Head of Content. Someone has already picked the angle — the hook below is the opening line they chose, and the whole bet on any platform. Your job is to write it out as a finished post. The post goes out under the writer's own name, not yours: match how they actually write, not how a generic ghostwriter would.`
 
 const DRAFTING_RULES = `Rules:
-- Write in the user's voice as described below. A named habit is a habit, not an instruction: it tells you what they sound like across many posts, not what every post of theirs contains. An explicit "never" is the one absolute — if the voice says the user never does something, never do it.
-- Do not give this post a signature. Pick the opener and the closer this particular idea needs; a recurring emoji or sign-off from the voice notes is one option among several, and reaching for the same one every time is the single fastest way to sound generated rather than written. If a version of this post ends up with an emoji, one is the ceiling, and the two channel versions must not use the same one.
-- Reuse nothing from the recently written posts listed below, if any are. Not their opening move, not their closing line, not their emoji, not their sentence shape. Those already went out under this name; this one has to sound like the next thing they said, not the same thing again.
+- Write in the user's voice. Where posts they actually wrote are shown below, those are the truth about how they sound and the description is only a summary of them — read the real posts first and match those. A named habit is a habit, not an instruction: it tells you what they sound like across many posts, not what every post of theirs contains. An explicit "never" is the one absolute — if the voice says the user never does something, never do it.
+- Sounding like them is the job; sounding identical to their last post is not. Vary the opener and the closer this idea needs rather than reaching for their most common one every time. That is about repetition across posts, never about stripping out what makes them recognisable — if they habitually use an emoji, a lowercase opening or a short sign-off, a post without any of it does not read as theirs. If a version ends up with an emoji, one is the ceiling, and the two channel versions must not use the same one.
+- Do not repeat the recently written posts listed below, if any are: not their opening move, not their closing line, not their emoji. Those already went out under this name. Their sentence *rhythm* is fair game — that is the voice, and avoiding it is how a draft stops sounding like the same person.
 - Adapt each version to its own channel. Two versions of the same idea must not be the same text with different line breaks — the platform, the fold and the reader are different each time.
 - Whatever the idea's shape (short post, thread, carousel, essay), write exactly one post per channel — never a numbered list of parts, thread markers like "1/", or a script for a multi-post sequence. If the idea needs more than one post's worth of space, write the strongest single post that carries it rather than splitting it.
 - Never invent a fact, number, date or outcome that is not in the material below or the brain's story pages.
 - Write in English unless the brain instructs otherwise.
 - Output the post text only: no preamble, no "Here's your post", no surrounding quotes, and no hashtags unless the brain shows the user actually uses them.`
 
-function buildSystemPrompt(brain: string): string {
+function buildSystemPrompt(brain: string, examples: string[]): string {
   const base = `${IDENTITY}\n\n${DRAFTING_RULES}`
-  return brain ? `${base}\n\n${brain}` : base
+  const shown = describeExamples(examples)
+  // Examples after the brain, so the last thing the model reads before the
+  // hook is the user's own writing rather than a description of it.
+  return [base, brain, shown].filter(Boolean).join("\n\n")
 }
 
 /**
@@ -214,6 +224,32 @@ function buildSystemPrompt(brain: string): string {
  *
  * Exported for the test, matching how this file treats `describeConstraints`.
  */
+/**
+ * The user's own posts, verbatim, as the thing to match.
+ *
+ * In the system prompt beside the brain rather than in the user prompt: it does
+ * not change between two drafts for the same person, so it belongs on the half
+ * that stays stable and cacheable. `describeRecent` is the opposite — it
+ * changes every call, and it is an avoid-list rather than a target.
+ *
+ * The framing has to be exact, because these two blocks sit near each other and
+ * mean opposite things. This one says "write like this". The other says "do not
+ * repeat these". Getting them confused would make the model avoid the voice and
+ * copy the last draft, which is precisely backwards.
+ */
+export function describeExamples(examples: string[]): string {
+  const posts = examples.map((p) => p.trim()).filter(Boolean)
+  if (posts.length === 0) return ""
+
+  return [
+    `## How the user actually writes`,
+    ``,
+    `Posts this user published themselves, verbatim. This is the ground truth for their voice — where it disagrees with any description of their voice, believe these. Match the rhythm, the sentence length, the punctuation habits and the level of polish, including the imperfections. Do not reuse their subjects, their facts or their phrasing; you are matching how they sound, not what they said.`,
+    ...posts.map((post) => `---\n${post}`),
+    `---`,
+  ].join("\n")
+}
+
 export function describeRecent(recent: string[]): string {
   const posts = recent.map((p) => p.trim()).filter(Boolean)
   if (posts.length === 0) return ""
@@ -329,7 +365,7 @@ export const generateDraft: DraftGenerator = async (input) => {
           model: MODEL,
           providerOptions: REASONING,
           schema: buildSchema(input.channels),
-          system: buildSystemPrompt(input.brain),
+          system: buildSystemPrompt(input.brain, input.examples ?? []),
           prompt: buildUserPrompt(input),
         })
       } catch (cause) {

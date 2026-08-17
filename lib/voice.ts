@@ -419,3 +419,67 @@ export async function compileVoice({
 
   return result
 }
+
+/**
+ * Posts the user actually wrote, verbatim, for the drafting prompt.
+ *
+ * **The drafting call has never seen a single thing this person wrote.** It is
+ * handed `IDENTITY` — "match how they actually write, not how a generic
+ * ghostwriter would" — and then given only a *description* of how they write:
+ * a portrait paragraph and a dozen compiled rules. Rules capture the surface
+ * ("very short paragraphs", "occasional typos") and lose everything underneath
+ * it: what they find worth saying, where they land a sentence, what they leave
+ * out. A model following the description produces something with the right
+ * shape and the wrong person in it, which is exactly the "it doesn't sound like
+ * me" this exists to fix.
+ *
+ * Exemplars are the strongest lever there is for voice, and the corpus was
+ * already sitting in `source_item` — bought and paid for by the X read, used
+ * once to compile rules, and never shown to the thing doing the writing.
+ *
+ * **Verbatim, never summarised.** The moment these are paraphrased they become
+ * more rules. The whole point is that the model reads the person's own
+ * sentences.
+ *
+ * Shortest-first is deliberate for the default caller: a short post is what
+ * most angles become, and a prompt full of the user's longest threads teaches
+ * the wrong length. `budgetItems` then bounds the total, so a handful of long
+ * posts cannot crowd the rest of the prompt out.
+ */
+export const VOICE_EXAMPLE_COUNT = 8
+
+/** Long enough to show a voice, short enough that eight of them stay cheap. */
+const MAX_EXAMPLE_CHARS = 600
+
+/**
+ * Below this a post is a link drop or a one-word reply — real, and useless as a
+ * demonstration of how somebody writes.
+ */
+const MIN_EXAMPLE_CHARS = 60
+
+export async function voiceExamples({
+  userId,
+  limit = VOICE_EXAMPLE_COUNT,
+  sources = ["x", "x-archive"],
+}: {
+  userId: string
+  limit?: number
+  sources?: SourceItemSource[]
+}): Promise<string[]> {
+  const items = await db
+    .select({ body: sourceItem.body, postedAt: sourceItem.postedAt })
+    .from(sourceItem)
+    .where(
+      and(
+        eq(sourceItem.userId, userId),
+        inArray(sourceItem.source, sources),
+        sql`length(${sourceItem.body}) between ${MIN_EXAMPLE_CHARS} and ${MAX_EXAMPLE_CHARS}`
+      )
+    )
+    // Newest first: how somebody writes now beats how they wrote two years ago,
+    // and a corpus read reaches back further than a voice changes.
+    .orderBy(sql`${sourceItem.postedAt} desc nulls last`)
+    .limit(limit)
+
+  return items.map((item) => item.body.trim()).filter(Boolean)
+}
