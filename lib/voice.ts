@@ -441,10 +441,13 @@ export async function compileVoice({
  * more rules. The whole point is that the model reads the person's own
  * sentences.
  *
- * Shortest-first is deliberate for the default caller: a short post is what
- * most angles become, and a prompt full of the user's longest threads teaches
- * the wrong length. `budgetItems` then bounds the total, so a handful of long
- * posts cannot crowd the rest of the prompt out.
+ * `about` picks *which* posts, and it matters more than it sounds. Newest-first
+ * alone is a bet that a voice is one thing; it is not. The same person writes
+ * differently about a release than about a plane delay, and eight of the wrong
+ * eight teach a register this draft should not be in. When a topic is given,
+ * half the slots go to the posts that are actually about it and half stay on
+ * recency, so the block shows both how they sound *now* and how they sound
+ * *about this*. Neither half alone is the voice.
  */
 export const VOICE_EXAMPLE_COUNT = 8
 
@@ -457,29 +460,160 @@ const MAX_EXAMPLE_CHARS = 600
  */
 const MIN_EXAMPLE_CHARS = 60
 
+/**
+ * Words carrying no topic, dropped before they can eat the term budget.
+ *
+ * `websearch_to_tsquery('english', …)` would strip most of these anyway — this
+ * is not about the query being wrong, it is about `TOPIC_TERMS` being spent on
+ * "the" and "that" instead of on the four words that say what the post is about.
+ */
+const STOP_WORDS = new Set([
+  "and",
+  "are",
+  "but",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "her",
+  "his",
+  "how",
+  "its",
+  "not",
+  "one",
+  "our",
+  "out",
+  "she",
+  "that",
+  "the",
+  "them",
+  "then",
+  "they",
+  "this",
+  "was",
+  "were",
+  "what",
+  "when",
+  "who",
+  "why",
+  "will",
+  "with",
+  "you",
+  "your",
+])
+
+/** Enough to describe an angle; past this the query stops discriminating. */
+const TOPIC_TERMS = 12
+
+/**
+ * A hook turned into a Postgres text query, or "" when there is nothing to ask.
+ *
+ * Any-of rather than all-of. An angle is a sentence, and a sentence run through
+ * `plainto_tsquery` becomes an AND of every word in it, which matches nothing —
+ * the failure mode where topical selection silently degrades to "no results"
+ * and nobody notices, because the recency half still returns posts.
+ *
+ * Built in TS rather than handed over raw so the terms are bounded and the
+ * operators are ours. Every term starts with a letter or digit by construction,
+ * so none of them can arrive as a `-` negation or an unbalanced quote;
+ * `websearch_to_tsquery` never throws on bad input regardless, which is exactly
+ * why it is the one used here and `to_tsquery` is not.
+ *
+ * Exported for the test.
+ */
+export function topicQuery(about: string, max = TOPIC_TERMS): string {
+  // Anchored at both ends, so a term can hold a hyphen or an apostrophe
+  // ("open-source", "doesn't") but can never begin or end with one. A leading
+  // `-` is a negation to `websearch_to_tsquery` and a stray quote is a phrase
+  // delimiter; both would silently change what was asked for.
+  const words = about.toLowerCase().match(/[a-z0-9][a-z0-9'-]+[a-z0-9]/g) ?? []
+  const kept = new Set<string>()
+
+  for (const word of words) {
+    if (STOP_WORDS.has(word)) continue
+    kept.add(word)
+    if (kept.size >= max) break
+  }
+
+  return [...kept].join(" or ")
+}
+
+type ExamplePost = { id: string; body: string; postedAt: Date | null }
+
 export async function voiceExamples({
   userId,
   limit = VOICE_EXAMPLE_COUNT,
   sources = ["x", "x-archive"],
+  about = "",
 }: {
   userId: string
   limit?: number
   sources?: SourceItemSource[]
+  /** What this draft is about, if anything. See the note on the constant. */
+  about?: string
 }): Promise<string[]> {
-  const items = await db
-    .select({ body: sourceItem.body, postedAt: sourceItem.postedAt })
+  const eligible = and(
+    eq(sourceItem.userId, userId),
+    inArray(sourceItem.source, sources),
+    sql`length(${sourceItem.body}) between ${MIN_EXAMPLE_CHARS} and ${MAX_EXAMPLE_CHARS}`
+  )
+  const columns = {
+    id: sourceItem.id,
+    body: sourceItem.body,
+    postedAt: sourceItem.postedAt,
+  }
+
+  const query = topicQuery(about)
+
+  /**
+   * Half, floored. At the default eight that is four and four; at a limit of
+   * one it is zero, and recency wins — which is the right way for the blend to
+   * collapse, because recency is the answer that needs no topic to be true.
+   */
+  const topical = query
+    ? await db
+        .select(columns)
+        .from(sourceItem)
+        .where(
+          and(
+            eligible,
+            sql`to_tsvector('english', ${sourceItem.body}) @@ websearch_to_tsquery('english', ${query})`
+          )
+        )
+        // Ties broken by recency, so the closest recent post beats the closest
+        // old one rather than whichever the planner happened to reach first.
+        .orderBy(
+          sql`ts_rank_cd(to_tsvector('english', ${sourceItem.body}), websearch_to_tsquery('english', ${query})) desc, ${sourceItem.postedAt} desc nulls last`
+        )
+        .limit(Math.floor(limit / 2))
+    : []
+
+  const recent = await db
+    .select(columns)
     .from(sourceItem)
-    .where(
-      and(
-        eq(sourceItem.userId, userId),
-        inArray(sourceItem.source, sources),
-        sql`length(${sourceItem.body}) between ${MIN_EXAMPLE_CHARS} and ${MAX_EXAMPLE_CHARS}`
-      )
-    )
+    .where(eligible)
     // Newest first: how somebody writes now beats how they wrote two years ago,
     // and a corpus read reaches back further than a voice changes.
     .orderBy(sql`${sourceItem.postedAt} desc nulls last`)
     .limit(limit)
 
-  return items.map((item) => item.body.trim()).filter(Boolean)
+  // Deduped by id, because a post can be both the most recent and the most
+  // relevant — and when it is, it must not take two of the eight slots.
+  const chosen = new Map<string, ExamplePost>()
+  for (const item of [...topical, ...recent]) {
+    if (chosen.size >= limit) break
+    if (!chosen.has(item.id)) chosen.set(item.id, item)
+  }
+
+  return (
+    [...chosen.values()]
+      // Presented newest first whichever half found them, so the block reads as
+      // a timeline rather than as two lists stapled together.
+      .sort(
+        (a, b) => (b.postedAt?.getTime() ?? 0) - (a.postedAt?.getTime() ?? 0)
+      )
+      .map((item) => item.body.trim())
+      .filter(Boolean)
+  )
 }

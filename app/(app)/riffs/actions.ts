@@ -241,11 +241,20 @@ export async function draftAngle(input: {
     /**
      * Their own posts, verbatim, as the thing to match.
      *
+     * `about` is the hook plus the angle's reasoning, which is everything known
+     * about the subject at this point — the same pair handed to the model
+     * below. Half the examples come back topically matched to it, so the block
+     * shows how this person writes about *this*, not only how they wrote most
+     * recently. See `voiceExamples`.
+     *
      * Same "must not cost the user their draft" reasoning as the avoid-list
      * below: without examples the draft is what it has always been, which is
      * worse and not broken.
      */
-    voiceExamples({ userId: session.user.id }).catch((cause) => {
+    voiceExamples({
+      userId: session.user.id,
+      about: `${angle.hook} ${angle.why}`,
+    }).catch((cause) => {
       console.error("[drafting] could not read voice examples:", cause)
       return [] as string[]
     }),

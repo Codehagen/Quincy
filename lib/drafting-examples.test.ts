@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { describeExamples } from "./drafting"
+import { TELLS, describeExamples } from "./drafting"
 
 /**
  * `describeExamples` and `describeRecent` sit near each other in the prompt and
@@ -28,5 +28,35 @@ describe("describeExamples", () => {
   it("tells the model to match the sound and not the subject", () => {
     const out = describeExamples(["a real post of mine"])
     expect(out).toContain("not what they said")
+  })
+
+  it("forbids handing back a post the user already published", () => {
+    // Half the examples are now picked *because* they are about the same
+    // subject, which is exactly when restating one stops being unlikely.
+    const out = describeExamples(["a real post of mine"])
+    expect(out).toContain("already published")
+  })
+})
+
+/**
+ * The anti-tells block. Only one thing is asserted, because only one thing here
+ * can regress into a bug rather than into a worse prompt: these must stay
+ * conditional on the user's own posts. A flat ban would fight the exemplars —
+ * this product's whole argument is that what somebody published outranks any
+ * rule about how they write, and a rule forbidding a word they demonstrably use
+ * makes the draft less like them while reading as a quality improvement.
+ */
+describe("TELLS", () => {
+  it("defers to the user's own posts rather than banning outright", () => {
+    expect(TELLS).toContain(
+      "unless the user's own posts below show them doing it"
+    )
+    expect(TELLS).not.toMatch(/\bnever use\b/i)
+  })
+
+  it("names the structures, not only the vocabulary", () => {
+    // Word bans are easy to route around. The shapes are what give a draft away.
+    expect(TELLS).toContain("Turns out")
+    expect(TELLS).toContain("Setup and reversal")
   })
 })
