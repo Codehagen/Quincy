@@ -28,7 +28,7 @@ import { promisify } from "node:util"
 import { eq } from "drizzle-orm"
 
 import { db } from "../lib/db"
-import { brainPage, riff } from "../lib/schema-app"
+import { brainPage, draft, riff } from "../lib/schema-app"
 import { user } from "../lib/schema"
 
 const run = promisify(execFile)
@@ -40,7 +40,9 @@ const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000"
 let failures = 0
 
 function check(label: string, ok: boolean, detail = "") {
-  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`)
+  console.log(
+    `  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`
+  )
   if (!ok) failures += 1
 }
 
@@ -70,6 +72,38 @@ async function currentUrl(): Promise<string> {
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Poll the page for a string instead of sleeping a guessed number of
+ * milliseconds. Every turn types itself out (`TypedLine`), so any fixed wait
+ * is a race against an animation whose length is the length of the copy —
+ * which is exactly what broke this script when the intro grew a sentence.
+ */
+async function waitForText(
+  needle: string,
+  timeoutMs = 30_000
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs
+  let text = ""
+  for (;;) {
+    text = await pageText()
+    if (text.includes(needle) || Date.now() > deadline) return text
+    await wait(1000)
+  }
+}
+
+/** Same, for a button that has not finished arriving yet. */
+async function waitForClick(
+  startsWith: string,
+  timeoutMs = 30_000
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (await click(startsWith)) return true
+    if (Date.now() > deadline) return false
+    await wait(1000)
+  }
+}
 
 function assertTestAddress(email: string) {
   if (!email.endsWith("@quincy.test")) {
@@ -154,7 +188,11 @@ async function main() {
    * not been run; 401 is the wrong password. See AGENTS.md, "Signing in
    * locally".
    */
-  check("signed in", signIn.status === 200 && Boolean(token), `${signIn.status}`)
+  check(
+    "signed in",
+    signIn.status === 200 && Boolean(token),
+    `${signIn.status}`
+  )
   if (!token) {
     const body = await signIn.text()
     throw new Error(
@@ -190,8 +228,7 @@ async function main() {
 
   console.log("\n=== the interview ===")
 
-  await wait(4000)
-  const opening = await pageText()
+  const opening = await waitForText("none of this publishes anything")
   check(
     "Quincy introduces itself before asking",
     opening.includes("I'm Quincy, and I write in your name"),
@@ -202,72 +239,135 @@ async function main() {
     opening.includes("none of this publishes anything")
   )
 
-  const answers: [string, string][] = [
-    ["I build in public", "My Human"],
-    ["Founders and operators", "Who you write for"],
-    ["English", "Voice"],
+  // The first answer is typed, not chipped, because the typed path is the one
+  // that has broken twice: a pending turn held as a bare string dropped every
+  // answer after the first, and no chip click can see that class of bug.
+  await waitForText("what do you actually do")
+  await browse(
+    "js",
+    `(()=>{const t=document.querySelector('textarea'); const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set; set.call(t,'I build Quincy in public, an AI ghostwriter, and I ship and write about it every day.'); t.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('form')?.requestSubmit(); return 'sent'})()`
+  )
+  check(
+    "a typed answer lands under My Human",
+    (await waitForText("My Human")).includes("My Human"),
+    ""
+  )
+
+  // The remaining two answers are chips, which send on click.
+  const answers: [string, string, string][] = [
+    [
+      "Founders and operators",
+      "Who you write for",
+      "What language should the posts be in",
+    ],
+    ["English", "Voice", "That is the talking done"],
   ]
 
-  for (const [chip, page] of answers) {
-    check(`chip "${chip}" is offered`, await click(chip))
-    await wait(3500)
-    const after = await pageText()
+  for (const [chip, page, nextMarker] of answers) {
+    check(`chip "${chip}" is offered`, await waitForClick(chip))
+    const after = await waitForText(nextMarker)
     check(`  the answer lands under ${page}`, after.includes(page), "")
   }
 
-  // The last question spends a model call, so it is typed rather than chipped
-  // and the wait is real.
-  await browse(
-    "js",
-    `(()=>{const t=document.querySelector('textarea'); const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set; set.call(t,'Shipped the end to end test for first run'); t.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('form')?.requestSubmit(); return 'sent'})()`
-  )
-
-  console.log("  … waiting on the angle generation (a real model call)")
-  let handed = false
-  let last = ""
-  for (let i = 0; i < 20 && !handed; i += 1) {
-    await wait(3000)
-    last = await pageText()
-    handed = last.includes("That is the talking done")
-    // The action refuses fast when it refuses at all — entitlement, an empty
-    // answer, a failed write — and renders the reason under the composer.
-    // Reporting it beats waiting sixty seconds for a timeout that says nothing.
-    if (/cannot work on this yet|did not save|nothing in that/i.test(last)) break
-  }
+  const last = await waitForText("That is the talking done")
   check(
-    "the last answer is accepted and Quincy hands over",
-    handed,
-    handed ? "" : `page ends: …${last.slice(-160).replace(/\s+/g, " ")}`
+    "the third answer is accepted and Quincy hands over",
+    last.includes("That is the talking done"),
+    `page ends: …${last.slice(-160).replace(/\s+/g, " ")}`
   )
 
-  console.log("\n=== the wiring ===")
+  console.log("\n=== the wiring, walked as the staircase it is ===")
 
-  const wiring = await pageText()
+  const wiring = await waitForText("Where the writing goes out")
   check(
     "the transcript is still on screen above it",
     wiring.includes("I'm Quincy, and I write in your name"),
     "replaced"
   )
   check("channels are offered", wiring.includes("Where the writing goes out"))
-  check("sources are named", wiring.includes("Where the material comes in"))
+
+  // No X connection on this account, so the way forward is the door beside
+  // the Connect button. Saying "later" is the decision that advances the step.
   check(
-    "Circleback is described rather than linked into a redirect loop",
-    wiring.includes("After setup"),
-    "no dead Connect"
+    "the step can be declined without granting anything",
+    await waitForClick("I will connect it later")
   )
 
-  console.log("\n=== the exits ===")
-
-  check("'Do the rest later' is offered", await click("Do the rest later"))
-  await wait(4000)
-
-  const landed = await currentUrl()
+  // The material ask appears only after the channel step settles. This
+  // account has no corpus, so it gets the plain form of the question.
+  const asked = await waitForText(
+    "what did you ship or figure out this week",
+    20_000
+  )
   check(
-    "skipping actually leaves first run",
-    landed.endsWith("/studio"),
+    "the material ask arrives after the settle",
+    asked.includes("what did you ship or figure out this week") ||
+      asked.includes("What happened this week"),
+    `page ends: …${asked.slice(-120).replace(/\s+/g, " ")}`
+  )
+
+  await browse(
+    "js",
+    `(()=>{const t=document.querySelector('textarea'); if(!t) return 'MISS'; const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set; set.call(t,'This week I rebuilt the first run end to end: the interview now writes to the brain as each answer lands, the corpus read starts itself from the database instead of a redirect flag, and the wiring became a staircase where every ask follows something Quincy already did.'); t.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('form')?.requestSubmit(); return 'sent'})()`
+  )
+
+  console.log("  … waiting on the angle generation (a real model call)")
+  const angled = await waitForText("Pick the one you want", 150_000)
+  check(
+    "the material comes back as angles",
+    angled.includes("Pick the one you want"),
+    angled.includes("could not find an angle")
+      ? "model found no angle"
+      : `page ends: …${angled.slice(-120).replace(/\s+/g, " ")}`
+  )
+
+  // GitHub and Circleback appear only once there is material.
+  const sourced = await waitForText("Where the material comes in", 20_000)
+  check("sources are named", sourced.includes("Where the material comes in"))
+  check(
+    "Circleback is described rather than linked into a redirect loop",
+    sourced.includes("After setup"),
+    "no dead Connect"
+  )
+  check(
+    "'Do the rest later' stays reachable beside the payoff",
+    sourced.includes("Do the rest later")
+  )
+
+  console.log("\n=== the exit: a draft that exists, not a promise of one ===")
+
+  const picked = await browse(
+    "js",
+    `(()=>{const b=document.querySelector('button[aria-pressed]'); if(!b) return 'MISS'; b.click(); return 'ok'})()`
+  )
+  check("an angle can be picked", picked.includes("ok"))
+  check(
+    "'Write this one' appears once an angle is chosen",
+    await waitForClick("Write this one")
+  )
+
+  console.log("  … waiting on the draft (a real model call)")
+  let landed = await currentUrl()
+  for (let i = 0; i < 90 && !landed.endsWith("/drafts"); i += 1) {
+    await wait(2000)
+    landed = await currentUrl()
+  }
+  check(
+    "first run ends on the draft it wrote",
+    landed.endsWith("/drafts"),
     // The failure this test was written for: the write lands, the cached
     // session still says null, and the layout bounces you straight back.
     landed.endsWith("/welcome") ? "bounced back to /welcome" : landed
+  )
+
+  const draftRows = await db
+    .select({ id: draft.id })
+    .from(draft)
+    .where(eq(draft.userId, userId))
+  check(
+    "the draft is a row, not a screen",
+    draftRows.length > 0,
+    `${draftRows.length} draft(s)`
   )
 
   const [after] = await db
@@ -286,6 +386,7 @@ async function main() {
   )
 
   console.log("\n=== teardown ===")
+  await db.delete(draft).where(eq(draft.userId, userId))
   await db.delete(brainPage).where(eq(brainPage.userId, userId))
   await db.delete(riff).where(eq(riff.userId, userId))
   await db
@@ -295,7 +396,7 @@ async function main() {
   check(
     "nothing left behind",
     true,
-    "brain and riffs cleared, entitlement and onboarded_at restored"
+    "drafts, brain and riffs cleared, entitlement and onboarded_at restored"
   )
 
   console.log(
