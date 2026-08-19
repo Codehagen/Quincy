@@ -62,17 +62,16 @@ no post is scheduled at a time no human chose. That second half is why this
 plan builds slot creation rather than defaulting a time — a default time would
 be Quincy choosing when to speak, which is the line.
 
-## What Postiz settled for us
+## What an established scheduler settled for us
 
-Read at `gitroomhq/postiz-app`, commit fetched 2026-08-05. It runs Temporal
-workflows rather than crons, so the architecture does not port. Four judgments
-do, and each one is a bug we would otherwise have shipped.
+Read from a mature open-source scheduling tool on 2026-08-05. It runs
+Temporal workflows rather than crons, so the architecture does not port.
+Four judgments do, and each one is a bug we would otherwise have shipped.
 
 **1. Never auto-retry an irreversible publish.**
-`apps/orchestrator/src/workflows/post-workflows/post.workflow.v1.0.6.ts:47`
-gives the publishing activity `maximumAttempts: 1`, with the reason in the
-comment: a retried attempt whose timed-out predecessor still completed in the
-background posts twice. Our cron reruns every few minutes over the same query,
+Its publish workflow gives the publishing activity `maximumAttempts: 1`,
+with the reason in a comment: a retried attempt whose timed-out predecessor
+still completed in the background posts twice. Our cron reruns every few minutes over the same query,
 which is an automatic retry wearing a different hat. A row that was picked up
 and did not come back must never be picked up again.
 
@@ -83,9 +82,8 @@ a 2xx with no readable id — and word it correctly. It has nowhere to be
 recorded: `scheduled_post.state` is `queued | published`.
 
 **3. A catch-up window has to be bounded.**
-`libraries/nestjs-libraries/src/database/prisma/posts/posts.repository.ts:36`
-sweeps queued posts from the last two days only. Without a bound, a cron that
-was broken for a week publishes a week of stale posts in one burst the moment
+Its dispatch query sweeps queued posts from the last two days only. Without
+a bound, a cron that was broken for a week publishes a week of stale posts in one burst the moment
 it recovers, which is the single worst failure this feature has.
 
 **4. Check the connection before spending a request on it**, and say which
@@ -103,7 +101,7 @@ migration; the columns below do.
 - `sending` — claimed by a run, in flight. **A row is claimed before the
   platform call, not after.** Two overlapping cron runs then cannot both send
   it, and a run that dies mid-publish leaves the row in `sending` where nothing
-  will retry it. That is Postiz lesson 1 expressed as a state rather than a
+  will retry it. That is lesson 1 expressed as a state rather than a
   retry policy, and it is also where lesson 2 lands: a stuck `sending` row
   means "outcome unknown, go and look".
 - `failed` — the platform refused, definitively. `lastError` carries its words.
