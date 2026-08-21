@@ -7,9 +7,11 @@ import { useRouter } from "next/navigation"
 import {
   disconnectGithub,
   readLastMergedPull,
+  readMergeOutcome,
   saveGithubLogin,
   type GithubSetup,
 } from "@/app/(app)/sources/actions"
+import { isSettled, sayOutcome } from "@/lib/shipped-outcome"
 import type { Connection } from "@/lib/sources"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -79,6 +81,19 @@ const OUTCOME: Record<string, { tone: "error" | "muted"; message: string }> = {
   },
 }
 
+/**
+ * Every three seconds, and give up after two minutes.
+ *
+ * The wait being covered is one model call — measured at about eight seconds
+ * from press to verdict on a merge that gets refused, and about thirty on one
+ * that becomes a riff. Three seconds is a couple of polls before the common
+ * answer lands. The ceiling is well past the slow case and exists for the run
+ * that dies: without it, a tab left open would ask about a row that is never
+ * going to change for as long as the laptop stayed awake.
+ */
+const POLL_INTERVAL_MS = 3000
+const POLL_GIVE_UP_MS = 2 * 60 * 1000
+
 export function GithubSourceRow({
   connection,
   setup,
@@ -90,10 +105,27 @@ export function GithubSourceRow({
   /** `?github=…` from the install callback. Undefined on an ordinary visit. */
   outcome?: string
 }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [login, setLogin] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  /**
+   * The read's state lives here rather than inside `ReadLastMerge`, and that is
+   * not tidiness — it is the only place it can live.
+   *
+   * `readLastMergedPull` now records the arrival, so the action's
+   * `revalidatePath("/sources")` flips this row from `waiting` to `arriving`
+   * the moment it returns. The offer only renders in the `waiting` branch, so a
+   * component holding its own answer would be unmounted by its own success
+   * about a second before the answer arrived — the message would appear for one
+   * frame and then be gone with the branch that drew it.
+   */
+  const [reading, setReading] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  /** The merge being waited on, or null. Drives the poll below. */
+  const [awaiting, setAwaiting] = useState<string | null>(null)
 
   /**
    * `setup.connected` is the row; `connection` is only how to describe it.
@@ -118,6 +150,84 @@ export function GithubSourceRow({
     outcome && !(outcome === "needs-login" && !needsLogin)
       ? OUTCOME[outcome]
       : undefined
+
+  /**
+   * Ask, then wait for the answer.
+   *
+   * The action returns as soon as the merge is stored, which is several seconds
+   * before the workflow knows whether there was a post in it — and "no" is the
+   * commonest answer. So the press has two halves: a receipt, then a verdict.
+   */
+  const readLastMerge = () => {
+    setSaid(null)
+    setReading(true)
+
+    void (async () => {
+      const result = await readLastMergedPull()
+      setReading(false)
+
+      if (!result.ok || !result.started) {
+        setSaid(result.message)
+        return
+      }
+
+      setSaid("Reading it — I will say what was in it in a moment.")
+      setAwaiting(result.sourceItemId)
+    })()
+  }
+
+  /**
+   * Poll until the workflow has an answer, then stop.
+   *
+   * The same call `RiffsRefresh` makes and for the same reason: the wait is
+   * seconds, it happens a handful of times a day, and a socket would mean a
+   * connection held open all day plus a second delivery path for state a
+   * `select` already knows. The difference is that this one polls a single row
+   * rather than re-rendering a page, so it is cheaper than that one.
+   */
+  React.useEffect(() => {
+    if (!awaiting) return
+
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const startedAt = Date.now()
+
+    const tick = async () => {
+      const outcome = await readMergeOutcome(awaiting)
+      if (cancelled) return
+
+      if (isSettled(outcome)) {
+        setSaid(sayOutcome(outcome))
+        setAwaiting(null)
+        // A riff may now exist. Nothing on this page shows one, but /riffs is
+        // one click away and its cache should not be a step behind.
+        router.refresh()
+        return
+      }
+
+      if (Date.now() - startedAt > POLL_GIVE_UP_MS) {
+        /**
+         * The run died, or is slower than anything measured. Say the true thing
+         * rather than a fourth outcome — a sentence that admits it does not
+         * know beats the confident one this whole change removed.
+         */
+        setSaid(
+          "I read the merge, but nothing has come back from the write yet. If there was a post in it, it will appear on /riffs."
+        )
+        setAwaiting(null)
+        return
+      }
+
+      timer = setTimeout(tick, POLL_INTERVAL_MS)
+    }
+
+    timer = setTimeout(tick, POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [awaiting, router])
 
   const save = () => {
     setError(null)
@@ -173,7 +283,14 @@ export function GithubSourceRow({
               <p className="text-caption text-muted-foreground">
                 Connected {connection.since} — nothing merged yet
               </p>
-              <ReadLastMerge />
+              {/* Gone once it has been answered. The answer renders below, at
+                  row level, where the state flip cannot take it away. */}
+              {said ? null : (
+                <ReadLastMerge
+                  onPress={readLastMerge}
+                  pending={reading || awaiting !== null}
+                />
+              )}
             </div>
           ) : connection?.state === "arriving" ? (
             <p className="text-caption text-muted-foreground pt-0.5">
@@ -223,6 +340,14 @@ export function GithubSourceRow({
         >
           {notice.message}
         </p>
+      ) : null}
+
+      {/* What the read said. Spelled out in place rather than toasted, because
+          most of these answers are "nothing happened, and here is why" — a
+          message that vanishes in four seconds is the wrong home for a reason
+          somebody may want to read twice. */}
+      {said ? (
+        <p className="text-caption text-muted-foreground text-pretty">{said}</p>
       ) : null}
 
       {!connected && !setup.installUrl ? (
@@ -328,22 +453,17 @@ export function GithubSourceRow({
  * status line would make the row read as two decisions. This is an offer, and
  * it should look like one.
  *
- * The outcome is spelled out in place rather than toasted, because two of the
- * three answers are "nothing happened, and here is why" — a message that
- * vanishes in four seconds is the wrong home for a reason somebody may want to
- * read twice.
+ * The offer only, with no opinion about what came of it. It used to hold that
+ * too, and could not: the answer outlives the branch this renders in — see the
+ * state hoisted into `GithubSourceRow`.
  */
-function ReadLastMerge() {
-  const router = useRouter()
-  const [pending, startTransition] = React.useTransition()
-  const [said, setSaid] = React.useState<string | null>(null)
-
-  if (said) {
-    return (
-      <p className="text-caption text-muted-foreground text-pretty">{said}</p>
-    )
-  }
-
+function ReadLastMerge({
+  onPress,
+  pending,
+}: {
+  onPress: () => void
+  pending: boolean
+}) {
   return (
     <div>
       <Button
@@ -351,26 +471,7 @@ function ReadLastMerge() {
         size="sm"
         disabled={pending}
         className="h-auto px-0 text-muted-foreground underline underline-offset-4"
-        onClick={() =>
-          startTransition(async () => {
-            const result = await readLastMergedPull()
-
-            if (!result.ok) {
-              setSaid(result.message)
-              return
-            }
-
-            if (!result.started) {
-              setSaid(result.message)
-              return
-            }
-
-            setSaid(
-              "Reading it now — the riff will be on /riffs in a moment."
-            )
-            router.refresh()
-          })
-        }
+        onClick={onPress}
       >
         {pending ? "Reading it…" : "Read my last merged pull request"}
       </Button>

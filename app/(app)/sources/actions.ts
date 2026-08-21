@@ -10,11 +10,14 @@ import {
   storeBackfilledMerge,
 } from "@/lib/github-backfill"
 import { getSession } from "@/lib/session"
+import { readShippedOutcome } from "@/lib/riffs"
+import { sayOutcome, type ShippedOutcome } from "@/lib/shipped-outcome"
 import {
   connectSource,
   disconnectSource,
   getSourceConnection,
   readGithubMeta,
+  recordArrival,
   setGithubLogin,
   setSigningSecret,
 } from "@/lib/source-connections"
@@ -391,7 +394,17 @@ export async function disconnectGithub(): Promise<
  * - **The entitlement gate**, because the workflow behind it spends.
  */
 export type BackfillResult =
-  | { ok: true; started: true }
+  /**
+   * The id travels back so the caller can ask what became of it.
+   *
+   * `started: true` used to be the end of the conversation, and it was the one
+   * answer of the three that could not be trusted: the workflow decides whether
+   * there is a post in a merge *after* this returns, and most merges are not
+   * posts. So the row said "the riff will be on /riffs in a moment", the
+   * selection said no a few seconds later, and nothing on screen ever heard
+   * about it. Started is a beginning, and this is how the end gets read.
+   */
+  | { ok: true; started: true; sourceItemId: string }
   | { ok: true; started: false; message: string }
   | { ok: false; message: string }
 
@@ -457,16 +470,48 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
     }
   }
 
+  /**
+   * The connection is working: a merge was found, it was theirs, and it is
+   * stored. Recorded before the outcome is known, exactly as the webhook does
+   * it and for the same reason — "material is arriving" is true whether or not
+   * this merge turned out to be worth publishing.
+   *
+   * This was missing, and `startShippedRiff`'s comment had already promised it:
+   * "what tells the user the connection is alive is /sources saying material is
+   * arriving". It never said so, because nothing on this path ever moved the
+   * row off `waiting` — so a GitHub connection that had read a merge went on
+   * reporting "nothing merged yet" indefinitely.
+   *
+   * **Not while paused.** `recordArrival` sets `arriving`, which would lift a
+   * pause nobody asked to lift. The webhook guards the same call the same way,
+   * and a `paused` that un-pauses itself makes the word a lie on /sources.
+   */
+  if (connection.state !== "paused") {
+    await recordArrival(connection.id)
+  }
+
   const stored = await storeBackfilledMerge({
     userId: session.user.id,
     payload: found.payload,
   })
 
-  if (!stored) {
+  if (!stored.stored) {
+    /**
+     * Already read, and this is where the old message was a guess. It said the
+     * riff was in /riffs; the likeliest truth is that the selection found no
+     * post in this merge and no riff was ever created. Ask the row.
+     */
+    const outcome = stored.sourceItemId
+      ? await readShippedOutcome({
+          userId: session.user.id,
+          sourceItemId: stored.sourceItemId,
+        })
+      : null
+
     return {
       ok: true,
       started: false,
-      message: "I have already read that one — it is in your riffs.",
+      message: `I have already read that one. ${sayOutcome(outcome)}`,
     }
   }
 
@@ -494,5 +539,27 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
 
   revalidatePath("/riffs")
   revalidatePath("/sources")
-  return { ok: true, started: true }
+  return { ok: true, started: true, sourceItemId: stored.sourceItemId }
+}
+
+/**
+ * What became of the merge that button just read.
+ *
+ * The other half of `readLastMergedPull`. The workflow behind it takes seconds
+ * and the answer is usually "there was no post in this one", so somebody has to
+ * ask — a server action polled by the row rather than a socket, for the reason
+ * `RiffsRefresh` gives about a wait of this length happening a handful of times
+ * a day.
+ *
+ * No cooldown and no entitlement gate. This spends nothing: two indexed selects
+ * against rows the caller already owns, and the ownership is checked inside
+ * `readShippedOutcome` because the id it takes has been to a browser and back.
+ */
+export async function readMergeOutcome(
+  sourceItemId: string
+): Promise<ShippedOutcome | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  return readShippedOutcome({ userId: session.user.id, sourceItemId })
 }

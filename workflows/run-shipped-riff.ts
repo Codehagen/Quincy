@@ -4,8 +4,10 @@ import { renderBrainForUser } from "@/lib/brain"
 import {
   completeSpokenRiff,
   failSpokenRiff,
+  recordShippedRefusal,
   startShippedRiff,
   type CompleteSpokenRiffResult,
+  type ShippedRefusal,
 } from "@/lib/riffs"
 import {
   selectShippedPassage,
@@ -61,8 +63,18 @@ export async function runShippedRiffWorkflow(payload: {
    * one — the run simply ends. The `source_item` written by the route is what
    * remembers that this merge was read and found to carry nothing, which is
    * also what stops a redelivery paying to reach the same conclusion.
+   *
+   * The verdict goes onto that row rather than only into the log. Nobody is
+   * watching a merge that arrived by webhook, but somebody pressing "read my
+   * last merged pull request" on /sources is watching, and until this step
+   * existed the only place the answer was written was a line in Vercel.
    */
   if (!selection.ok) {
+    await refusalStep({
+      sourceItemId: payload.sourceItemId,
+      reason: selection.reason,
+      why: selection.why,
+    })
     return { ok: false as const, reason: selection.reason }
   }
 
@@ -91,7 +103,16 @@ export async function runShippedRiffWorkflow(payload: {
 
 type SelectionOutcome =
   | { ok: true; passage: string }
-  | { ok: false; reason: "nothing-worth-keeping" | "empty" }
+  /**
+   * `why` in the user's direction, not the log's.
+   *
+   * It used to stop at `reason`, a two-word enum, with the model's sentence
+   * left in a `console.log` — which was the right call while the only reader
+   * was a prompt being tuned, and wrong the moment /sources grew a button that
+   * asks for this and waits for an answer. "There was no post in that one"
+   * without the because is the same inert message the empty state already was.
+   */
+  | { ok: false; reason: ShippedRefusal; why: string }
 
 /**
  * Read the description, pick the passage.
@@ -111,7 +132,11 @@ async function selectStep(payload: {
   "use step"
 
   if (payload.blocks.length === 0) {
-    return { ok: false, reason: "empty" }
+    return {
+      ok: false,
+      reason: "empty",
+      why: "The pull request had no title or description to read.",
+    }
   }
 
   let selection: ShippedSelection
@@ -150,20 +175,55 @@ async function selectStep(payload: {
 
   if (!selection.passage) {
     /**
-     * The expected answer, logged rather than surfaced.
+     * The expected answer. Logged, and now also returned.
      *
-     * `why` is kept here and nowhere else on purpose. It is the model
-     * explaining a refusal, which is worth having when tuning the prompt and is
-     * not worth a card — a user does not need to be told several times a day
-     * that a dependency bump was not a post.
+     * Still not a card — a user does not need to be told several times a day
+     * that a dependency bump was not a post, which is the argument
+     * `startShippedRiff` makes at length. But "not a card" was read as "not
+     * anywhere", and the two are different: `recordShippedRefusal` puts this
+     * sentence on the `source_item` so the one person who did ask — by pressing
+     * a button and being promised a riff — gets the answer they waited for.
      */
     console.log(
       `[shipped-riff] nothing to publish in ${payload.repository}: ${selection.why}`
     )
-    return { ok: false, reason: "nothing-worth-keeping" }
+    return {
+      ok: false,
+      reason: "nothing-worth-keeping",
+      why: selection.why,
+    }
   }
 
   return { ok: true, passage: selection.passage }
+}
+
+/**
+ * Write the refusal, and never let writing it fail the run.
+ *
+ * A step of its own because it touches the database, and one that swallows its
+ * own error on purpose: by the time this is reached the interesting work is
+ * finished and the answer is "no". Throwing here would make Workflow retry a
+ * selection that has already been paid for, to reach a conclusion already
+ * known, so that a status line could be updated. The line not appearing is the
+ * behaviour this whole change replaced — it is not worse than what was there,
+ * and it is not worth a second model call.
+ *
+ * Only reached when no riff was created. Once one exists, `riff.state` and
+ * `riff.failure` are the record and this must stay quiet — see the note on
+ * `recordShippedRefusal` about two fields that can disagree.
+ */
+async function refusalStep(input: {
+  sourceItemId: string
+  reason: ShippedRefusal
+  why: string
+}): Promise<void> {
+  "use step"
+
+  try {
+    await recordShippedRefusal(input)
+  } catch (cause) {
+    console.error("[shipped-riff] could not record the refusal:", cause)
+  }
 }
 
 /**

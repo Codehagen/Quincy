@@ -29,8 +29,10 @@
  * default does not wait, so it cannot be flaky on a provider and says nothing
  * about the prompt. `--live` waits for the workflow and is the only way to
  * learn whether the passage Quincy picks is the one a human would have picked,
- * and whether a merge that is not a post correctly leaves nothing behind. The
- * PR body should say which one was run.
+ * and whether a merge that is not a post correctly leaves no card *and still
+ * says why* — the second half added after a live install produced the right
+ * verdict and no way for anybody to read it. The PR body should say which one
+ * was run.
  *
  * **The payloads are real.** The two pull requests below are #23 and #5 of this
  * repository, with their real descriptions, numbers and logins. A fabricated
@@ -49,7 +51,9 @@ import { createHmac } from "node:crypto"
 import { and, eq, inArray } from "drizzle-orm"
 
 import { db } from "../lib/db"
+import { readShippedOutcome } from "../lib/riffs"
 import { riff, riffAngle, sourceConnection, sourceItem } from "../lib/schema-app"
+import { sayOutcome } from "../lib/shipped-outcome"
 import { descriptionBlocks } from "../lib/shipped-work"
 import { user } from "../lib/schema"
 import {
@@ -690,7 +694,7 @@ async function main() {
         )
 
         const items = await db
-          .select({ id: sourceItem.id })
+          .select({ id: sourceItem.id, meta: sourceItem.meta })
           .from(sourceItem)
           .where(
             and(
@@ -703,6 +707,39 @@ async function main() {
           items.length === 1,
           "though the merge is recorded, so a redelivery cannot pay to reread it"
         )
+
+        /**
+         * "Leaves nothing" was taken too literally, and it cost a live user a
+         * silence.
+         *
+         * Every assertion above this one passed on 2026-08-21 against a real
+         * install, and /sources still said "the riff will be on /riffs in a
+         * moment" forever — because the verdict existed only as a line in
+         * Vercel's log, which is not a place a product can speak from. No riff
+         * is right. No *answer* was the bug.
+         */
+        const refusal = items[0]?.meta?.refusal
+
+        check(
+          typeof refusal === "string",
+          "and the refusal is written on the row, not only into the log",
+          typeof refusal === "string" ? refusal : "missing"
+        )
+
+        const outcome = await readShippedOutcome({
+          userId: owner.id,
+          sourceItemId: items[0]?.id ?? "",
+        })
+
+        check(
+          outcome?.state === "refused",
+          "so the button that asked for it can be told what happened",
+          outcome?.state ?? "no row"
+        )
+
+        // Printed because this is the sentence a person reads, and a run of
+        // this script is the only place anybody sees it before they ship it.
+        console.log(`      · "${sayOutcome(outcome)}"`)
       }
     }
 

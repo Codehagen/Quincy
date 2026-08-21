@@ -16,7 +16,8 @@ import { listConnections } from "./channels"
 import { db } from "./db"
 import { recentKinds } from "./drafts"
 import { formatConversationDate } from "./format-date"
-import { draft, draftVersion, riff, riffAngle } from "./schema-app"
+import { draft, draftVersion, riff, riffAngle, sourceItem } from "./schema-app"
+import type { ShippedOutcome } from "./shipped-outcome"
 import { resolveTimeZone } from "./timezone"
 import { recordUsage } from "./usage"
 import { MAX_AUDIO_SECONDS } from "./voice-note"
@@ -809,6 +810,15 @@ export async function startTypedRiff(userId: string): Promise<string> {
 export const SHIPPED_SOURCE = { id: "github", label: "Pull request" } as const
 
 /**
+ * A merge's riff id, derived rather than generated. See `startShippedRiff` for
+ * why it is derived; this exists so the two places that need it — the write and
+ * the read that asks whether the write happened — cannot spell it differently.
+ */
+export function shippedRiffId(sourceItemId: string): string {
+  return `rif_gh_${sourceItemId}`
+}
+
+/**
  * A riff for a merge, created **after** the selection said there was one.
  *
  * This is where the GitHub flow deliberately diverges from voice and meetings,
@@ -836,7 +846,7 @@ export async function startShippedRiff(
   userId: string,
   sourceItemId: string
 ): Promise<string> {
-  const id = `rif_gh_${sourceItemId}`
+  const id = shippedRiffId(sourceItemId)
 
   await db
     .insert(riff)
@@ -852,6 +862,110 @@ export async function startShippedRiff(
     .onConflictDoNothing()
 
   return id
+}
+
+/** The two ways a merge can carry nothing. Both are ordinary, neither is an error. */
+export type ShippedRefusal = "nothing-worth-keeping" | "empty"
+
+/** Long enough for the model's sentence, short enough not to store an essay. */
+const MAX_REFUSAL_CHARS = 500
+
+/**
+ * Why a merge left no riff, written where somebody can be told.
+ *
+ * The counterpart to `startShippedRiff`, and the argument above is exactly why
+ * it had to exist. That comment is right that a merge carrying nothing deserves
+ * no card — but the verdict then lived only in a server log, and `/sources`
+ * offers a button that says "the riff will be on /riffs in a moment" before the
+ * selection has run. When the answer was no, the sentence stayed on screen and
+ * nothing ever contradicted it. A refusal is an answer, not a silence; it just
+ * does not deserve a card.
+ *
+ * Kept on `source_item.meta` because that row is already the thing that
+ * remembers this merge was read — it is what `onConflictDoNothing` consults to
+ * make a redelivery or a second press free. One merge, one row, one record of
+ * what came of it.
+ *
+ * `||` rather than a read-modify-write, so the provider's own facts underneath
+ * survive: the merge's own numbers were written by whoever stored the row and
+ * must not be overwritten by a copy this function never read.
+ *
+ * **Success is deliberately not recorded here.** The riff's row is the fact
+ * that one was written and its id is derived from `sourceItemId`, so a second
+ * field claiming the same thing is a second field that can disagree with it —
+ * the mistake `setup.connected` was already fixed for on /sources.
+ */
+export async function recordShippedRefusal(input: {
+  sourceItemId: string
+  reason: ShippedRefusal
+  why: string
+}): Promise<void> {
+  await db
+    .update(sourceItem)
+    .set({
+      meta: sql`${sourceItem.meta} || ${JSON.stringify({
+        refusal: input.reason,
+        refusalWhy: input.why.slice(0, MAX_REFUSAL_CHARS),
+      })}::jsonb`,
+    })
+    .where(eq(sourceItem.id, input.sourceItemId))
+}
+
+/**
+ * What became of one merge, for the button that asked for it.
+ *
+ * Reads the riff first and the refusal second, in that order, because the riff
+ * is the stronger fact: a row that exists settles the question, and the meta
+ * field is only consulted when there is nothing to have settled it. The shape
+ * of the answer lives in lib/shipped-outcome.ts, which the browser can import
+ * and this file cannot be.
+ */
+export async function readShippedOutcome(input: {
+  userId: string
+  sourceItemId: string
+}): Promise<ShippedOutcome | null> {
+  const [item] = await db
+    .select({ meta: sourceItem.meta })
+    .from(sourceItem)
+    .where(
+      and(
+        eq(sourceItem.id, input.sourceItemId),
+        // The ownership check, and the reason this takes a userId at all: the
+        // id travels to the browser and comes back, so a caller must not be
+        // able to read somebody else's merge by editing it.
+        eq(sourceItem.userId, input.userId)
+      )
+    )
+    .limit(1)
+
+  if (!item) return null
+
+  const id = shippedRiffId(input.sourceItemId)
+
+  const [row] = await db
+    .select({ state: riff.state, failure: riff.failure })
+    .from(riff)
+    .where(and(eq(riff.id, id), eq(riff.userId, input.userId)))
+    .limit(1)
+
+  if (row) {
+    if (row.state === "working") return { state: "writing", riffId: id }
+    if (row.state === "failed") {
+      return { state: "failed", message: row.failure }
+    }
+    // `ready`, and `archived` — which is a riff that existed and was filed
+    // away. Both answer "there was a post in it", which is the question.
+    return { state: "ready", riffId: id }
+  }
+
+  const refusal = item.meta?.refusal
+  const why = item.meta?.refusalWhy
+
+  if (typeof refusal === "string") {
+    return { state: "refused", why: typeof why === "string" ? why : "" }
+  }
+
+  return { state: "pending" }
 }
 
 export async function startSpokenRiff(

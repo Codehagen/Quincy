@@ -1,4 +1,5 @@
 import { createIdGenerator } from "ai"
+import { and, eq } from "drizzle-orm"
 
 import { db } from "./db"
 import { installationAccessToken } from "./github-app"
@@ -26,8 +27,9 @@ import {
  * nobody asked to write about. One recent merge proves the pipe and costs one
  * angle call.
  *
- * The GitHub calls themselves are free and bounded — one repository listing,
- * at most `MAX_REPOS_SCANNED` pull-request listings, one detail fetch.
+ * The GitHub calls themselves are free and bounded — at most `MAX_REPO_PAGES`
+ * repository listings, at most `MAX_REPOS_SCANNED` pull-request listings, one
+ * detail fetch.
  */
 
 const newSourceItemId = createIdGenerator({ prefix: "si", size: 20 })
@@ -94,6 +96,52 @@ type PullDetail = {
 }
 
 /**
+ * Every repository the installation can see, across pages.
+ *
+ * **This used to be one request, and the sort below quietly lied because of
+ * it.** `per_page=100` is GitHub's maximum, so an install with more than a
+ * hundred repositories returned an arbitrary hundred of them — and "sorted by
+ * most recently pushed, so the first few are where a merge from this week
+ * actually is" then meant *most recently pushed out of an arbitrary hundred*.
+ * Measured on a real install on 2026-08-21: 266 repositories, and the first
+ * page's freshest was last pushed five weeks earlier. The button read a merge
+ * from July and reported it as the last one, which it was not.
+ *
+ * `MAX_REPO_PAGES` is a ceiling and not a page count. Three requests cover the
+ * install this was measured against with room to spare, and an install past it
+ * is one where the freshest repository is overwhelmingly likely to have been
+ * seen already. It is logged when hit rather than silently truncated, because a
+ * cap nobody can see reads exactly like complete coverage.
+ */
+const MAX_REPO_PAGES = 5
+
+async function installationRepos(token: string): Promise<RepoRow[]> {
+  const all: RepoRow[] = []
+
+  for (let page = 1; page <= MAX_REPO_PAGES; page++) {
+    const body = await getJson<{ repositories?: RepoRow[] }>(
+      `${API}/installation/repositories?per_page=100&page=${page}`,
+      token
+    )
+
+    const rows = body?.repositories ?? []
+    all.push(...rows)
+
+    // A short page is the last page. A failed request returns null, which
+    // arrives here as a short page too — the right call either way, because
+    // going on would ask for page N+1 of a listing that just failed.
+    if (rows.length < 100) return all
+  }
+
+  console.log(
+    `[github-backfill] stopped at ${MAX_REPO_PAGES} pages of repositories; ` +
+      `some were not looked at`
+  )
+
+  return all
+}
+
+/**
  * The most recent merge this person wrote, across the repositories they gave
  * the app.
  *
@@ -112,12 +160,7 @@ export async function findLastMergedPull(input: {
   const token = await installationAccessToken(input.installationId)
   if (!token) return null
 
-  const repos = await getJson<{ repositories?: RepoRow[] }>(
-    `${API}/installation/repositories?per_page=100`,
-    token
-  )
-
-  const names = (repos?.repositories ?? [])
+  const names = (await installationRepos(token))
     .filter((r) => typeof r.full_name === "string")
     .sort((a, b) => (b.pushed_at ?? "").localeCompare(a.pushed_at ?? ""))
     .slice(0, MAX_REPOS_SCANNED)
@@ -187,19 +230,31 @@ export async function findLastMergedPull(input: {
   return null
 }
 
+export type StoredMerge =
+  | { stored: true; sourceItemId: string; blocks: string[] }
+  | { stored: false; sourceItemId: string }
+
 /**
- * Stores the merge and returns what the workflow needs, or null if this one has
- * already been read.
+ * Stores the merge and returns what the workflow needs, or says which row it
+ * collided with.
  *
  * `onConflictDoNothing` on `(user, source, external_id)` is what makes pressing
  * twice — or installing, uninstalling and installing again — free. The webhook
  * relies on exactly the same constraint for redelivery, so a merge that arrived
  * by webhook first is silently skipped here rather than drafted twice.
+ *
+ * **The collision returns the id rather than a null.** It used to return
+ * nothing, and the caller answered "I have already read that one — it is in
+ * your riffs", which is a guess dressed as a fact: the commonest reason a merge
+ * is already stored is that it was read and found to carry no post, in which
+ * case it is *not* in the riffs and the sentence sends somebody to look for a
+ * card that was never going to exist. Handing back the id lets the caller go
+ * and find out what actually became of it.
  */
 export async function storeBackfilledMerge(input: {
   userId: string
   payload: ShippedPayload
-}): Promise<{ sourceItemId: string; blocks: string[] } | null> {
+}): Promise<StoredMerge> {
   const { userId, payload } = input
   const blocks = descriptionBlocks(payload)
 
@@ -234,10 +289,28 @@ export async function storeBackfilledMerge(input: {
     .onConflictDoNothing()
     .returning({ id: sourceItem.id })
 
-  // Nothing inserted means this merge is already stored — by an earlier press,
-  // or by the webhook that fired when it landed. Either way the riff for it
-  // exists or is coming, and paying for a second one would be the bug.
-  return inserted.length > 0
-    ? { sourceItemId: inserted[0].id, blocks }
-    : null
+  if (inserted.length > 0) {
+    return { stored: true, sourceItemId: inserted[0].id, blocks }
+  }
+
+  /**
+   * Already stored — by an earlier press, or by the webhook that fired when it
+   * landed. Paying for a second selection would be the bug, so the row is read
+   * back instead: it is the one that already holds the answer.
+   *
+   * A second query, and only on the path where nothing was written.
+   */
+  const [existing] = await db
+    .select({ id: sourceItem.id })
+    .from(sourceItem)
+    .where(
+      and(
+        eq(sourceItem.userId, userId),
+        eq(sourceItem.source, "github"),
+        eq(sourceItem.externalId, payload.nodeId)
+      )
+    )
+    .limit(1)
+
+  return { stored: false, sourceItemId: existing?.id ?? "" }
 }
