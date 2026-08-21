@@ -1153,12 +1153,22 @@ export async function completeSpokenRiff({
   riffId,
   userId,
   transcript,
+  note = "",
   emptyMessage = "That recording came back empty.",
   deps = { angles: generateAnglesFromSaid },
 }: {
   riffId: string
   userId: string
   transcript: string
+  /**
+   * Framing that is not material. Empty for a voice note, where the transcript
+   * is the whole of what the user said, and set for a merge, where it carries
+   * what changed for the reader — see `anglesStep`.
+   *
+   * It reaches the prompt as "what the user added afterwards", so it steers
+   * the angles without ever being quotable. Nothing in it reaches the scrap.
+   */
+  note?: string
   /**
    * What to say if there are no words at all. Parameterised because the two
    * callers arrive here from different places and "that recording came back
@@ -1228,7 +1238,7 @@ export async function completeSpokenRiff({
   try {
     generation = await deps.angles({
       scrap,
-      note: "",
+      note,
       ...(await angleContext(userId)),
     })
   } catch (cause) {

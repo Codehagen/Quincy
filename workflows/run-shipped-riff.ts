@@ -87,6 +87,7 @@ export async function runShippedRiffWorkflow(payload: {
     riffId,
     userId: payload.userId,
     passage: selection.passage,
+    claim: selection.claim,
   })
 
   if (!result.ok) {
@@ -102,7 +103,7 @@ export async function runShippedRiffWorkflow(payload: {
 }
 
 type SelectionOutcome =
-  | { ok: true; passage: string }
+  | { ok: true; passage: string; claim: string }
   /**
    * `why` in the user's direction, not the log's.
    *
@@ -194,7 +195,7 @@ async function selectStep(payload: {
     }
   }
 
-  return { ok: true, passage: selection.passage }
+  return { ok: true, passage: selection.passage, claim: selection.claim }
 }
 
 /**
@@ -242,6 +243,7 @@ async function anglesStep(input: {
   riffId: string
   userId: string
   passage: string
+  claim: string
 }): Promise<CompleteSpokenRiffResult> {
   "use step"
 
@@ -252,6 +254,17 @@ async function anglesStep(input: {
     // model returned — never text a model wrote. That is what makes it safe to
     // hand to a generator whose whole job is to work from their own specifics.
     transcript: input.passage,
+    /**
+     * The one written sentence, and it rides beside the material rather than
+     * in it.
+     *
+     * A pull request describes a change to a reviewer. Angles cut from that
+     * prose come back about the implementation, which is the fault measured on
+     * 2026-08-21 — a real merge produced three angles about a log line. The
+     * claim says what changed for whoever uses the product, and the generator
+     * reads it as context the user added rather than as quotable material.
+     */
+    note: input.claim,
     emptyMessage: "There was nothing to publish in that pull request.",
   })
 }
