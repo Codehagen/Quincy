@@ -1,0 +1,84 @@
+packages: []
+
+# Transitive packages pulled up to their patched version.
+#
+# Every advisory this repo carries is transitive — nothing here is a dependency
+# Quincy chose, and none of them can be fixed by upgrading what it did choose.
+# An override is the only lever that reaches them, and each one below is a
+# patch-level pull inside the same major, which is what makes it safe: the API
+# does not move, only the fix arrives.
+#
+# Delete an entry the moment the parent catches up. An override that outlives
+# its advisory silently pins a package the ecosystem has moved past, and the
+# next person cannot tell the difference between a live constraint and a stale
+# one — so `pnpm audit --prod` is the record of why each line is here.
+overrides:
+  # GHSA — predictable id generation. Reached through better-auth, next, nuqs
+  # and workflow, which is nearly everything; both major lines are in the tree.
+  nanoid@^3.0.0: ^3.3.17
+  nanoid@^5.0.0: ^5.1.16
+  # High and moderate advisories in the HTTP client `workflow` uses.
+  undici@^7.0.0: ^7.29.0
+
+# Deliberately not overridden:
+#
+# **esbuild** (moderate, GHSA-67mh-4wv8-2f99). The advisory says "patched
+# >=0.24.3" and no such version exists — the 0.24 line ends at 0.24.2, so the
+# fix ships in 0.25, a major the tooling that pulls it (drizzle-kit, through
+# @esbuild-kit/esm-loader) cannot take. The vulnerability is in esbuild's own
+# development server, which nothing here runs: it is a build-time dependency of
+# a CLI, invoked and gone. Forcing 0.25 would break `pnpm db:*` to fix a server
+# that never starts. Revisit when drizzle-kit updates its loader.
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  msw: false
+  # drizzle-kit and react-email both bundle with esbuild, which fetches its
+  # platform binary in a postinstall script. Without this, neither CLI runs.
+  esbuild: true
+  # Downloads the ffmpeg binary for the install platform in a postinstall
+  # script. Without this there is no binary and every transcode throws ENOENT —
+  # locally and, more expensively, on the first deploy.
+  ffmpeg-static: true
+  # Both arrived with `workflow` (plans/018) and both are native builds.
+  #
+  # @swc/core is what compiles the "use workflow" / "use step" directives. With
+  # the build script blocked the package installs without its platform binary
+  # and the transform never runs, so a directive silently does nothing — the
+  # function executes inline as ordinary code and the durability it was added
+  # for is gone, with no error anywhere to say so.
+  '@swc/core': true
+  # cbor-extract is the native decoder behind cbor-x, which serialises workflow
+  # run state. It falls back to a pure-JS path when absent, so this one is
+  # speed rather than correctness — but the fallback sits in the hot path of
+  # every step boundary, and prebuilt binaries exist for the platforms this
+  # deploys to.
+  cbor-extract: true
+
+minimumReleaseAgeExclude:
+  # Not a version pin like the entries below it — this one is here because the
+  # package lives on a private registry (see .npmrc) that answers 401 to anyone
+  # without a token. The age check has to fetch metadata to do its job, so for
+  # this package it cannot, and a check that cannot run fails the whole install.
+  #
+  # Paired with `optionalDependencies` in package.json: this gets the lockfile
+  # past the policy, and that lets the 401 on the tarball be survivable. Both
+  # are needed, and neither works alone — verified by installing with the token
+  # withheld. See components/lapse-panel.tsx for what happens after it is
+  # missing.
+  - '@aiforui/lapse@0.19.0'
+  - '@workflow/astro@4.0.17'
+  - '@workflow/builders@4.1.7'
+  - '@workflow/cli@4.3.6'
+  - '@workflow/core@4.8.2'
+  - '@workflow/nest@4.0.18'
+  - '@workflow/next@4.1.6'
+  - '@workflow/nitro@4.1.8'
+  - '@workflow/nuxt@4.0.18'
+  - '@workflow/rollup@4.0.17'
+  - '@workflow/sveltekit@4.0.17'
+  - '@workflow/vite@4.0.17'
+  - '@workflow/web@4.1.18'
+  - shadcn@4.17.0
+  - workflow@4.8.2

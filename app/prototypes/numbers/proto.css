@@ -1,0 +1,81 @@
+/* ── Diverging pair for the Numbers exploration ────────────────────
+   The data's job is "above or below a baseline", which is the one job
+   that wants a diverging scale: two hues that read as opposite, with a
+   neutral midpoint. The midpoint here is the median line itself, drawn
+   in --border, so it reads as "nothing" rather than as a third series.
+
+   Marks come from the project's own chart tokens (--chart-1 warm H70,
+   --chart-2 cool H250) — warm/cool poles, which is the pair that passes;
+   two cool hues would not. Deliberately NOT --signal: brass-as-surface
+   means "this ritual is running", and a bar chart is not a state claim.
+
+   The ink steps are a separate slot because the mark colours sit at
+   L 0.62 and lose to body text on sand-50. Brass has a ramp to borrow
+   from. Blue does not, so --proto-down-ink is the one raw value in this
+   exploration: L 0.47 to match brass-700 exactly, so neither pole reads
+   louder than the other. If a variant is promoted this needs a real ramp
+   step in globals.css, not a copy of this line.
+   ────────────────────────────────────────────────────────────────── */
+
+.proto-numbers {
+  --proto-up: var(--chart-1);
+  --proto-up-soft: color-mix(in oklch, var(--chart-1) 16%, transparent);
+  --proto-up-ink: var(--color-brass-700);
+
+  --proto-down: var(--chart-2);
+  --proto-down-soft: color-mix(in oklch, var(--chart-2) 14%, transparent);
+  --proto-down-ink: oklch(0.47 0.13 250);
+}
+
+.dark .proto-numbers {
+  /* Dark mode is selected, not flipped: the marks step up to the dark
+     chart tokens (L 0.70) and the ink slots collapse onto them, because
+     against sand-950 the L 0.47 steps that worked on paper go muddy. */
+  --proto-up-ink: var(--color-brass-300);
+  --proto-down-ink: oklch(0.78 0.12 250);
+}
+
+/* ── Motion ────────────────────────────────────────────────────────
+   Named properties, never `all`: a transition on `all` silently picks
+   up width and height and turns a colour change into a layout pass.
+   Interactive state uses transitions rather than keyframes so a
+   reversed toggle retargets from where it is instead of restarting.
+   ────────────────────────────────────────────────────────────────── */
+
+.proto-numbers .proto-bar span[aria-hidden] {
+  transition: opacity 120ms ease-out;
+}
+
+.proto-numbers .proto-chevron {
+  transition: rotate 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.proto-numbers .proto-chevron-open {
+  rotate: 180deg;
+}
+.proto-numbers .proto-chevron-open-90 {
+  rotate: 90deg;
+}
+
+.proto-numbers .proto-row {
+  transition: background-color 120ms ease-out;
+}
+@media (hover: hover) {
+  .proto-numbers .proto-row:hover {
+    background-color: var(--accent);
+  }
+}
+/* A press state, because a control without one feels dead. Not scale(0.96):
+   this row is the full content width, and scaling a 900px band reads as the
+   page flexing rather than as a button going down. Colour is the honest
+   feedback at this size. */
+.proto-numbers .proto-row:active {
+  background-color: var(--secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proto-numbers .proto-bar span[aria-hidden],
+  .proto-numbers .proto-chevron,
+  .proto-numbers .proto-row {
+    transition-duration: 0.01ms;
+  }
+}
