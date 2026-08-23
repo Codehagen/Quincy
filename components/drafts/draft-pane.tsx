@@ -1,12 +1,29 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowRight01Icon,
+  LinkSquare02Icon,
+  SentIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { duplicates, type Draft, type Version } from "@/lib/drafts"
 import { measurePost } from "@/lib/post-length"
+import type { SendNowResult } from "@/lib/publish-run"
 import type { ApprovalPlacement } from "@/lib/scheduling"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { SourceMark } from "@/components/sources/source-mark"
 
@@ -172,15 +189,105 @@ export function WorkingPane({
  * Per version, not per piece. Two channels are two different slots at two
  * different times, and one sentence covering both would have to pick one.
  */
+type When = {
+  text: string
+  muted: boolean
+  /** Show "Give it a time": approved, a slot exists, and no time was taken. */
+  placeable: boolean
+  /** Show "Post now": nothing has gone out and nothing is in flight. */
+  postable: boolean
+  /** The live post, once there is one. */
+  url?: string | null
+  /**
+   * `wrong` for the two states where something did not happen that was supposed
+   * to. Everything else on this row is quiet on purpose — a pane of muted
+   * sentences is the right register for "here is what will happen" — but a post
+   * the platform refused is not a note, and rendering it in the same grey as
+   * "no slot yet" is how a failure goes unread for a week.
+   */
+  tone?: "wrong"
+}
+
 function when(
   version: Version,
-  placement?: ApprovalPlacement
-): { text: string; muted: boolean; placeable: boolean } {
+  placement?: ApprovalPlacement,
+  posted?: SendNowResult
+): When {
+  /**
+   * On the internet already. Everything below is about a future, and this
+   * version does not have one — so it is answered first, from the server’s row
+   * rather than from anything this session remembers.
+   */
+  if (version.sent?.state === "published") {
+    return {
+      text: `Posted ${version.sent.at}`,
+      muted: false,
+      placeable: false,
+      postable: false,
+      url: version.sent.url,
+    }
+  }
+
+  /**
+   * The press you just made, before the page has re-read anything.
+   *
+   * Both halves matter. A success needs saying in the second before
+   * `router.refresh` lands, and a failure may leave no trace on the row at all
+   * — "no LinkedIn account is connected" never reaches `scheduled_post`, so
+   * without this the row would fall through to "no slot yet" and the reason the
+   * post did not go would be nowhere on screen.
+   */
+  if (posted) {
+    return posted.ok
+      ? {
+          text: "Posted just now",
+          muted: false,
+          placeable: false,
+          postable: false,
+          url: posted.url,
+        }
+      : {
+          text: posted.message,
+          muted: true,
+          placeable: false,
+          // Retryable, because most of these are: a connection to repair, a
+          // limit to wait out. The two that are not — published and sending —
+          // are caught above and by the branch below.
+          postable: true,
+          tone: "wrong" as const,
+        }
+  }
+
+  // Claimed and mid-flight. Nothing automated resolves this and neither does a
+  // button, so the row offers none — see `claim` in lib/publish-run.ts.
+  if (version.sent?.state === "sending") {
+    return {
+      text: "Quincy is sending this one. Check the account before trying again.",
+      muted: true,
+      placeable: false,
+      postable: false,
+    }
+  }
+
+  // It tried and the platform said no. The words are the platform’s, never
+  // paraphrased, and the next step is to press Post now again once whatever
+  // they describe is fixed.
+  if (version.sent?.state === "failed") {
+    return {
+      text: version.sent.error ?? "It did not go out.",
+      muted: true,
+      placeable: false,
+      postable: true,
+      tone: "wrong" as const,
+    }
+  }
+
   if (version.goingOut) {
     return {
       text: `Going out ${version.goingOut}`,
       muted: false,
       placeable: false,
+      postable: true,
     }
   }
 
@@ -205,6 +312,7 @@ function when(
         : `Going out ${at}`,
       muted: false,
       placeable: false,
+      postable: true,
     }
   }
 
@@ -213,9 +321,10 @@ function when(
   // it is only knowable from what the server just answered.
   if (placement && !placement.scheduled && placement.reason === "slots-full") {
     return {
-      text: `Every ${version.label} slot is taken for the next two weeks — free one up on Lineup`,
+      text: `Every ${version.label} slot is taken for the next two weeks — free one up on Lineup, or send it now`,
       muted: true,
       placeable: false,
+      postable: true,
     }
   }
 
@@ -230,36 +339,123 @@ function when(
       text: "Approved before that slot existed, so it has no time yet",
       muted: true,
       placeable: true,
+      postable: true,
     }
   }
 
   return {
-    text: `No ${version.label} slot yet, so it has no time`,
+    text: `No ${version.label} slot yet, so it has no time — give it one on Lineup, or send it now`,
     muted: true,
     placeable: false,
+    postable: true,
   }
+}
+
+/**
+ * Send it now, with the one confirmation this pane adds.
+ *
+ * **Why a dialog, on a product whose rule is that only Discard gets one.** That
+ * rule holds because everything else here is reversible: approving is undone by
+ * Reopen, a time is undone by moving it, and both leave the writing where it
+ * was. This one is not. The text is on somebody's timeline a second later, in
+ * their name, and the product has no unsend — `reopenVersion` says as much out
+ * loud. A press that cannot be taken back is worth a sentence first.
+ *
+ * The dialog is controlled rather than left to close itself: `AlertDialogAction`
+ * is a plain button, and the row it sits behind survives the press, so without
+ * this the confirmation would stay open over a post that had already gone.
+ */
+function PostNow({
+  label,
+  idea,
+  pending,
+  primary,
+  onPost,
+}: {
+  label: string
+  idea: string
+  pending: boolean
+  /** True when this is the only way this version goes out at all. */
+  primary: boolean
+  onPost: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            variant={primary ? "default" : "outline"}
+            disabled={pending}
+            aria-label={`Post the ${label} version now`}
+          />
+        }
+      >
+        <HugeiconsIcon aria-hidden="true" icon={SentIcon} />
+        {pending ? "Posting…" : "Post now"}
+      </AlertDialogTrigger>
+
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Post this to {label} now?</AlertDialogTitle>
+          {/* Names the channel and says the two things that are actually true
+              and actually irreversible: it goes out under your own account, and
+              nothing here can take it back. */}
+          <AlertDialogDescription>
+            The {label} version of “{idea}” goes out immediately, in your name.
+            Quincy cannot unsend it.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Not yet</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setOpen(false)
+              onPost()
+            }}
+          >
+            Post now
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
 }
 
 function PublishedVersion({
   version,
+  idea,
   twin,
   placement,
   placing,
+  posting,
+  posted,
   takeFocus,
   onPlace,
+  onPost,
   onReopen,
 }: {
   version: Version
+  /** The piece's idea, for the Post now confirmation. */
+  idea: string
   twin?: string
   placement?: ApprovalPlacement
   /** A place request for this version is in flight. */
   placing: boolean
+  /** A post request for this version is in flight. */
+  posting: boolean
+  /** What the server said about sending it, once it has said. */
+  posted?: SendNowResult
   takeFocus: boolean
   onPlace: () => void
+  onPost: () => void
   onReopen: () => void
 }) {
   const { used, limit } = measurePost(version.text, version.channel)
-  const state = when(version, placement)
+  const state = when(version, placement, posted)
   const reopenRef = useFocusOnAppear<HTMLButtonElement>(takeFocus)
 
   return (
@@ -286,7 +482,18 @@ function PublishedVersion({
             the other two have different next steps — collapsing them into
             "queued" is the bug plans/010 fixed. */}
         <p className="text-caption">
-          <span className={state.muted ? "text-muted-foreground" : undefined}>
+          <span
+            // `role="alert"` only on the wrong ones. A live region announcing
+            // "going out Monday" on every render would talk over the page.
+            role={state.tone === "wrong" ? "alert" : undefined}
+            className={
+              state.tone === "wrong"
+                ? "text-destructive"
+                : state.muted
+                  ? "text-muted-foreground"
+                  : undefined
+            }
+          >
             {state.text}
           </span>
         </p>
@@ -335,6 +542,48 @@ function PublishedVersion({
               {placing ? "Giving it a time…" : "Give it a time"}
             </Button>
           ) : null}
+
+          {/* The other way out, and the only one when the channel has no
+              rhythm at all. It is the filled control exactly then: a row whose
+              every action is quiet is a row with no next step, which is the
+              dead end this button was added to end.
+
+              It steps back to outline the moment the version has a future of
+              its own — a time already taken, or a slot waiting to give it one.
+              A post that goes out Tuesday does not need the loudest control on
+              the row telling you to send it today. */}
+          {state.postable ? (
+            <PostNow
+              label={version.label}
+              idea={idea}
+              pending={posting}
+              primary={!state.placeable && !version.goingOut}
+              onPost={onPost}
+            />
+          ) : null}
+
+          {/* The receipt. A row that says posted and cannot show you the post
+              is asking you to take our word for it. */}
+          {state.url ? (
+            <Button
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+              // Matches the receipt on /lineup: same wording, same icon, same
+              // new tab. Two surfaces describing one post should not each have
+              // their own idea of what a link to it looks like.
+              render={
+                <Link href={state.url} target="_blank" rel="noreferrer" />
+              }
+            >
+              View post
+              <HugeiconsIcon
+                aria-hidden="true"
+                data-icon="inline-end"
+                icon={LinkSquare02Icon}
+              />
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -376,8 +625,11 @@ export function DonePane({
   completedBy,
   placements,
   placing,
+  posts,
+  posting,
   takeFocus,
   onPlace,
+  onPost,
   onReopen,
 }: {
   draft: Draft
@@ -387,8 +639,13 @@ export function DonePane({
   placements: Record<string, ApprovalPlacement | undefined>
   /** The version id whose place request is in flight. */
   placing: string | null
+  /** What the server said about sending it, per version id, once it has said. */
+  posts: Record<string, SendNowResult | undefined>
+  /** The version id whose post request is in flight. */
+  posting: string | null
   takeFocus: boolean
   onPlace: (versionId: string) => void
+  onPost: (versionId: string) => void
   onReopen: (channel: string) => void
 }) {
   const twins = duplicates(draft)
@@ -400,14 +657,18 @@ export function DonePane({
           <PublishedVersion
             key={v.channel}
             version={v}
+            idea={draft.idea}
             twin={twins[v.channel]}
             placement={placements[v.id]}
             placing={placing === v.id}
+            posting={posting === v.id}
+            posted={posts[v.id]}
             // Only the version whose Approve button this replaced inherits
             // focus, and only when you are the one who pressed it. A piece that
             // arrived already approved has nothing to hand focus to.
             takeFocus={takeFocus && completedBy === v.channel}
             onPlace={() => onPlace(v.id)}
+            onPost={() => onPost(v.id)}
             onReopen={() => onReopen(v.channel)}
           />
         ))}

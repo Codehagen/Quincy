@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import { isBeyondVisibleWeek, occurrencesOf } from "./scheduling"
-import { formatSlotTime } from "./slots"
+import {
+  formatSlotTime,
+  nextOccurrenceAfter,
+  STARTER_RHYTHM,
+  starterRhythmLabel,
+} from "./slots"
 import { hhmmIn, isoWeekdayOf, calendarDayIn } from "./timezone"
 
 /**
@@ -274,5 +279,54 @@ describe("formatSlotTime", () => {
 
     expect(formatSlotTime(instant, "UTC", NOW)).toBe("tomorrow at 23:00")
     expect(formatSlotTime(instant, "Europe/Oslo", NOW)).toBe("Fri at 01:00")
+  })
+})
+
+/**
+ * The rhythm an account gets before it asks for one.
+ *
+ * Written by `ensureStarterSlots`, which reads the database — what is worth
+ * pinning here is that the rows it writes are rows `createSlot` would have
+ * accepted from a person. A starter slot the product cannot sort, name or
+ * place is worse than no starter slot at all: it is on screen, it looks
+ * committed, and the first thing it does is put a day out of order.
+ */
+describe("STARTER_RHYTHM", () => {
+  it("only names weekdays the schema allows", () => {
+    for (const s of STARTER_RHYTHM) {
+      expect(Number.isInteger(s.weekday)).toBe(true)
+      expect(s.weekday).toBeGreaterThanOrEqual(1)
+      expect(s.weekday).toBeLessThanOrEqual(7)
+    }
+  })
+
+  it("zero-pads every time", () => {
+    // `slot.time_of_day` is text and sorts lexically as it reads. "8:00" would
+    // sort after "10:00" and put the day out of order on /lineup.
+    for (const s of STARTER_RHYTHM) {
+      expect(s.time).toMatch(/^\d{2}:\d{2}$/)
+    }
+  })
+
+  it("holds no duplicate, which the unique key would silently drop", () => {
+    const keys = STARTER_RHYTHM.map((s) => `${s.weekday}@${s.time}`)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it("puts every slot inside the placement horizon", () => {
+    // `nextFreeSlot` looks two weeks ahead. A starter slot whose next
+    // occurrence fell outside that would be a commitment no approval could
+    // ever take.
+    for (const s of STARTER_RHYTHM) {
+      const at = nextOccurrenceAfter(s.weekday, s.time, "Europe/Oslo", NOW)
+      expect(at).not.toBeNull()
+      expect(at!.getTime() - NOW.getTime()).toBeLessThan(
+        14 * 24 * 60 * 60 * 1000
+      )
+    }
+  })
+
+  it("says itself the way the first-run panel prints it", () => {
+    expect(starterRhythmLabel()).toBe("Tuesday and Thursday at 08:00")
   })
 })

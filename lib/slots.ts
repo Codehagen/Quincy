@@ -34,6 +34,50 @@ export const WEEKDAYS = [
   { value: 7, label: "Sunday", short: "Sun" },
 ] as const
 
+/**
+ * The rhythm a new account starts with.
+ *
+ * **Why an account has slots before it asks for any.** Approving is where a
+ * draft gets a time, and it can only take a time the person already committed
+ * to — see lib/scheduling.ts. On an account with no slots that rule produced a
+ * dead end nobody could have predicted from the Approve button: writing you
+ * said yes to, and a sentence explaining it has nowhere to go. The fix people
+ * reach for is "invent a time at the moment of approval", and that is the one
+ * thing lib/scheduling.ts must not do — a time nobody chose is a post going out
+ * at an hour nobody agreed to.
+ *
+ * So the commitment is made earlier, at the one moment the person has already
+ * said what they want: connecting a channel to publish on. Two real rows, on
+ * screen at /lineup, deletable in one press. Nothing is hidden and nothing is
+ * invented later.
+ *
+ * **Two a week, mornings.** Small enough that the first thing a new account
+ * sees is a rhythm it can keep rather than a quota it will miss, and small
+ * enough that the empty-slot rows on /lineup read as a nudge rather than as
+ * failure. Tuesday and Thursday rather than Monday and Friday: the two days
+ * that are neither the start-of-week backlog nor the Friday drift.
+ *
+ * The times are zero-padded because `slot.time_of_day` is text and sorts
+ * lexically as it reads — the same rule `createSlot` enforces on typed input.
+ */
+export const STARTER_RHYTHM = [
+  { weekday: 2, time: "08:00" },
+  { weekday: 4, time: "08:00" },
+] as const
+
+/** "Tuesday and Thursday at 08:00" — the rhythm said the way a person would. */
+export function starterRhythmLabel(): string {
+  const days = STARTER_RHYTHM.map((s) => weekdayLabel(s.weekday))
+  const times = [...new Set(STARTER_RHYTHM.map((s) => s.time))]
+
+  const spelled =
+    days.length > 1
+      ? `${days.slice(0, -1).join(", ")} and ${days[days.length - 1]}`
+      : days[0]
+
+  return `${spelled} at ${times.join(" and ")}`
+}
+
 export function weekdayLabel(weekday: number): string {
   return WEEKDAYS.find((d) => d.value === weekday)?.label ?? "—"
 }

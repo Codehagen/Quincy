@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 
 import { isChannelEnabled, PLATFORM_TIMEOUT_MS } from "./channels"
 import { db } from "./db"
@@ -564,4 +564,218 @@ export async function countUnresolved(): Promise<number> {
     .where(eq(scheduledPost.state, "sending"))
 
   return row?.n ?? 0
+}
+
+/* ── Sending one post, now, because a person just pressed it ──────────────── */
+
+export type SendNowResult =
+  /** It is on the internet. `url` is the receipt, exactly as `record` stored it. */
+  | { ok: true; url: string }
+  /** Nothing went out, or nobody can say whether it did. `message` is for the user. */
+  | { ok: false; message: string }
+
+/**
+ * Publish one approved version immediately.
+ *
+ * **Why this lives beside the sweep rather than in a server action.** `claim`
+ * is the whole safety argument of this module — one atomic move to `sending`
+ * before the platform is called, so two senders racing over a row produce one
+ * post and one loser. A "post now" button is exactly a second sender: the cron
+ * can be mid-sweep on the same row at the same second. Anything that reached
+ * for the platform without going through `claim` would be a second code path to
+ * the same timeline with none of that reasoning, and the failure would be a
+ * double post in somebody's name. So this borrows the claim rather than
+ * copying it, and the copy that does not exist cannot drift.
+ *
+ * **No window and no catch-up.** `runScheduledPublish` refuses anything more
+ * than two hours late because a time nobody is watching stops meaning what was
+ * approved. Here the person is watching — they pressed the button this second —
+ * so the only time that matters is now.
+ *
+ * The approval is still the authorisation. This will not publish a version that
+ * is not `approved`; the caller in app/(app)/drafts/actions.ts approves first,
+ * with the text on screen, and that write is what docs/vision.md's "Quincy
+ * drafts, you send" rests on. Pressing this is the send.
+ */
+export async function sendNow({
+  userId,
+  versionId,
+  now = new Date(),
+  deps = LIVE_DEPS,
+}: {
+  userId: string
+  versionId: string
+  now?: Date
+  deps?: PublishDeps
+}): Promise<SendNowResult> {
+  /**
+   * One read for the writing, its state and whatever row already stands for it.
+   *
+   * Scoped through `draft.user_id` in the same statement rather than trusting
+   * the caller: a version id arrives from a browser, and `draft_version` has no
+   * owner of its own. Same chain the actions file proves, for the same reason.
+   */
+  const [row] = await db
+    .select({
+      channel: draftVersion.channel,
+      body: draftVersion.body,
+      state: draftVersion.state,
+      postId: scheduledPost.id,
+      postState: scheduledPost.state,
+      postUrl: scheduledPost.postUrl,
+    })
+    .from(draftVersion)
+    .innerJoin(draft, eq(draftVersion.draftId, draft.id))
+    .leftJoin(scheduledPost, eq(scheduledPost.draftVersionId, draftVersion.id))
+    .where(and(eq(draftVersion.id, versionId), eq(draft.userId, userId)))
+    .limit(1)
+
+  if (!row) {
+    return { ok: false, message: "No such version." }
+  }
+
+  if (row.state !== "approved") {
+    return {
+      ok: false,
+      message: "Only writing you have approved can go out.",
+    }
+  }
+
+  /**
+   * Already published: say so and hand back the receipt.
+   *
+   * Pressing a button twice is not an error, and the second press has to answer
+   * the same question the first one did — "where is it" — rather than argue.
+   * The unique key on the version is what makes this reachable at all: there is
+   * one row per version, so "already published" is a fact and not a guess.
+   */
+  if (row.postState === "published") {
+    return row.postUrl
+      ? { ok: true, url: row.postUrl }
+      : { ok: false, message: "This one has already gone out." }
+  }
+
+  /**
+   * Mid-flight. Nothing automated resolves a `sending` row and neither does a
+   * button — see `claim`. A retry here is the double post the whole module is
+   * arranged to prevent.
+   */
+  if (row.postState === "sending") {
+    return {
+      ok: false,
+      message:
+        "Quincy is sending this one. Check the account before trying again — " +
+        "it may already be out.",
+    }
+  }
+
+  if (!isConnectable(row.channel)) {
+    return {
+      ok: false,
+      message: `Quincy cannot publish to ${row.channel} yet.`,
+    }
+  }
+
+  /**
+   * The same check the sweep makes before claiming, and for a sharper reason
+   * here: a missing client id would mark this row `failed` permanently, in
+   * front of somebody who is watching, over an environment variable.
+   */
+  if (!isChannelEnabled(row.channel)) {
+    return {
+      ok: false,
+      message: `${row.channel} publishing is not configured in this environment.`,
+    }
+  }
+
+  let postId = row.postId
+
+  if (!postId) {
+    /**
+     * Approved with no time — the case this button exists for. The row it
+     * writes is the same shape approving into a slot writes, minus the slot: a
+     * one-off is exactly a post with a time and no standing commitment behind
+     * it, and the time is now.
+     */
+    const id = `sch_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+
+    const [inserted] = await db
+      .insert(scheduledPost)
+      .values({
+        id,
+        userId,
+        draftVersionId: versionId,
+        slotId: null,
+        scheduledFor: now,
+      })
+      // Something scheduled it between the read above and here. The unique key
+      // on the version refuses the second row, and the one that exists is the
+      // one to send.
+      .onConflictDoNothing()
+      .returning({ id: scheduledPost.id })
+
+    if (inserted) {
+      postId = inserted.id
+    } else {
+      const [existing] = await db
+        .select({ id: scheduledPost.id })
+        .from(scheduledPost)
+        .where(eq(scheduledPost.draftVersionId, versionId))
+        .limit(1)
+
+      if (!existing) return { ok: false, message: "Could not queue it." }
+      postId = existing.id
+    }
+  } else {
+    /**
+     * A row already stands for this version: it is queued for a slot, or it
+     * failed. Both become "now", and a failed row goes back to `queued` because
+     * `claim` only takes that state — without this, retrying something the
+     * platform refused would silently do nothing.
+     *
+     * Bounded to `queued`/`failed` in the `where`, so this can never drag a
+     * `published` or `sending` row back into the queue. The two branches above
+     * already refuse those; this is the half that holds under a race.
+     */
+    await db
+      .update(scheduledPost)
+      .set({ scheduledFor: now, state: "queued", lastError: null })
+      .where(
+        and(
+          eq(scheduledPost.id, postId),
+          inArray(scheduledPost.state, ["queued", "failed"])
+        )
+      )
+  }
+
+  if (!(await claim(postId))) {
+    return {
+      ok: false,
+      message:
+        "Quincy was already sending this one. Check the account before trying " +
+        "again — it may already be out.",
+    }
+  }
+
+  const result = await deps.send({
+    userId,
+    channel: row.channel,
+    text: row.body,
+  })
+
+  const outcome = await record(postId, result)
+
+  if (outcome === "published" && result.ok) {
+    return { ok: true, url: result.url }
+  }
+
+  console.error(
+    `[publish] ${postId} (${row.channel}) post-now ${outcome}: ` +
+      (result.ok ? "" : result.message)
+  )
+
+  return {
+    ok: false,
+    message: result.ok ? "It did not go out." : result.message,
+  }
 }
