@@ -7,6 +7,7 @@ import { parseSourceInput } from "@/lib/adapt"
 import { createAdaptedDraft } from "@/lib/adapt-draft"
 import { db } from "@/lib/db"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
+import { sendNow, type SendNowResult } from "@/lib/publish-run"
 import { nextFreeSlot, type ApprovalPlacement } from "@/lib/scheduling"
 import { getSession } from "@/lib/session"
 import { draft, draftVersion, scheduledPost } from "@/lib/schema-app"
@@ -175,6 +176,37 @@ export async function placeApprovedVersion(
         beyondThisWeek: placement.beyondThisWeek,
       }
     : { scheduled: false, reason: placement.reason }
+}
+
+/**
+ * Send an approved version out now, without waiting for a slot.
+ *
+ * **The way out of the dead end this page could reach.** Approving places a
+ * version only if its channel has a free slot, so an account with no rhythm yet
+ * could approve writing and be told, correctly and unhelpfully, that it has no
+ * time. The two repairs on offer were both journeys: go to /lineup and invent a
+ * weekly commitment for the sake of one post, or reopen and start again. This
+ * is the third answer, and it is the one people actually mean — the post is
+ * ready, send it.
+ *
+ * It does not weaken "Quincy drafts, you send". The opposite: nothing here runs
+ * on its own, and the row it publishes is one a person approved and then
+ * pressed a second, confirmed button on. What it removes is the requirement to
+ * express that decision as a recurring time.
+ *
+ * The mechanism is `sendNow` in lib/publish-run.ts rather than a call to
+ * `publish` from here, because the cron may be holding the same row this
+ * second and only the claim in that file arbitrates it. See its note.
+ */
+export async function postNow(versionId: string): Promise<SendNowResult> {
+  const version = await ownedVersion(versionId)
+
+  const result = await sendNow({ userId: version.user.id, versionId })
+
+  revalidatePath("/drafts")
+  revalidatePath("/lineup")
+
+  return result
 }
 
 /**

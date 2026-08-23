@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { and, eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
+import { ensureStarterSlots } from "@/lib/scheduling"
 import { getSession } from "@/lib/session"
 import {
   CONNECTABLE_CHANNELS,
@@ -184,6 +185,34 @@ export async function createSlot(input: {
     // want that slot, and it exists. An error there would be the product
     // arguing with someone who got what they asked for.
     .onConflictDoNothing()
+
+  revalidatePath("/lineup")
+}
+
+/**
+ * Take the starting rhythm, in one press.
+ *
+ * The same two slots connecting a channel now writes — see `ensureStarterSlots`
+ * — offered here for the accounts that connected before it did. Without this,
+ * the only accounts that could reach a starting rhythm would be ones that
+ * disconnected and connected again.
+ *
+ * It is a proposal on screen and a press, not a default that arrives: the
+ * first-run panel spells out the days and the time before you take it, and
+ * every row it creates is listed and removable in the same dialog as any other
+ * slot.
+ */
+export async function applyStarterRhythm(channel: string) {
+  const user = await requireUser()
+
+  if (!(CONNECTABLE_CHANNELS as readonly string[]).includes(channel)) {
+    throw new Error("Quincy cannot publish to that channel yet")
+  }
+
+  await ensureStarterSlots({
+    userId: user.id,
+    channel: channel as ConnectableChannel,
+  })
 
   revalidatePath("/lineup")
 }

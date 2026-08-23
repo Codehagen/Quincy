@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Alert02Icon,
   ArrowDown01Icon,
@@ -25,7 +26,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SourceMark } from "@/components/sources/source-mark"
 
-import { SlotComposer } from "./slot-composer"
+import { applyStarterRhythm } from "@/app/(app)/lineup/actions"
+import { starterRhythmLabel } from "@/lib/slots"
+
+import { CHANNEL_LABELS, SlotComposer } from "./slot-composer"
 
 import type { Day, Entry, Slot } from "@/lib/lineup"
 
@@ -726,7 +730,91 @@ export function NoLineup({
           channel. Then it goes out on its own.
         </p>
       </div>
-      <SlotComposer variant="primary" timezone={timezone} connected={connected} />
+      {/* The one-press rhythm comes first when there is a channel to put it on,
+          and the dialog steps back to quiet beside it. An account that has just
+          connected LinkedIn does not want a form asking which weekday; it wants
+          a rhythm it can change. With nothing connected there is no honest
+          default to offer, so the form is all there is. */}
+      {connected.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <StarterRhythm connected={connected} />
+          <SlotComposer
+            existing={[]}
+            timezone={timezone}
+            connected={connected}
+          />
+        </div>
+      ) : (
+        <SlotComposer
+          variant="primary"
+          timezone={timezone}
+          connected={connected}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Take the starting rhythm.
+ *
+ * **The proposal is on the button, not behind it.** The whole complaint this
+ * answers is that a new account had to invent a weekly commitment before it
+ * could approve anything — so replacing the form with a different form would
+ * miss the point. The days and the time are spelled out beside the press, the
+ * channels are named, and every row it writes is listed and removable in the
+ * Slots dialog one control to the right.
+ *
+ * Not optimistic, matching `SlotComposer`: these rows change which days have
+ * anything in them at all, and a week that appears and then vanishes on a
+ * failed write is a worse first impression than one that takes a moment.
+ */
+function StarterRhythm({ connected }: { connected: string[] }) {
+  const router = useRouter()
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const labels = connected.map((c) => CHANNEL_LABELS[c] ?? c)
+  const on =
+    labels.length > 1
+      ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`
+      : labels[0]
+
+  async function take() {
+    setSaving(true)
+    setError(null)
+
+    try {
+      // Sequential rather than concurrent. Two channels is the whole range, and
+      // each call reads "does this channel have a rhythm" before it writes —
+      // running them together against the same connection buys nothing worth
+      // the interleaving.
+      for (const channel of connected) {
+        await applyStarterRhythm(channel)
+      }
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not set it up")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" disabled={saving} onClick={take}>
+          {saving ? "Setting it up…" : "Start with a weekly rhythm"}
+        </Button>
+        <p className="text-caption text-muted-foreground">
+          {starterRhythmLabel()} on {on}
+        </p>
+      </div>
+      {error ? (
+        <p role="alert" className="text-caption text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

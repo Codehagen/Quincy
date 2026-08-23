@@ -57,7 +57,15 @@ import {
  * and a post going out Tuesday.
  */
 
-const CHANNEL_LABELS: Record<string, string> = { x: "X", linkedin: "LinkedIn" }
+/**
+ * Exported so `NoLineup` names the same channels the same way. One map rather
+ * than two: a first-run panel offering a rhythm for "Linkedin" and a dialog
+ * listing it under "LinkedIn" is the same product disagreeing with itself.
+ */
+export const CHANNEL_LABELS: Record<string, string> = {
+  x: "X",
+  linkedin: "LinkedIn",
+}
 
 /** What the parent already has, so the dialog can show it and refuse a repeat. */
 export type ExistingSlot = {

@@ -9,6 +9,7 @@ import {
   approveVersion,
   discardVersion,
   placeApprovedVersion,
+  postNow,
   reopenVersion,
 } from "@/app/(app)/drafts/actions"
 import {
@@ -18,6 +19,7 @@ import {
   isDone,
   type Draft,
 } from "@/lib/drafts"
+import type { SendNowResult } from "@/lib/publish-run"
 import type { ApprovalPlacement } from "@/lib/scheduling"
 import { cn } from "@/lib/utils"
 import { withViewTransition } from "@/lib/view-transition"
@@ -132,6 +134,22 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
 
   /** The version whose "Give it a time" is in flight. */
   const [placing, setPlacing] = React.useState<string | null>(null)
+
+  /**
+   * What sending it on the spot did, once the server has said. Keyed by version,
+   * like `placements`, and for the same reason.
+   *
+   * Kept even after `router.refresh` re-reads the row, because the two say
+   * different things: the row can only report what `scheduled_post` holds, and
+   * the failures that never reach that table — a channel with no connection, a
+   * post over the limit — exist nowhere else.
+   */
+  const [posts, setPosts] = React.useState<
+    Record<string, SendNowResult | undefined>
+  >({})
+
+  /** The version whose "Post now" is in flight. */
+  const [posting, setPosting] = React.useState<string | null>(null)
 
   const { drafts, completedBy } = state
 
@@ -376,7 +394,13 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
       setFocused({ draftId, channel })
 
       const versionId = versionIdFor(draftId, channel)
-      if (versionId) persist(state, () => reopenVersion(versionId))
+      if (versionId) {
+        persist(state, () => reopenVersion(versionId))
+        // What a previous Post now said about this version stops being true the
+        // moment it is a decision again. Left behind, a refused post would
+        // re-approve into a row still showing the platform's old refusal.
+        setPosts((current) => ({ ...current, [versionId]: undefined }))
+      }
 
       withViewTransition(() =>
         setState((current) => ({
@@ -449,6 +473,45 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
         .catch((error) => console.error(error))
         .finally(() => {
           setPlacing(null)
+          router.refresh()
+        })
+    },
+    [router]
+  )
+
+  /**
+   * Send one approved version now.
+   *
+   * Not optimistic, and the one write on this page that never could be. Every
+   * other action here describes something the database will certainly do;
+   * this one describes a request to somebody else's platform, which can refuse
+   * it, take it and say nothing, or take twenty seconds. A row that claimed
+   * "Posted" the instant you pressed it would be guessing about the internet.
+   *
+   * `router.refresh` afterwards for the same reason `place` does it: the row's
+   * real state lives in `scheduled_post` now, and the pane should agree with
+   * what a reload would show.
+   */
+  const post = React.useCallback(
+    (versionId: string) => {
+      setPosting(versionId)
+
+      postNow(versionId)
+        .then((result) =>
+          setPosts((current) => ({ ...current, [versionId]: result }))
+        )
+        .catch((error) => {
+          console.error(error)
+          setPosts((current) => ({
+            ...current,
+            [versionId]: {
+              ok: false,
+              message: "Quincy could not reach the platform. Try again.",
+            },
+          }))
+        })
+        .finally(() => {
+          setPosting(null)
           router.refresh()
         })
     },
@@ -589,8 +652,11 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
               completedBy={completedBy[selected.id]}
               placements={placements}
               placing={placing}
+              posts={posts}
+              posting={posting}
               takeFocus={focused?.draftId === selected.id}
               onPlace={place}
+              onPost={post}
               onReopen={(channel) => reopen(selected.id, channel)}
             />
           ) : (

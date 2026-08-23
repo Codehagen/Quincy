@@ -1,8 +1,12 @@
 import { and, asc, eq, gte, inArray, lt } from "drizzle-orm"
 
 import { db } from "./db"
-import { scheduledPost, slot } from "./schema-app"
-import { isBeyondVisibleWeek, occurrencesOf } from "./slots"
+import {
+  scheduledPost,
+  slot,
+  type ConnectableChannel,
+} from "./schema-app"
+import { isBeyondVisibleWeek, occurrencesOf, STARTER_RHYTHM } from "./slots"
 // Re-exported so lib/scheduling.test.ts and the Add-a-slot dialog reach them
 // through one name. The maths lives in lib/slots.ts because the dialog needs it
 // client-side and this file imports the database driver.
@@ -184,4 +188,57 @@ export async function nextFreeSlot({
     slotId: free.slotId,
     beyondThisWeek: isBeyondVisibleWeek(free.at, now, zone),
   }
+}
+
+/**
+ * Give a channel the starting rhythm, if it has none.
+ *
+ * Called when a channel is connected — the moment somebody says "publish here"
+ * — and offered again on the /lineup first-run screen for accounts that
+ * connected before this existed. See `STARTER_RHYTHM` in lib/slots.ts for what
+ * it writes and why an account gets slots it did not type.
+ *
+ * **Only ever on an empty channel.** The guard is not politeness, it is what
+ * makes reconnecting safe: repairing an expired LinkedIn token runs the same
+ * callback as connecting for the first time, and an account that deliberately
+ * keeps one Friday slot must not find two mornings back every time it
+ * re-authorises. A channel with any slot at all has a rhythm, and this has
+ * nothing to say about it.
+ *
+ * Returns how many it created, so a caller can tell "there was nothing and now
+ * there is" from "it already had one" without asking again.
+ */
+export async function ensureStarterSlots({
+  userId,
+  channel,
+}: {
+  userId: string
+  channel: ConnectableChannel
+}): Promise<number> {
+  const [existing] = await db
+    .select({ id: slot.id })
+    .from(slot)
+    .where(and(eq(slot.userId, userId), eq(slot.channel, channel)))
+    .limit(1)
+
+  if (existing) return 0
+
+  const created = await db
+    .insert(slot)
+    .values(
+      STARTER_RHYTHM.map((s) => ({
+        id: `slot_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+        userId,
+        channel,
+        weekday: s.weekday,
+        timeOfDay: s.time,
+      }))
+    )
+    // `slot_user_channel_when_key` is unique on the four columns. The read
+    // above is not a lock, so two callbacks racing — a double-clicked connect —
+    // both find nothing and both insert; the key decides, and neither errors.
+    .onConflictDoNothing()
+    .returning({ id: slot.id })
+
+  return created.length
 }

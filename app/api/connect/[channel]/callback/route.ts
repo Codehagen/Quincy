@@ -11,6 +11,7 @@ import {
   saveConnection,
   type ConnectHandshake,
 } from "@/lib/channels"
+import { ensureStarterSlots } from "@/lib/scheduling"
 
 /**
  * Where the platform sends the person back.
@@ -159,6 +160,29 @@ export async function GET(
       profile,
       tokens,
     })
+
+    /**
+     * A channel you can publish to, with nowhere to publish, is where every
+     * new account used to land. Connecting is the moment somebody says
+     * "publish here", so it is the moment the standing rhythm is written —
+     * two rows, visible on /lineup, removable in one press. See
+     * `STARTER_RHYTHM` in lib/slots.ts.
+     *
+     * After the connection rather than before: a handshake that fails leaves
+     * no channel and must leave no slots for it either. Awaited rather than
+     * fired off, because the redirect can land on /lineup and a slot that
+     * appears one render later reads as the page forgetting.
+     *
+     * It never overwrites a rhythm — see `ensureStarterSlots` — so a reconnect
+     * changes nothing here. A failure to write it is not a failure to connect,
+     * which is why it cannot throw out of this branch and turn a working
+     * connection into `exchange_failed`.
+     */
+    try {
+      await ensureStarterSlots({ userId: session.user.id, channel })
+    } catch (error) {
+      console.error(`[connect] ${channel} starter slots failed`, error)
+    }
 
     return back(channel, { connected: "1" }, next)
   } catch (error) {

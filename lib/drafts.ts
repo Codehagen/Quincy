@@ -4,7 +4,13 @@ import { db } from "./db"
 import { formatConversationDate } from "./format-date"
 import { formatSlotTime } from "./slots"
 import { resolveTimeZone } from "./timezone"
-import { draft, draftVersion, scheduledPost, slot } from "./schema-app"
+import {
+  draft,
+  draftVersion,
+  scheduledPost,
+  SCHEDULED_STATES,
+  slot,
+} from "./schema-app"
 
 /**
  * Where the writing happens, and where it gets approved.
@@ -82,6 +88,25 @@ export type Version = {
    * to say that.
    */
   hasSlot: boolean
+  /**
+   * What the publish attempt did, once there has been one.
+   *
+   * Added with the Post now button, and it repairs something that was already
+   * wrong without it: `goingOut` was set from any `scheduled_post` row
+   * whatever its state, so a post that went out at 09:12 read as "going out
+   * today at 09:12" for the rest of the day, and one the platform refused read
+   * the same way — a page promising a future for writing that already had a
+   * past. Sending on the spot makes that the normal case rather than the edge
+   * one, so the state has to travel.
+   *
+   * `goingOut` is now the queued row only. These four are the rest of the
+   * scheduled states, said in the words the pane needs.
+   */
+  sent:
+    | { state: "published"; url: string | null; at: string }
+    | { state: "sending" }
+    | { state: "failed"; error: string | null }
+    | null
 }
 
 export type Draft = {
@@ -221,6 +246,58 @@ export async function recentKinds(
   return rows.map((r) => r.kind)
 }
 
+/**
+ * The publish outcome of one version, in the words the pane renders.
+ *
+ * Null for a version with no row and for a queued one — those are `goingOut`'s
+ * job, and a field that answered for both states would let the two disagree
+ * about the same row.
+ *
+ * `publishedAt` rather than `scheduledFor` for the time. Post now writes them
+ * seconds apart and a slot writes them identically, but a post that went out
+ * late is the case where they differ and the honest answer is when it left.
+ *
+ * `formatSlotTime` rather than `formatConversationDate`, which is the same
+ * choice `goingOut` makes one field up and for the mirrored reason. That one
+ * buckets to "Today" with no clock in it, and "Posted Today" is not what a
+ * receipt says — the hour is the whole of what you check when you want to know
+ * whether the thing you pressed a minute ago actually left.
+ */
+function sentFrom(
+  post: {
+    postState: (typeof SCHEDULED_STATES)[number] | null
+    publishedAt: Date | null
+    scheduledFor: Date | null
+    postUrl: string | null
+    lastError: string | null
+  } | null,
+  zone: string,
+  now: Date
+): Version["sent"] {
+  if (!post) return null
+
+  if (post.postState === "published") {
+    const at = post.publishedAt ?? post.scheduledFor
+
+    return {
+      state: "published",
+      url: post.postUrl,
+      at: at ? formatSlotTime(at, zone, now) : "",
+    }
+  }
+
+  // Mid-flight, and nothing automated will resolve it — see `claim` in
+  // lib/publish-run.ts. The pane says so rather than showing a spinner that
+  // will never stop.
+  if (post.postState === "sending") return { state: "sending" }
+
+  if (post.postState === "failed") {
+    return { state: "failed", error: post.lastError }
+  }
+
+  return null
+}
+
 export async function getDrafts(user: {
   id: string
   email: string
@@ -259,6 +336,12 @@ export async function getDrafts(user: {
     .select({
       version: draftVersion,
       scheduledFor: scheduledPost.scheduledFor,
+      // The row's own state, because "it has a time" and "it went out" are
+      // different sentences and one column cannot carry both.
+      postState: scheduledPost.state,
+      publishedAt: scheduledPost.publishedAt,
+      postUrl: scheduledPost.postUrl,
+      lastError: scheduledPost.lastError,
     })
     .from(draftVersion)
     .leftJoin(scheduledPost, eq(scheduledPost.draftVersionId, draftVersion.id))
@@ -277,10 +360,10 @@ export async function getDrafts(user: {
   const now = new Date()
   const zone = resolveTimeZone(user.timezone)
 
-  const timeByVersion = new Map(
+  const postByVersion = new Map(
     versionRows
       .filter((r) => r.scheduledFor !== null)
-      .map((r) => [r.version.id, r.scheduledFor])
+      .map((r) => [r.version.id, r])
   )
 
   return pieces.map((piece) => ({
@@ -307,7 +390,7 @@ export async function getDrafts(user: {
     versions: versions
       .filter((v) => v.draftId === piece.id)
       .map((v) => {
-        const at = timeByVersion.get(v.id) ?? null
+        const post = postByVersion.get(v.id) ?? null
 
         return {
           id: v.id,
@@ -319,8 +402,16 @@ export async function getDrafts(user: {
           // surrounding week to read "Monday" against.
           // Not formatConversationDate — that buckets the past and answers
           // "Today" for anything in the future. See formatSlotTime.
-          goingOut: at ? formatSlotTime(at, zone, now) : null,
+          //
+          // Queued only. A published row's `scheduledFor` is in the past, and
+          // running it through a formatter that names a future is how a post
+          // that is already on the internet ends up described as about to go.
+          goingOut:
+            post && post.scheduledFor && post.postState === "queued"
+              ? formatSlotTime(post.scheduledFor, zone, now)
+              : null,
           hasSlot: channelsWithSlots.has(v.channel),
+          sent: sentFrom(post, zone, now),
         }
       }),
   }))
@@ -346,7 +437,11 @@ export function countWithoutTime(drafts: Draft[]) {
   return drafts.reduce(
     (n, d) =>
       n +
-      d.versions.filter((v) => v.state === "approved" && !v.goingOut).length,
+      // Something already published or in flight has no time left to be given,
+      // so it is not waiting on anything and must not be counted as if it were.
+      d.versions.filter(
+        (v) => v.state === "approved" && !v.goingOut && !v.sent
+      ).length,
     0
   )
 }
