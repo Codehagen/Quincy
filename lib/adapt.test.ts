@@ -7,6 +7,7 @@ import {
   ANGLE_SHAPES,
   buildAdaptPrompt,
   buildSaidPrompt,
+  buildSteerPrompt,
   describeChannels,
   describeShapes,
   parseSourceInput,
@@ -160,7 +161,7 @@ describe("buildAdaptPrompt", () => {
       note: "",
     })
     expect(prompt).toContain("someone else")
-    expect(prompt).not.toContain("@\"")
+    expect(prompt).not.toContain('@"')
   })
 
   it("includes the user's steer when they gave one", () => {
@@ -179,6 +180,103 @@ describe("buildAdaptPrompt", () => {
       note: "   ",
     })
     expect(prompt).not.toContain("What the user said about it")
+  })
+})
+
+/**
+ * The steer prompt. `generateSteeredAngle` itself is not exercised here — no DB
+ * and no model, the same split the rest of this file keeps.
+ *
+ * What is worth asserting is the ordering and the refusal, because both are
+ * load-bearing and both are invisible from the output of a passing call: the
+ * note has to be the last thing read, and the escape hatch has to survive a
+ * user who asked firmly for something the material does not contain.
+ */
+describe("buildSteerPrompt", () => {
+  const SCRAP = "We cut the p95 from 840ms to 120ms by dropping the join."
+  const SHAPES = ["Short post", "Thread"] as const
+
+  it("includes the note", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: [],
+      note: "more like the numbers, less product-speak",
+      shapes: SHAPES,
+    })
+    expect(prompt).toContain("more like the numbers, less product-speak")
+  })
+
+  it("puts the note last, after the material and the existing angles", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: ["An angle they already have"],
+      note: "the numbers",
+      shapes: SHAPES,
+    })
+    expect(prompt.indexOf(SCRAP)).toBeLessThan(prompt.indexOf("the numbers"))
+    expect(prompt.indexOf("An angle they already have")).toBeLessThan(
+      prompt.indexOf("the numbers")
+    )
+  })
+
+  it("names the angles it must not repeat", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: ["We dropped the join", "840ms was the join"],
+      note: "the numbers",
+      shapes: SHAPES,
+    })
+    expect(prompt).toContain("do not repeat")
+    expect(prompt).toContain("- We dropped the join")
+    expect(prompt).toContain("- 840ms was the join")
+  })
+
+  it("omits the do-not-repeat block on a riff with no angles yet", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: [],
+      note: "the numbers",
+      shapes: SHAPES,
+    })
+    expect(prompt).not.toContain("do not repeat")
+  })
+
+  it("offers only the shapes it was given", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: [],
+      note: "the numbers",
+      shapes: ["Thread"],
+    })
+    expect(prompt).toContain("Thread")
+    expect(prompt).not.toContain("Carousel")
+  })
+
+  /**
+   * The rule the whole prompt turns on. A steer reads as a commission, and a
+   * model that cannot refuse one will invent the number the user asked for —
+   * in an angle they requested, which is the one they are least likely to
+   * check. See `STEER_ANGLE_RULES`.
+   */
+  it("keeps the refusal available in the same breath as the request", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: [],
+      note: "give me a customer name",
+      shapes: SHAPES,
+    })
+    expect(prompt).toContain("return an empty list of angles")
+  })
+
+  it("trims the note rather than passing the whitespace through", () => {
+    const prompt = buildSteerPrompt({
+      scrap: SCRAP,
+      existing: [],
+      note: "  the numbers  ",
+      shapes: SHAPES,
+    })
+    expect(prompt).toContain("the numbers\n")
+    expect(prompt).not.toContain("  the numbers  ")
   })
 })
 
@@ -210,9 +308,7 @@ describe("parseSourceInput", () => {
   })
 
   it("recovers the handle from a www link", () => {
-    const parsed = parseSourceInput(
-      "text https://www.x.com/someone/status/7"
-    )
+    const parsed = parseSourceInput("text https://www.x.com/someone/status/7")
     expect(parsed.handle).toBe("someone")
   })
 
@@ -329,7 +425,10 @@ describe("structured-output schemas", () => {
       // Comments explaining the ban are allowed; a schema key is not.
       const declarations = source
         .split("\n")
-        .filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"))
+        .filter(
+          (line) =>
+            !line.trim().startsWith("//") && !line.trim().startsWith("*")
+        )
         .filter((line) => /\b(minItems|maxItems)\s*:/.test(line))
 
       expect(declarations).toEqual([])

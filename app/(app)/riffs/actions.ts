@@ -14,7 +14,9 @@ import { measurePost } from "@/lib/post-length"
 import {
   ADAPT_MODEL,
   ADAPT_SPEND,
+  asAngleKind,
   generateChannelAngle,
+  generateSteeredAngle,
   parseSourceInput,
 } from "@/lib/adapt"
 import {
@@ -28,6 +30,7 @@ import {
   getOwnedRiff,
   newAngleId,
   shapesForChannel,
+  shapesForChannels,
   type Angle,
   type Riff,
 } from "@/lib/riffs"
@@ -224,8 +227,21 @@ export async function draftAngle(input: {
    * The brain says how this user writes; `recent` says what they have just
    * been given. Read together, not in series — neither is on the critical
    * path of the other, and the drafting call waits for both.
+   *
+   * **The names have to follow the array order, and once they did not.** This
+   * read `[brain, recent, examples]` against a list whose second entry is
+   * `voiceExamples` and whose third is `recentlyWritten`, so the two arrived
+   * in each other's slots — and both are `Promise<string[]>`, so nothing in
+   * the type system had an opinion. `describeExamples` says "this is how the
+   * user writes, match it" and `describeRecent` says "these already went out,
+   * do not repeat them", which meant every draft this account ever produced
+   * was told to imitate its own last draft and to steer clear of 8 of the 76
+   * real posts the corpus holds. It is the exact inversion `describeExamples`
+   * warns about in lib/drafting.ts, and it is invisible from the output: the
+   * drafts came back fluent, on-length and plausible, just not in anybody's
+   * voice. Keep these three names in the order the calls below appear.
    */
-  const [brain, recent, examples] = await Promise.all([
+  const [brain, examples, recent] = await Promise.all([
     /**
      * Stories in full, because `generateDraft` has no tools.
      *
@@ -306,17 +322,39 @@ export async function draftAngle(input: {
       hook: angle.hook,
       shape: angle.shape as Angle["shape"],
       /**
-       * The angle's own reasoning as material — **never the riff's scrap**.
+       * Your own material in full; an adapted riff's reasoning only.
        *
-       * For an adapted riff the scrap is a stranger's post, and
-       * `DRAFTING_RULES` tells the model it may use anything in the material
-       * below. Handing it their numbers would launder exactly what
-       * lib/adapt.ts was built to prevent, one layer further down where the
-       * adapt rules no longer apply. So the stranger's words reach the angle
-       * prompt and stop there; what travels on is the hook and the reason,
-       * both of which are ours.
+       * The rule this replaces was **never the riff's scrap**, and the reason
+       * given was sound for exactly one case: for an adapted riff the scrap is
+       * a stranger's post, `DRAFTING_RULES` tells the model it may use anything
+       * in the material, and handing it their numbers would launder precisely
+       * what lib/adapt.ts exists to prevent — one layer further down, where the
+       * adapt rules no longer apply. That case is still refused below.
+       *
+       * It fired on every other case too, and those are the majority. A merge
+       * you wrote and a voice note you recorded are not a stranger's post; they
+       * are the material. Blocking them left `angle.why` as the whole of what
+       * `generateDraft` ever saw — 208 characters of summary standing in for
+       * the 998-character pull request body it was summarising, measured on the
+       * draft written from PR #2 on 2026-08-23. `TELLS` then did its job
+       * correctly and made the situation worse: told to prefer the specific
+       * detail and to write short when there is none, and given a material
+       * block containing no specific detail, it wrote the general version. The
+       * post came back true, fluent and about nothing in particular, because
+       * every concrete thing in that merge — the atomic claim, "there is no
+       * unsend", "Quincy drafts, you send" — had been filtered out one step
+       * upstream.
+       *
+       * `adaptedFromUrl` is the discriminator, and it is the one the original
+       * comment was already describing in prose. It is non-empty exactly when
+       * the scrap belongs to somebody else, so this narrows the ban to the case
+       * it was written for rather than weakening it. The scrap is bounded at
+       * `MAX_TRANSCRIPT_CHARS` when the riff is created, so there is no second
+       * ceiling to impose here.
        */
-      scrapOrIdea: angle.why || angle.hook,
+      scrapOrIdea: angle.adaptedFromUrl
+        ? angle.why || angle.hook
+        : angle.scrap || angle.why || angle.hook,
       sourceLabel: angle.sourceLabel,
       channels: targets,
       brain,
@@ -612,9 +650,181 @@ export async function askForChannelAngle(input: {
     // with a stray space at the front of a card and gets copied into a post.
     hook: angle.hook.trim(),
     shape: angle.shape,
+    /**
+     * Missing until 2026-08-23, so every channel angle stored `""` and its
+     * card read "Short post" where the others read "Announcement · Short
+     * post". `asAngleKind`'s own comment says the guard belongs on every
+     * `riff_angle` insert because a caller can inject a generator; this was
+     * the one insert that had neither the guard nor the column.
+     */
+    kind: asAngleKind(angle.kind),
     why: (angle.why ?? "").trim(),
     // Last, so an angle you asked for lands under the ones you were given
     // rather than jumping the queue you were already reading.
+    position: owned.angles.length,
+  })
+
+  revalidatePath("/riffs")
+
+  return { ok: true, found: true, angleId: id, hook: angle.hook }
+}
+
+/**
+ * "None of these is the post I meant — here is what I want."
+ *
+ * The free-text twin of `askForChannelAngle`, and the other half of a control
+ * the product decided on and never finished. `Steer` in
+ * components/riffs/riff-parts.tsx has rendered a labelled field and an Ask
+ * button since /riffs shipped, with `onSubmit={(e) => e.preventDefault()}` as
+ * the entire handler — `name="steer"` appeared exactly once in the codebase
+ * and nothing read it. `app/(app)/drafts/page.tsx` states the rule the form
+ * was drawn for: steering belongs upstream on /riffs, because Riffs is where
+ * you judge and Drafts is where you write.
+ *
+ * Why it is worth the model call, when a riff already comes with several
+ * angles: the alternative is take one or discard the riff. On a merge that
+ * carried four angles on 2026-08-23, the strongest one for this user's voice —
+ * "28 assertions, a green production build, zero lint warnings, and 214
+ * passing tests" — sat beside the one they pressed, and there was no way to
+ * say "more like the numbers" short of throwing the riff away and starting
+ * again.
+ *
+ * **Coming back empty is a success, not an error**, and the argument is
+ * stronger here than on the channel path. There the model invents a duplicate
+ * to fill a gap; here it invents one to please the person who asked, whose
+ * note it will read as a commission. See `STEER_ANGLE_RULES`. An angle you
+ * requested is the one you are least likely to check.
+ *
+ * Money patterns are plan 012's, in the order `askForChannelAngle` uses:
+ * session, ownership, the free refusals, entitlement, *then* spend.
+ */
+export type AskAngleResult =
+  | { ok: true; found: true; angleId: string; hook: string }
+  | { ok: true; found: false }
+  | { ok: false; message: string }
+
+/** Long enough to be a direction, short enough that nobody is drafting in it.
+ *  The field is one line and this is the sentence it can hold; anything past
+ *  it is somebody using the steer as an editor, which is the thing /riffs
+ *  exists to keep out. */
+const MAX_STEER_CHARS = 280
+
+export async function askForAngle(input: {
+  /** The riff to find another angle in. Everything else is read server-side. */
+  riffId: string
+  /** What the user typed. */
+  note: string
+}): Promise<AskAngleResult> {
+  const session = await getSession()
+  if (!session) {
+    return { ok: false, message: "Not signed in." }
+  }
+
+  /**
+   * A blank steer is not a cheap version of "surprise me".
+   *
+   * Without the note the prompt has no question in it — the model would be
+   * asked to find "one more angle following the user's note" with no note,
+   * and would answer by rewording an angle already on the card. Refused here
+   * rather than defaulted, and before anything is spent.
+   */
+  const note = input.note.trim().slice(0, MAX_STEER_CHARS)
+  if (!note) {
+    return {
+      ok: false,
+      message: "Say what you want instead, and Quincy will look again.",
+    }
+  }
+
+  const owned = await getOwnedRiff(session.user.id, input.riffId)
+  if (!owned) {
+    return { ok: false, message: "No such riff." }
+  }
+
+  /**
+   * Every shape this account can publish, not one channel's worth.
+   *
+   * `askForChannelAngle` narrows to `shapesForChannel` because it is filling a
+   * named gap. A steer names no channel, so the constraint is only the one
+   * `targetsFor` will enforce later anyway: do not offer a shape this account
+   * cannot draft. `shapesForChannels` widens to everything for an account with
+   * nothing connected, which is the same answer `targetsFor` gives.
+   */
+  const connections = await listConnections(session.user.id)
+  const shapes = shapesForChannels(
+    connections.filter((c) => c.state === "active").map((c) => c.channel)
+  )
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return {
+      ok: false,
+      message:
+        entitlement.state === "lapsed"
+          ? "Your subscription is no longer active."
+          : "Your free day is over.",
+    }
+  }
+
+  // The same 15s the rest of the adapt-model family shares — see the note on
+  // `askForChannelAngle`. A steer is the press most likely to be repeated in
+  // frustration, which is exactly the spend this cooldown is for.
+  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
+  if (!cooldown.ready) {
+    return {
+      ok: false,
+      message: `Give Quincy a moment — ${cooldown.secondsLeft}s before the next one.`,
+    }
+  }
+
+  const brain = await renderBrainForUser(session.user.id)
+
+  let generation
+  try {
+    generation = await generateSteeredAngle({
+      scrap: owned.scrap,
+      existing: owned.angles.map((a) => a.hook),
+      note,
+      shapes,
+      brain,
+    })
+  } catch (cause) {
+    console.error("[riffs] steered angle generation failed:", cause)
+    return { ok: false, message: "Quincy could not read that one. Try again." }
+  }
+
+  // Metered before the result is judged, for the reason `askForChannelAngle`
+  // gives: the gateway charged for the call whether or not an angle came back.
+  if (generation.usage) {
+    try {
+      await recordUsage({
+        userId: session.user.id,
+        model: ADAPT_MODEL,
+        conversationId: ADAPT_SPEND,
+        inputTokens: generation.usage.inputTokens,
+        cachedInputTokens: generation.usage.cachedInputTokens,
+        outputTokens: generation.usage.outputTokens,
+      })
+    } catch (cause) {
+      console.error("[riffs] could not record usage:", cause)
+    }
+  }
+
+  const [angle] = generation.angles
+  if (!angle) {
+    return { ok: true, found: false }
+  }
+
+  const id = newAngleId()
+
+  await db.insert(riffAngle).values({
+    id,
+    riffId: owned.id,
+    hook: angle.hook.trim(),
+    shape: angle.shape,
+    kind: asAngleKind(angle.kind),
+    why: (angle.why ?? "").trim(),
+    // Last, so the angle you asked for lands under the ones you were given.
     position: owned.angles.length,
   })
 

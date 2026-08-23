@@ -1424,6 +1424,19 @@ export async function getOwnedAngle(userId: string, angleId: string) {
       riffId: riff.id,
       sourceId: riff.sourceId,
       sourceLabel: riff.sourceLabel,
+      /**
+       * The material itself, for the writer — see `draftAngle`.
+       *
+       * This join was already here for `adaptedFromUrl`, and the scrap was the
+       * one column it did not take. That made the angle's own `why` the only
+       * thing `generateDraft` ever saw: a hundred-odd characters of summary
+       * standing in for a merge description or a voice note that runs to a
+       * thousand. `TELLS` tells the model to prefer the specific detail and to
+       * write short when there is none, so it correctly wrote the general
+       * version of a post whose specifics were sitting in a column nobody
+       * selected.
+       */
+      scrap: riff.scrap,
       adaptedFromUrl: riff.adaptedFromUrl,
       adaptedFromHandle: riff.adaptedFromHandle,
     })

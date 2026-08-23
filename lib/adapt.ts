@@ -1033,6 +1033,141 @@ function buildChannelPrompt(input: {
   return lines.join("\n\n")
 }
 
+/* ── Angles you asked for ─────────────────────────────────────────────────
+   The free-text sibling of the channel path above. See `Steer` in
+   components/riffs/riff-parts.tsx, which has drawn this form since /riffs
+   shipped and, until now, submitted it to nothing.
+
+   A separate prompt rather than an optional `note` on `buildChannelPrompt`,
+   and the identity block is the reason. That one opens "The user publishes to
+   a channel that none of those angles can reach" and every rule under it is
+   about earning a channel — a frame that is simply untrue here and would have
+   the model justifying its answer against a gap nobody mentioned. The two
+   share the schema, the retry and the metering, which is the part worth
+   sharing; they do not share the question.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const STEER_ANGLE_IDENTITY = `You are Quincy, an AI Head of Content. Below is something the user said or captured, the angles you already found in it, and a note from the user about what they actually want.
+
+They read your angles and none of them was the post they had in mind. Your job is to find ONE more angle in the SAME material that follows their note — or to say plainly that the material does not carry one.`
+
+/**
+ * The rules, and the third one is why this is worth building.
+ *
+ * The steer is a direction, not a commission. A model handed "more like the
+ * numbers" will find numbers whether or not the material has any, because
+ * producing what was asked for is what it is for — the identical failure
+ * `CHANNEL_ANGLE_RULES` was written against, arriving through a door the user
+ * opened themselves. Refusing has to stay available, and it has to stay
+ * available *especially* here: an invented number in an angle the user asked
+ * for is one they are predisposed to believe.
+ *
+ * The note does not license invention and it does not license repetition. It
+ * decides which true thing in the material gets picked.
+ */
+const STEER_ANGLE_RULES = `Rules:
+
+- Follow the user's note. It tells you which part of their material to look at, or what tone to take — it is a direction for choosing, never a licence to write something the material does not support.
+- It must be a genuinely different point, not a rewording of an angle that already exists. If the note only describes an angle they already have, return no angles at all.
+- If the material genuinely cannot carry what they asked for, return no angles at all rather than inventing one to satisfy the note. That is the correct answer and the user is told plainly.
+- Use only the user's own material. Never invent a number, a name, a customer or an outcome that is not in what they said.
+- The hook is the opening line they would actually publish, in the language they used.
+- "why" is one line on why this angle answers what they asked for.
+- Return at most one angle.
+${describeKinds()}`
+
+export type SteeredAngleGenerator = (input: {
+  /** The riff's raw material, verbatim. */
+  scrap: string
+  /** The hooks already on the riff, so it cannot hand one of them back. */
+  existing: string[]
+  /** What the user typed. Never empty — the call site refuses a blank steer. */
+  note: string
+  /** Every shape this account can publish, from `shapesForChannels`. */
+  shapes: readonly string[]
+  brain: string
+}) => Promise<AngleGeneration>
+
+export const generateSteeredAngle: SteeredAngleGenerator = async (input) => {
+  const spent = usageAccumulator()
+
+  const { object } = await retryMalformed(
+    async () => {
+      const result = await generateObject({
+        model: MODEL,
+        providerOptions: REASONING,
+        schema: buildAnglesSchema(input.shapes),
+        system: input.brain
+          ? `${STEER_ANGLE_IDENTITY}\n\n${STEER_ANGLE_RULES}\n\n${input.brain}`
+          : `${STEER_ANGLE_IDENTITY}\n\n${STEER_ANGLE_RULES}`,
+        prompt: buildSteerPrompt(input),
+      })
+
+      spent.add(result.usage)
+
+      return {
+        ...result,
+        object: unwrapStringifiedObject(result.object, ANGLES_KEYS, ["angles"]),
+      }
+    },
+    ({ object }) => Array.isArray(object.angles),
+    { label: "adapt/steered-angle" }
+  )
+
+  const angles = Array.isArray(object.angles)
+    ? object.angles
+        .filter((a) => a.hook?.trim().length > 0)
+        // Same posture as the channel path: the prompt naming the allowed
+        // shapes is a request, and a shape this account cannot publish is an
+        // angle `targetsFor` will refuse to draft.
+        .filter((a) => input.shapes.includes(a.shape))
+        .slice(0, 1)
+        .map(settleKind)
+    : []
+
+  return {
+    angles,
+    groundedIn: object.groundedIn ?? "",
+    usage: spent.total,
+  }
+}
+
+/**
+ * The note goes last, and that is deliberate.
+ *
+ * It is the newest thing the model knows and the one the whole call turns on,
+ * so it sits closest to the instruction to answer — the same placement
+ * `describeExamples` argues for in lib/drafting.ts. Putting it above the
+ * existing angles would have it read as context for them rather than as the
+ * question.
+ */
+export function buildSteerPrompt(input: {
+  scrap: string
+  existing: string[]
+  note: string
+  shapes: readonly string[]
+}): string {
+  const lines = [`What the user captured:\n\n${input.scrap}`]
+
+  if (input.existing.length > 0) {
+    lines.push(
+      `Angles you already found in it — do not repeat any of these:\n\n${input.existing
+        .map((hook) => `- ${hook}`)
+        .join("\n")}`
+    )
+  }
+
+  lines.push(
+    `The shapes this account can publish are: ${input.shapes.join(", ")}.`
+  )
+
+  lines.push(
+    `What the user asked for:\n\n${input.note.trim()}\n\nGive one angle that follows that note if the material genuinely carries one. If it does not, return an empty list of angles.`
+  )
+
+  return lines.join("\n\n")
+}
+
 /* ── Selection ────────────────────────────────────────────────────────────
    Which bookmarks are worth adapting at all. Only the bookmarks rhythm needs
    this — a pasted post was already selected by a human pressing a button.

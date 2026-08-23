@@ -6,6 +6,7 @@ import {
   Alert01Icon,
   ArrowRight01Icon,
   Delete02Icon,
+  Loading03Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -14,6 +15,7 @@ import { useRouter } from "next/navigation"
 
 import {
   archiveRiff,
+  askForAngle,
   discardAngle,
   draftAngle,
 } from "@/app/(app)/riffs/actions"
@@ -595,12 +597,30 @@ export function AngleActions({ angle }: { angle: Angle }) {
  * rather than absent, since the button beside it already names the action for
  * anyone who can see it.
  */
+/**
+ * What the ask came back with. Mirrors `Gap` in channel-gap.tsx, because the
+ * two are the same transaction — spend a model call on this riff, get an angle
+ * or an honest no — and two vocabularies for one outcome is how the empty case
+ * ends up rendered as a failure on one of them.
+ */
+type SteerOutcome =
+  | { kind: "idle" }
+  | { kind: "working" }
+  /** The material would not carry it. Not an error — see `STEER_ANGLE_RULES`. */
+  | { kind: "empty" }
+  | { kind: "failed"; message: string }
+
 export function Steer({ riffId }: { riffId: string }) {
+  const router = useRouter()
   const [open, setOpen] = React.useState(false)
+  const [note, setNote] = React.useState("")
+  const [outcome, setOutcome] = React.useState<SteerOutcome>({ kind: "idle" })
+  const [pending, startTransition] = React.useTransition()
   const inputRef = React.useRef<HTMLInputElement>(null)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
   const formId = `steer-${riffId}`
   const inputId = `${formId}-input`
+  const working = outcome.kind === "working" || pending
 
   // Focus follows disclosure. A field that appears without focus makes you
   // reach for the mouse to use the thing you just asked for.
@@ -621,6 +641,58 @@ export function Steer({ riffId }: { riffId: string }) {
     setOpen(false)
     triggerRef.current?.focus()
   }, [])
+
+  /**
+   * Ask, and say which of the three things happened.
+   *
+   * The `try` is not optional — `Gap` shipped without one and left the row
+   * spinning forever when a server action rejected rather than resolved (a
+   * dropped connection, a deploy mid-click). `working` is set before the
+   * transition and only the resolved paths clear it.
+   */
+  function ask() {
+    const asked = note.trim()
+    if (!asked || working) return
+
+    setOutcome({ kind: "working" })
+    startTransition(async () => {
+      try {
+        // The riff id and the note, and nothing else. Material and ownership
+        // are read server-side — a client that could name the scrap could
+        // spend this account's budget on any text it liked.
+        const result = await askForAngle({ riffId, note: asked })
+
+        if (!result.ok) {
+          setOutcome({ kind: "failed", message: result.message })
+          return
+        }
+
+        if (!result.found) {
+          setOutcome({ kind: "empty" })
+          return
+        }
+
+        /**
+         * Clear the field and close, then re-read.
+         *
+         * The new angle renders above this form, and leaving the steer open
+         * with the text still in it invites a second press against material
+         * that just answered — another model call for the same sentence. The
+         * disclosure's own contract does the rest: `close` hands focus back to
+         * the trigger, so the keyboard lands next to the angle that arrived.
+         */
+        setNote("")
+        setOutcome({ kind: "idle" })
+        close()
+        router.refresh()
+      } catch {
+        setOutcome({
+          kind: "failed",
+          message: "Could not reach Quincy. Try again.",
+        })
+      }
+    })
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -652,28 +724,93 @@ export function Steer({ riffId }: { riffId: string }) {
       <form
         id={formId}
         hidden={!open}
-        className="flex items-center gap-2"
-        onSubmit={(e) => e.preventDefault()}
+        className="flex flex-col gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          ask()
+        }}
         // Escape closes, the same key that dismisses every other transient
         // thing in the app. Scoped to the form so it never swallows an Escape
-        // meant for something else.
+        // meant for something else. Not while a call is in flight: the angle
+        // is coming and closing the form is how you fail to see it arrive.
         onKeyDown={(e) => {
-          if (e.key === "Escape") close()
+          if (e.key === "Escape" && !working) close()
         }}
       >
-        <label htmlFor={inputId} className="sr-only">
-          Ask Quincy for a different angle on this
-        </label>
-        <Input
-          id={inputId}
-          ref={inputRef}
-          name="steer"
-          placeholder="More like… / less like…"
-          className="h-8"
-        />
-        <Button variant="ghost" size="sm" type="submit">
-          Ask
-        </Button>
+        <div className="flex items-center gap-2">
+          <label htmlFor={inputId} className="sr-only">
+            Ask Quincy for a different angle on this
+          </label>
+          <Input
+            id={inputId}
+            ref={inputRef}
+            name="steer"
+            value={note}
+            onChange={(e) => {
+              setNote(e.target.value)
+              // The previous answer is about the previous question. Clearing
+              // on the first keystroke stops "could not find anything" sitting
+              // under a sentence it was never asked about.
+              if (outcome.kind !== "idle") setOutcome({ kind: "idle" })
+            }}
+            disabled={working}
+            placeholder="More like… / less like…"
+            className="h-8"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            type="submit"
+            // A blank steer is refused by the action before it spends, and a
+            // disabled button says so a round trip earlier.
+            disabled={working || note.trim().length === 0}
+          >
+            {working ? "Asking…" : "Ask"}
+          </Button>
+        </div>
+
+        {working ? (
+          <p
+            role="status"
+            className="flex items-center gap-2 text-caption text-muted-foreground"
+          >
+            <HugeiconsIcon
+              aria-hidden="true"
+              icon={Loading03Icon}
+              className="size-3.5 animate-spin"
+            />
+            Looking for that in this one…
+          </p>
+        ) : null}
+
+        {/* The honest no, muted rather than destructive: nothing broke. The
+            material genuinely would not carry what was asked for, and
+            `STEER_ANGLE_RULES` names refusing as a correct answer precisely so
+            this outcome exists instead of an invented angle the user is
+            predisposed to believe. It clears on the next keystroke rather than
+            offering a Dismiss button — unlike `Gap`, this form has a field, so
+            editing the sentence *is* the way to try again. */}
+        {outcome.kind === "empty" ? (
+          <p
+            role="status"
+            className="max-w-[60ch] text-caption text-pretty text-muted-foreground"
+          >
+            Quincy could not find that in this one without repeating an angle
+            already here. Try asking for something else in it.
+          </p>
+        ) : null}
+
+        {/* A real failure — no entitlement, the cooldown, the model threw. The
+            action's own sentence, unedited: it is the only thing that knows
+            which one happened, and it already names the fix. */}
+        {outcome.kind === "failed" ? (
+          <p
+            role="status"
+            className="text-caption text-pretty text-destructive"
+          >
+            {outcome.message}
+          </p>
+        ) : null}
       </form>
     </div>
   )
