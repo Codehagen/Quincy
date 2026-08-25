@@ -74,6 +74,37 @@ export type DraftGenerator = (input: {
   shape: Angle["shape"]
   scrapOrIdea: string
   sourceLabel: string
+  /**
+   * What the material is about, when the material does not say. See plans/021.
+   *
+   * A pull request description is written for somebody who already has the
+   * repository open: it names files and functions and takes the product as
+   * read. Handing that to a writer told to prefer the specific detail produces
+   * a true post about nothing anybody outside the repository recognises. This
+   * is the product put back — what it is, whether it is public, what a user of
+   * it gained — from `riff.context`.
+   *
+   * Optional, and empty is the honest answer for a voice note: the user said
+   * what they were talking about, so there is nothing to add.
+   */
+  about?: string
+  /**
+   * The three beats of what happened, in the order they go in the post. See
+   * plans/026 decision 7 and `ShippedBeats` in lib/shipped-work.ts.
+   *
+   * `about` says what the material is *about*; this says what shape the post
+   * takes. They are separate on purpose — a writer that knows the product and
+   * still has no sequence writes a paragraph, and the user does not write
+   * paragraphs about his work. Measured across 100 of his real posts: one
+   * clause per line, a blank line between beats, the number whole and on its
+   * own line, and himself as the subject of the first.
+   *
+   * Optional and per-beat-optional. A voice note has none of this; a merge that
+   * only described a state has a "happened" and no "did". The prompt below
+   * prints what exists and tells the model not to invent the rest, which is a
+   * different instruction from printing an empty label.
+   */
+  beats?: { did: string; happened: string; learned: string }
   channels: DraftTarget[]
   brain: string
   /**
@@ -297,11 +328,51 @@ export function describeRecent(recent: string[]): string {
   ].join("\n")
 }
 
-function buildUserPrompt(input: {
+/**
+ * The three-beat block, or "" when there are no beats to print.
+ *
+ * The numbering and the closing paragraph are both load-bearing. A list of
+ * three labelled facts is read as three facts; a numbered list with "in that
+ * order" under it is read as a form. The user's own posts are the form — one
+ * clause per line, a blank line between, the number whole and alone — and this
+ * is the only place in the prompt that says so.
+ *
+ * **No line-break caveat, because no channel needs one.** `describeConstraints`
+ * was checked on 2026-08-25: `ChannelRules` carries `limit`, `fold` and
+ * `urlCost`, and not one of the six channels forbids a newline. If one ever
+ * does, this paragraph is where the exception goes — "three blocks" would
+ * otherwise be an instruction the channel rules silently contradict.
+ *
+ * Exported for the test, matching how this file treats `describeConstraints`.
+ */
+export function describeBeats(beats?: {
+  did: string
+  happened: string
+  learned: string
+}): string {
+  const did = beats?.did.trim() ?? ""
+  const happened = beats?.happened.trim() ?? ""
+  const learned = beats?.learned.trim() ?? ""
+
+  if (!did && !happened && !learned) return ""
+
+  return [
+    `The three beats, in the order they go in the post:`,
+    `1. What you did: ${did}`,
+    `2. What happened: ${happened}`,
+    `3. What it meant: ${learned}`,
+    ``,
+    `Write these as three short blocks with a blank line between them, in that order. You are the subject of the first. Beat 2 keeps its number exactly as written. If a beat is empty, write the other two and stop — do not invent the missing one.`,
+  ].join("\n")
+}
+
+export function buildUserPrompt(input: {
   hook: string
   shape: Angle["shape"]
   scrapOrIdea: string
   sourceLabel: string
+  about?: string
+  beats?: { did: string; happened: string; learned: string }
   channels: DraftTarget[]
   recent?: string[]
 }): string {
@@ -311,9 +382,22 @@ function buildUserPrompt(input: {
     `Source: ${input.sourceLabel}`,
   ]
 
+  // Between the source and the material, because that is the order it has to
+  // be read in: what this is, what it is about, then the words themselves.
+  if (input.about?.trim()) {
+    lines.push(`About the material:\n${input.about.trim()}`)
+  }
+
   if (input.scrapOrIdea.trim() && input.scrapOrIdea !== input.hook) {
     lines.push(`Material:\n${input.scrapOrIdea}`)
   }
+
+  // After the material, because it is a reading of it: the beats are three
+  // clauses lifted out of the block above, and putting them first would make
+  // the description look like supporting detail for a summary somebody else
+  // wrote. Before the constraints, because the constraints are about length.
+  const beats = describeBeats(input.beats)
+  if (beats) lines.push(beats)
 
   const recent = describeRecent(input.recent ?? [])
   if (recent) lines.push(recent)

@@ -6,6 +6,12 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { DRAFTING_MODEL, generateDraft, targetsFor } from "@/lib/drafting"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
+import { describeRepo, readRepoContext } from "@/lib/repo-context"
+import {
+  MAX_FOR_USER_CHARS,
+  readShippedBeats,
+  type ShippedBeats,
+} from "@/lib/shipped-work"
 import { listConnections } from "@/lib/channels"
 import { renderBrainForUser } from "@/lib/brain"
 import { recentlyWritten } from "@/lib/drafts"
@@ -48,6 +54,98 @@ const OR = new Intl.ListFormat("en", { style: "long", type: "disjunction" })
  *  so the vowel test is the whole rule and there is no exception to hardcode. */
 function article(word: string) {
   return /^[aeiou]/i.test(word) ? "an" : "a"
+}
+
+/**
+ * What the writer needs to know about the material that the material never
+ * says. See `riff.context` and `DraftGenerator.about`.
+ *
+ * **Every read is a narrowing, and that is not defensive coding for its own
+ * sake.** The column is jsonb and its comment says it is never parsed for logic
+ * — so a riff written before it existed holds `{}`, a riff from a voice note
+ * holds `{}`, and a shape the workflow stops writing next month has to come out
+ * of here as a shorter prompt rather than as a throw on the page somebody
+ * pressed Draft on. There is no version field to check because there is nothing
+ * a version would let this function do differently.
+ *
+ * Deliberately three lines at most. `describeFacts` exists and reads well, but
+ * it is written for the selection prompt, where the merge's counts are the
+ * evidence; here it would sit above a pull request description competing with
+ * the material for the model's attention. The commit count is not what makes
+ * the post — what the product is, and what somebody using it got, is.
+ *
+ * **A private repository's description reaches the writer, and that is the
+ * intended behaviour rather than an oversight.** The selection rules refuse to
+ * *return* anything a private repository would not want disclosed; this is one
+ * step further on, and what it produces is a draft on the user's own /riffs
+ * page. Nothing in Quincy publishes without them pressing Approve — the whole
+ * product rests on that, per docs/vision.md — so the question is not "may the
+ * model see this" but "may this reach a channel", and the answer to the second
+ * is no by construction. Withholding it instead would leave the writer doing
+ * what the 2026-08-24 audit measured: writing around a subject it cannot name.
+ * The private line below is what tells it to keep the naming inside what the
+ * material already says out loud.
+ */
+function describeMaterial(context: unknown): string {
+  if (!context || typeof context !== "object") return ""
+
+  const row = context as Record<string, unknown>
+  const facts =
+    row.facts && typeof row.facts === "object"
+      ? (row.facts as Record<string, unknown>)
+      : null
+
+  const lines: string[] = []
+
+  // Narrowed rather than cast: this is jsonb, and `repo.topics.length` on a row
+  // whose `topics` an older deploy stored as a string is a TypeError inside the
+  // server action somebody pressed Draft on.
+  const repo = describeRepo(readRepoContext(facts?.repo)).trim()
+  if (repo) lines.push(repo)
+
+  if (facts && typeof facts.private === "boolean") {
+    // Said out loud because the writer is about to be told to prefer the
+    // specific detail. On a private repository the only thing already public is
+    // what the description itself says, and the model has to know which case
+    // it is in before it decides how much to name.
+    lines.push(
+      facts.private
+        ? `The repository is private. Nothing about it is public except what the material below already says.`
+        : `The repository is public.`
+    )
+  }
+
+  // Bounded again on the way out, not only on the way in. The value stored was
+  // one line of at most `MAX_FOR_USER_CHARS`; this is a jsonb column, and the
+  // cost of proving that twice is one `replace`.
+  const forUser =
+    typeof row.forUser === "string"
+      ? row.forUser.replace(/\s+/g, " ").trim().slice(0, MAX_FOR_USER_CHARS)
+      : ""
+  if (forUser) lines.push(`What changed for a user: ${forUser}`)
+
+  return lines.join("\n")
+}
+
+/**
+ * The three beats off `riff.context`, or three empty strings.
+ *
+ * Beside `describeMaterial` rather than inside it, because the two say
+ * different kinds of thing to the writer and land in different parts of the
+ * prompt: `about` is what the material is about, and this is the order the post
+ * goes in. Folding the beats into the "About the material" block would turn a
+ * form into three more facts, which is precisely the reading that produced a
+ * paragraph instead of three lines.
+ *
+ * Narrowed field by field for the reason `describeMaterial` gives at length:
+ * this is jsonb, every riff written before 2026-08-25 has no `beats` key, and a
+ * voice note will never have one. `readShippedBeats` answers all three cases
+ * with `NO_BEATS`, and `describeBeats` prints nothing for that.
+ */
+function readMaterialBeats(context: unknown): ShippedBeats {
+  if (!context || typeof context !== "object") return readShippedBeats(null)
+
+  return readShippedBeats((context as Record<string, unknown>).beats)
 }
 
 /**
@@ -356,6 +454,26 @@ export async function draftAngle(input: {
         ? angle.why || angle.hook
         : angle.scrap || angle.why || angle.hook,
       sourceLabel: angle.sourceLabel,
+      /**
+       * The other half of the same fix as `scrapOrIdea` above.
+       *
+       * That one gave the writer the pull request description; this gives it
+       * the product the description assumes. Empty for every riff that has no
+       * context — a voice note says what it is about, so there is nothing to
+       * add and nothing is added.
+       */
+      about: describeMaterial(angle.context),
+      /**
+       * The order the post goes in, when the material is a merge.
+       *
+       * `about` and `scrapOrIdea` between them gave the writer the product and
+       * the description, and the drafts that came back were still one
+       * paragraph with the pull request as the subject. This is the third
+       * thing: what he did, what happened, what it meant — his own form, off
+       * `riff.context`. Empty for a voice note and for every riff written
+       * before the beats existed, and empty prints nothing.
+       */
+      beats: readMaterialBeats(angle.context),
       channels: targets,
       brain,
       recent,

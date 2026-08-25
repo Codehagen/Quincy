@@ -223,7 +223,17 @@ async function publishableShapes(userId: string): Promise<Angle["shape"][]> {
  */
 async function angleContext(userId: string) {
   const [brain, shapes, kinds] = await Promise.all([
-    renderBrainForUser(userId),
+    /**
+     * Stories in full, because none of the generators this feeds has tools.
+     *
+     * The default index form renders four story titles and then instructs the
+     * model to "call the story tool" before citing anything from one — and
+     * there is no such tool in a single `generateObject`. Voice, meeting and
+     * shipped angles are all that shape, so the correction belongs here rather
+     * than at three call sites. `generateDraft` already passes this; see the
+     * note on `renderBrain` for what the index form did to it.
+     */
+    renderBrainForUser(userId, { stories: "full" }),
     publishableShapes(userId),
     recentKinds(userId).catch((cause) => {
       console.error("[riffs] could not read recent kinds:", cause)
@@ -844,7 +854,20 @@ export function shippedRiffId(sourceItemId: string): string {
  */
 export async function startShippedRiff(
   userId: string,
-  sourceItemId: string
+  sourceItemId: string,
+  /**
+   * What the writer will need and the scrap does not carry — see
+   * `riff.context`. Optional so a caller with nothing to say writes `{}`
+   * rather than inventing a shape, which is also what every riff created
+   * before this column existed has.
+   *
+   * Today that is `{ forUser, beats, facts }` from the shipped workflow. The
+   * signature stays `Record<string, unknown>` deliberately: every read of this
+   * column narrows field by field (`readShippedFacts`, `readShippedBeats`),
+   * because what a row holds is decided by the deploy that wrote it and not by
+   * the type on this parameter.
+   */
+  context: Record<string, unknown> = {}
 ): Promise<string> {
   const id = shippedRiffId(sourceItemId)
 
@@ -856,6 +879,11 @@ export async function startShippedRiff(
       scrap: "",
       sourceId: SHIPPED_SOURCE.id,
       sourceLabel: SHIPPED_SOURCE.label,
+      // The kind is in `sourceId`; this is the row. Written here rather than
+      // recovered later, because the workflow is the only place that still
+      // knows which `source_item` this riff came out of.
+      sourceItemId,
+      context,
       state: "working",
       startedAt: new Date(),
     })
@@ -1135,15 +1163,25 @@ export const RIFF_STUCK_AFTER_MS = 4 * 60 * 1000
  * to put a reason on it.
  *
  * **Spoken, not voice.** Renamed from `completeVoiceRiff` by plans/019, which
- * gave it a second caller: a passage selected out of a meeting transcript. Both
- * inputs are the user talking rather than writing, which is the property
- * `generateAnglesFromSaid` is built for — its rules are about false starts and
- * repetition, and they are as true of a call as of a walk. The old name would
- * have made the meeting workflow read like a mistake.
+ * gave it a second caller: a passage selected out of a meeting transcript.
+ * Those two are the user talking rather than writing, which is the property the
+ * default `generateAnglesFromSaid` is built for — its rules are about false
+ * starts and repetition, and they are as true of a call as of a walk. The old
+ * name would have made the meeting workflow read like a mistake.
  *
- * What the two callers do *not* share is how they got here. A voice note's
+ * **The third caller is not spoken, and it says so through `deps`.** A merged
+ * pull request description is prose the user wrote and revised before merging
+ * it, so plans/021's audit moved it onto `generateAnglesFromShipped`. Read as a
+ * transcript it goes wrong in a specific way: the rules tell the model to read
+ * through false starts to the thought underneath, and a deliberate sentence
+ * read as a stumble gets discarded. Nothing in this function changes for it — a
+ * closure that adds the merge's facts to what it is handed is still a
+ * `SaidAngleGenerator`, which is the whole point of the seam.
+ *
+ * What the callers do *not* share is how they got here. A voice note's
  * transcript is the whole recording; a meeting's is one passage lib/meetings.ts
- * already chose, out of an hour this function never sees.
+ * already chose, out of an hour this function never sees; a merge's is the
+ * blocks the selection kept, reassembled by code.
  */
 export type CompleteSpokenRiffResult =
   | { ok: true; angles: number; groundedIn: string }
@@ -1437,6 +1475,19 @@ export async function getOwnedAngle(userId: string, angleId: string) {
        * selected.
        */
       scrap: riff.scrap,
+      /**
+       * What the scrap is *about*, for the same reader — see `riff.context`.
+       *
+       * The scrap above fixed half of the drafting problem: the writer could
+       * finally see the pull request description. It still could not see what
+       * the product was, so a merge described in its own vocabulary produced a
+       * post that could have been about any repository. This column carries the
+       * sentence the selection wrote about what changed for a user, the
+       * repository's own description, and — since 2026-08-25 — the three beats
+       * of the event, which are what tell the writer the order the post goes
+       * in rather than only what it is about. See `ShippedBeats`.
+       */
+      context: riff.context,
       adaptedFromUrl: riff.adaptedFromUrl,
       adaptedFromHandle: riff.adaptedFromHandle,
     })

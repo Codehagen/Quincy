@@ -62,6 +62,23 @@ function headers(token: string) {
 async function getJson<T>(url: string, token: string): Promise<T | null> {
   try {
     const response = await fetch(url, { headers: headers(token) })
+
+    /**
+     * Every non-2xx is still a null, and two of them now say so out loud.
+     *
+     * A 403 or a 429 from GitHub is a rate limit or a revoked permission, and
+     * both look from the outside exactly like "this account has no merges" —
+     * the button reports nothing recent and there is nothing anywhere saying
+     * the request was refused. `retry-after` is logged with it because on a
+     * secondary rate limit it is the only thing that says how long.
+     */
+    if (response.status === 403 || response.status === 429) {
+      console.error(
+        `[github-backfill] ${url} answered ${response.status}` +
+          ` (retry-after: ${response.headers.get("retry-after") ?? "none"})`
+      )
+    }
+
     if (!response.ok) return null
     return (await response.json()) as T
   } catch (cause) {
@@ -73,11 +90,18 @@ async function getJson<T>(url: string, token: string): Promise<T | null> {
 }
 
 type RepoRow = { full_name?: string; pushed_at?: string; private?: boolean }
+/**
+ * `base` is on the list rows too, not only on the detail.
+ *
+ * Which is what makes the default-branch gate free here: it is read from a
+ * response already in hand rather than bought with a request per candidate.
+ */
 type PullRow = {
   number?: number
   merged_at?: string | null
   draft?: boolean
   user?: { login?: string }
+  base?: { ref?: string; repo?: { default_branch?: string } }
 }
 type PullDetail = {
   node_id?: string
@@ -149,7 +173,37 @@ async function installationRepos(token: string): Promise<RepoRow[]> {
  * line on the webhook, and for the same reason — drafting a post about a
  * colleague's work under your name is the one outcome this feature must never
  * produce.
+ *
+ * **The gate is mirrored here rather than called, and it used to be mirrored
+ * incompletely.** `shippedGate` takes a `ShippedPayload`, which is a webhook
+ * body; a list row is not one and is not worth fabricating a payload from
+ * twenty times per repository. So the filter below repeats the three checks
+ * that apply — merged, not a draft, authored by them — and for a while that was
+ * all it repeated. The fourth, *merged into the default branch*, was missing,
+ * which meant the one merge shown on install could be a stacked pull request
+ * landing in its parent feature branch: real work, and not a thing that
+ * shipped. Tolerant of a missing `default_branch` in exactly the way the gate
+ * is, because refusing on an absent field drops real merges to guard a case
+ * that has never occurred.
+ *
+ * Anything added to `shippedGate` has to be added here too. That duplication is
+ * the cost of the two shapes, and it is cheaper than the alternative — a gate
+ * with a second entry point taking half a payload.
  */
+/**
+ * `shippedGate`'s default-branch check, against a list row.
+ *
+ * True when both fields are absent, which is the same tolerance the gate has:
+ * a missing `default_branch` is GitHub not saying, and refusing on it would
+ * silently drop the merge this whole path exists to find.
+ */
+function intoDefaultBranch(pull: PullRow): boolean {
+  const ref = pull.base?.ref
+  const branch = pull.base?.repo?.default_branch
+
+  return !ref || !branch || ref === branch
+}
+
 export async function findLastMergedPull(input: {
   installationId: number
   /** The GitHub login whose work counts. Empty means we cannot attribute. */
@@ -177,7 +231,8 @@ export async function findLastMergedPull(input: {
         (p) =>
           p.merged_at &&
           !p.draft &&
-          p.user?.login?.toLowerCase() === input.login.toLowerCase()
+          p.user?.login?.toLowerCase() === input.login.toLowerCase() &&
+          intoDefaultBranch(p)
       )
       .sort((a, b) => (b.merged_at ?? "").localeCompare(a.merged_at ?? ""))[0]
 

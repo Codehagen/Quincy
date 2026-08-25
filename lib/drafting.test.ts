@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  buildUserPrompt,
+  describeBeats,
   describeConstraints,
   describeRecent,
   targetsFor,
@@ -144,5 +146,97 @@ describe("describeRecent", () => {
     expect(block).toContain("first post")
     expect(block).toContain("second post")
     expect(block.split("---").length - 1).toBe(3)
+  })
+})
+
+/**
+ * The three beats, and the one thing that decides whether they are printed at
+ * all: at least one of them has to exist.
+ *
+ * An empty block would be three labels with nothing after them, and "What it
+ * meant:" followed by a blank is an invitation to fill it in — which is the
+ * moral `TELLS` spends a bullet forbidding. See plans/026 decision 7.
+ */
+describe("describeBeats", () => {
+  const beats = {
+    did: "Switched from one model to a cheaper one.",
+    happened: "69x cheaper for the same job.",
+    learned: "It took an afternoon.",
+  }
+
+  it("is empty for a voice note, which has no beats", () => {
+    expect(describeBeats(undefined)).toBe("")
+    expect(describeBeats({ did: "", happened: "", learned: "" })).toBe("")
+    expect(describeBeats({ did: " ", happened: "", learned: "  " })).toBe("")
+  })
+
+  it("prints all three in order, with the form under them", () => {
+    const block = describeBeats(beats)
+
+    expect(block.indexOf("1. What you did")).toBeLessThan(
+      block.indexOf("2. What happened")
+    )
+    expect(block.indexOf("2. What happened")).toBeLessThan(
+      block.indexOf("3. What it meant")
+    )
+    expect(block).toContain("69x cheaper for the same job.")
+    expect(block).toContain("blank line between them")
+    expect(block).toContain("do not invent the missing one")
+  })
+
+  /**
+   * One beat is enough to print the block. A merge that only described a state
+   * has no "did", and the writer is told to write the two it has — which is a
+   * different instruction from being handed nothing.
+   */
+  it("prints the block when only one beat survived the quote check", () => {
+    const block = describeBeats({
+      did: "",
+      happened: "83/100 to 100/100.",
+      learned: "",
+    })
+
+    expect(block).toContain("83/100 to 100/100.")
+    expect(block).toContain("If a beat is empty")
+  })
+})
+
+describe("buildUserPrompt", () => {
+  const base = {
+    hook: "Switched models and the bill fell.",
+    shape: "Short post" as const,
+    scrapOrIdea: "The pull request body, in full.",
+    sourceLabel: "Pull request",
+    channels: targetsFor("Short post", ["x"]),
+  }
+
+  it("carries no beats block for a riff that has none", () => {
+    const prompt = buildUserPrompt(base)
+
+    expect(prompt).toContain("Material:")
+    expect(prompt).not.toContain("The three beats")
+  })
+
+  /**
+   * After the material and before the constraints. The beats are a reading of
+   * the description, so putting them above it would make the user's own words
+   * look like supporting detail for a summary somebody else wrote.
+   */
+  it("puts the beats between the material and the channel constraints", () => {
+    const prompt = buildUserPrompt({
+      ...base,
+      beats: {
+        did: "Switched from one model to a cheaper one.",
+        happened: "69x cheaper for the same job.",
+        learned: "",
+      },
+    })
+
+    expect(prompt.indexOf("Material:")).toBeLessThan(
+      prompt.indexOf("The three beats")
+    )
+    expect(prompt.indexOf("The three beats")).toBeLessThan(
+      prompt.indexOf("Write one post for each of these channels")
+    )
   })
 })

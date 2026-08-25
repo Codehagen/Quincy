@@ -959,6 +959,37 @@ export const riff = pgTable(
     sourceId: text("source_id").notNull().default(""),
     sourceLabel: text("source_label").notNull().default(""),
     /**
+     * The delivery this riff came out of, when there was one. See plans/026.
+     *
+     * `sourceId` beside it holds the *kind* — "github" — which is what the card
+     * renders and what nothing can be joined on. This is the `source_item` row,
+     * so a riff can be traced back to the merge that made it and the merge's
+     * own numbers can be read again without the workflow having to carry them
+     * forward a second time. Empty for a riff somebody typed or pasted; there
+     * is no row upstream of those.
+     */
+    sourceItemId: text("source_item_id").notNull().default(""),
+    /**
+     * What the writer should know about the material that is not the material.
+     *
+     * `scrap` is what was said. This is what it was said *about* — for a merge,
+     * `{ forUser, facts }`: the sentence the selection wrote about what changed
+     * for a user of the product, plus the repository's description, homepage
+     * and topics and the merge's own counts. Twelve angles from four merges
+     * produced zero drafts on 2026-08-24, and part of the reason is that
+     * `generateDraft` had never been told what the product *is*: it saw a hook,
+     * a pull request description and a brain, and wrote around the subject.
+     *
+     * Never parsed for logic beyond reading strings out of it — the same
+     * contract `source_item.meta` carries, and it matters more here because
+     * this is prompt input. A shape that changes upstream has to degrade to a
+     * shorter prompt, never to a throw on a page somebody is watching.
+     */
+    context: jsonb("context")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    /**
      * Whose post this came out of, when it came out of somebody else's.
      *
      * The same pair `draft` carries, and carried here too rather than only

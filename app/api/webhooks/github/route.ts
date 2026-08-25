@@ -5,6 +5,7 @@ import { start } from "workflow/api"
 import { db } from "@/lib/db"
 import { isEntitled, resolveEntitlement } from "@/lib/entitlement"
 import { isGithubAppConfigured, verifyGithubSignature } from "@/lib/github-app"
+import { repoContextFor } from "@/lib/github-repo"
 import { user } from "@/lib/schema"
 import { sourceItem } from "@/lib/schema-app"
 import {
@@ -21,6 +22,7 @@ import {
   descriptionBlocks,
   MAX_DESCRIPTION_CHARS,
   parseShippedPayload,
+  shippedFacts,
   shippedGate,
 } from "@/lib/shipped-work"
 import { runShippedRiffWorkflow } from "@/workflows/run-shipped-riff"
@@ -435,6 +437,44 @@ export async function POST(request: Request) {
   }
 
   /**
+   * What the repository says about itself, fetched once and carried from here.
+   *
+   * A pull request description is written for somebody who already has the
+   * repository open — it names files and assumes the product — and both the
+   * angle prompt and the writer downstream were guessing at what that product
+   * was. The description, homepage and topics are the cheapest honest answer.
+   *
+   * **Below every refusal above it, which is the whole placement argument.**
+   * `repoContextFor` is cached per repository for seven days, so on the happy
+   * path it costs one request a week — but a repository whose metadata read
+   * *fails* caches nothing, and up here that would have been one wasted GitHub
+   * request on every redelivery, every merge of an unentitled or paused
+   * account, and every merge over the daily ceiling. Those are exactly the
+   * paths the branches above exist to keep free. Down here the fetch is bounded
+   * by `MAX_MERGES_PER_DAY` and is the cheapest thing on a path that is about
+   * to buy a model call. It is also where the backfill in
+   * app/(app)/sources/actions.ts already put it, so the two paths agree.
+   *
+   * Not written to `source_item.meta`. The row is the merge; this is a fact
+   * about the repository around it, it changes on its own schedule, and the
+   * reader that needs it — the draft, days later — takes it off `riff.context`.
+   *
+   * **It may never block the workflow.** `repoContextFor` does not throw, and
+   * this is belt to those braces: a GitHub outage, a revoked token or a
+   * repository the installation can no longer see all resolve to `null`, and
+   * `describeRepo(null)` is "". The merge is the fact; this is decoration on it.
+   */
+  const repo = await repoContextFor({
+    connectionId: connection.id,
+    installationId: meta.installationId,
+    repository: payload.repository,
+    meta: connection.meta,
+  }).catch((cause) => {
+    console.error("[github] could not read repository context:", cause)
+    return null
+  })
+
+  /**
    * No riff yet, and no id to return.
    *
    * The workflow creates it, and only if the selection finds something. See
@@ -446,7 +486,7 @@ export async function POST(request: Request) {
       {
         userId: owner.id,
         sourceItemId,
-        repository: payload.repository,
+        facts: shippedFacts(payload, repo),
         blocks,
       },
     ])

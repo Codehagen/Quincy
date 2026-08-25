@@ -9,9 +9,11 @@ import {
   findLastMergedPull,
   storeBackfilledMerge,
 } from "@/lib/github-backfill"
+import { repoContextFor } from "@/lib/github-repo"
 import { getSession } from "@/lib/session"
 import { readShippedOutcome } from "@/lib/riffs"
 import { sayOutcome, type ShippedOutcome } from "@/lib/shipped-outcome"
+import { shippedFacts } from "@/lib/shipped-work"
 import {
   connectSource,
   disconnectSource,
@@ -515,12 +517,37 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
     }
   }
 
+  /**
+   * What the repository says about itself, read here rather than inside
+   * `storeBackfilledMerge`.
+   *
+   * The webhook puts the same object on `source_item.meta` because the webhook
+   * owns that insert; this path does not, and duplicating the write through a
+   * second argument would give one row two authors. What both paths *do* share
+   * is that the workflow needs it, so it goes into the payload.
+   *
+   * **It may never cost the user their riff.** `repoContextFor` does not throw
+   * and this catch is belt to those braces: a merge with no repository context
+   * is a merge that still becomes a riff, one written by a model that has to
+   * guess at the product. That is the behaviour this whole change improves on,
+   * not a regression from it.
+   */
+  const repo = await repoContextFor({
+    connectionId: connection.id,
+    installationId: meta.installationId,
+    repository: found.payload.repository,
+    meta: connection.meta,
+  }).catch((cause) => {
+    console.error("[sources] could not read repository context:", cause)
+    return null
+  })
+
   try {
     await start(runShippedRiffWorkflow, [
       {
         userId: session.user.id,
         sourceItemId: stored.sourceItemId,
-        repository: found.repository,
+        facts: shippedFacts(found.payload, repo),
         blocks: stored.blocks,
       },
     ])
