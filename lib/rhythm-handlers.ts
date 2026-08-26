@@ -1,12 +1,29 @@
-import { and, eq, notInArray, sql } from "drizzle-orm"
+import { createIdGenerator } from "ai"
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm"
 
-import { ADAPT_MODEL, selectAdaptable, type Selector } from "./adapt"
+import {
+  ADAPT_MODEL,
+  selectAdaptable,
+  type AngleGenerator,
+  type Selector,
+} from "./adapt"
 import { createAdaptedDraft, type AdaptDraftDeps } from "./adapt-draft"
 import { importXBookmarks } from "./bookmarks-x"
-import { renderBrainForUser } from "./brain"
+import { renderBrainForUser, renderStandingBrain } from "./brain"
 import { importXCorpus } from "./corpus-x"
 import { db } from "./db"
-import { draft, sourceItem } from "./schema-app"
+import { createRiffFromPost } from "./riffs"
+import { draft, riff, sourceItem } from "./schema-app"
+import {
+  ORIGIN_LABEL,
+  readSignalMaterial,
+  readSignals,
+  selectSignals,
+  SIGNAL_MODEL,
+  SIGNAL_ORIGINS,
+  type SignalOrigin,
+  type SignalSelector,
+} from "./signals"
 import { recordUsage } from "./usage"
 import { compileVoice } from "./voice"
 
@@ -43,12 +60,20 @@ export type RhythmHandlerResult = {
 export type RhythmHandlerDeps = {
   adapt?: AdaptDraftDeps["adapt"]
   select?: Selector
+  /** Trend Alerts' two model calls, injectable for the same reason the two
+   *  above are: a test of a handler should not need a gateway. */
+  selectSignals?: SignalSelector
+  angles?: AngleGenerator
 }
 
 export type RhythmHandler = (input: {
   userId: string
   deps?: RhythmHandlerDeps
 }) => Promise<RhythmHandlerResult>
+
+/** Matches `newItemId` in lib/corpus-x.ts and lib/bookmarks-x.ts: every
+ *  `source_item` row carries an `si` id whatever wrote it. */
+const newSignalItemId = createIdGenerator({ prefix: "si", size: 16 })
 
 /**
  * How many bookmarks one run turns into drafts.
@@ -221,6 +246,187 @@ export const refreshVoice: RhythmHandler = async ({ userId }) => {
 }
 
 /**
+ * How many topics one run turns into riffs.
+ *
+ * Two, where Bookmarks allows three, and the difference is who chose the
+ * material. A bookmark is something the user already stopped and saved; a
+ * signal is something Quincy went and found, so the case for it being worth a
+ * morning is weaker and the cost of being wrong is a card that teaches the
+ * user to ignore the surface. `selectSignals` is told to return fewer, and
+ * usually should.
+ */
+const ANGLES_PER_RUN = 2
+
+/**
+ * How many stored signals the selection prompt reads.
+ *
+ * Bounded like `CANDIDATE_WINDOW` above, and the ceiling matters less because
+ * the readers are already bounded at `HN_LIMIT + GITHUB_LIMIT`. What this
+ * actually bounds is the backlog: a rhythm switched on after a week away has
+ * a week of unriffed rows behind it, and the prompt should see this morning's
+ * fifty rather than last Tuesday's three hundred.
+ */
+const SIGNAL_WINDOW = 50
+
+/**
+ * Trend Alerts.
+ *
+ * Read, select, riff — the same three steps as Bookmarks, with the judgment
+ * doing more work. A bookmark arrived with a human's implicit endorsement;
+ * these fifty arrived because the internet was loud, and `selectSignals` is
+ * the only thing standing between "a topic is trending" and a card in the
+ * user's morning. Its prompt names refusal as the common answer for that
+ * reason.
+ *
+ * It makes riffs rather than drafts, unlike Bookmarks. The promise is that
+ * Quincy hands you *the angle* early — a riff is one scrap plus the angles
+ * Quincy sees in it, which is exactly that, and it leaves the decision where
+ * it belongs. A finished draft about a topic the user has not decided to
+ * enter is a paragraph of somebody else's news in their voice.
+ *
+ * Nothing here is charged for a read. Both origins are free, so the only spend
+ * is the selection call plus one angle generation per pick — and the angle
+ * generations only happen for material that survived the selection.
+ */
+export const trendAlerts: RhythmHandler = async ({ userId, deps }) => {
+  const signals = await readSignals()
+
+  if (signals.length > 0) {
+    try {
+      await db
+        .insert(sourceItem)
+        .values(
+          signals.map((signal) => ({
+            id: newSignalItemId(),
+            userId,
+            source: signal.origin,
+            externalId: signal.externalId,
+            url: signal.url,
+            postedAt: signal.postedAt,
+            // The title and whatever one-line description the origin gave.
+            // **Not** the discussion or the README: those are fetched per pick
+            // in `readSignalMaterial`, and storing them for all fifty would
+            // buy fifty round trips to keep material nobody will read.
+            body: [signal.title, signal.blurb].filter(Boolean).join("\n\n"),
+            meta: { ...signal.meta, heat: signal.heat, handle: signal.handle },
+          }))
+        )
+        // Re-reading the same story tomorrow is the normal case, not an error.
+        .onConflictDoNothing()
+    } catch (cause) {
+      // The read cost nothing, so this is recoverable by simply running again.
+      console.error("[rhythm] could not store signals:", cause)
+      throw new Error("Quincy could not store what it read. Try again shortly.")
+    }
+  }
+
+  const candidates = await unriffedSignals(userId, SIGNAL_WINDOW)
+
+  if (candidates.length === 0) {
+    // Both origins empty *and* nothing left over is the only way here. Worth
+    // saying plainly rather than as a zero: it usually means both APIs were
+    // unreachable, which is a different fact from "nothing qualified".
+    return { summary: "Nothing new came back from Hacker News or GitHub." }
+  }
+
+  // Standing, not voice — see `renderStandingBrain`. The angles are written
+  // later by `createRiffFromPost`, which reads the whole brain because writing
+  // is what it is for; this call only decides which topics get that far.
+  const brain = await renderStandingBrain(userId)
+  const select = deps?.selectSignals ?? selectSignals
+
+  const selection = await select({
+    candidates: candidates.map((c) => ({
+      id: c.id,
+      origin: c.origin,
+      text: c.body,
+      heat: c.heat,
+    })),
+    brain,
+    limit: ANGLES_PER_RUN,
+  })
+
+  // Metered here rather than inside lib/signals.ts, matching every other model
+  // call site: this is the layer that knows the userId. The call already
+  // happened, so a bookkeeping failure logs and is dropped.
+  if (selection.usage) {
+    try {
+      await recordUsage({
+        userId,
+        model: SIGNAL_MODEL,
+        inputTokens: selection.usage.inputTokens,
+        cachedInputTokens: selection.usage.cachedInputTokens,
+        outputTokens: selection.usage.outputTokens,
+      })
+    } catch (cause) {
+      console.error("[rhythm] could not record selection usage:", cause)
+    }
+  }
+
+  if (selection.picks.length === 0) {
+    /**
+     * The expected outcome most days, and the summary says so without
+     * apologising. "Nothing qualified" reads as a broken rhythm; naming the
+     * bar it failed is what makes a run of empty days legible rather than
+     * worrying.
+     */
+    return {
+      summary: `Read ${candidates.length} topic${candidates.length === 1 ? "" : "s"}, none you have standing on.`,
+    }
+  }
+
+  const byId = new Map(candidates.map((c) => [c.id, c]))
+  let written = 0
+  const failures: string[] = []
+
+  for (const pick of selection.picks) {
+    const candidate = byId.get(pick.id)
+    if (!candidate) continue
+
+    // Sequential for the reason `bookmarksToPosts` is: each iteration is a
+    // model call, and the dispatcher's time budget is what bounds the whole.
+    try {
+      const material = await readSignalMaterial({
+        origin: candidate.origin,
+        externalId: candidate.externalId,
+        stored: candidate.body,
+      })
+
+      const result = await createRiffFromPost({
+        userId,
+        source: {
+          body: material,
+          handle: candidate.handle,
+          url: candidate.url,
+        },
+        note: pick.why,
+        sourceId: candidate.origin,
+        sourceLabel: ORIGIN_LABEL[candidate.origin],
+        ...(deps?.angles ? { deps: { angles: deps.angles } } : {}),
+      })
+
+      if (result.ok && !result.existing) written += 1
+      if (!result.ok) failures.push(result.message)
+    } catch (cause) {
+      console.error("[rhythm] signal riff failed:", cause)
+      failures.push("one angle could not be written")
+    }
+  }
+
+  if (written === 0) {
+    throw new Error(
+      failures[0] ?? "Quincy found nothing worth an angle in today's topics."
+    )
+  }
+
+  const suffix = failures.length > 0 ? ` (${failures.length} failed)` : ""
+
+  return {
+    summary: `${written} angle${written === 1 ? "" : "s"} waiting from today's discussion${suffix}.`,
+  }
+}
+
+/**
  * Which rhythms actually do something.
  *
  * Keyed by the `id` in lib/rhythms.ts. Adding a rhythm to the catalogue does
@@ -229,6 +435,7 @@ export const refreshVoice: RhythmHandler = async ({ userId }) => {
 export const RHYTHM_HANDLERS: Record<string, RhythmHandler> = {
   "bookmarks-to-posts": bookmarksToPosts,
   "voice-refresh": refreshVoice,
+  "trend-alerts": trendAlerts,
 }
 
 export function hasHandler(rhythmId: string): boolean {
@@ -285,6 +492,79 @@ async function unadaptedBookmarks(
     id: row.id,
     body: row.body,
     url: row.url,
+    handle: typeof row.meta?.handle === "string" ? row.meta.handle : "",
+  }))
+}
+
+/**
+ * Signals this user has stored and not yet turned into a riff.
+ *
+ * The same two-query shape as `unadaptedBookmarks` above, reading `riff`
+ * rather than `draft` because that is what Trend Alerts leaves behind. Without
+ * it the selection prompt would be shown the same story every morning for as
+ * long as it stayed inside the window, and would keep picking it — a model
+ * asked twice about the same material gives the same answer.
+ *
+ * `createRiffFromPost` also deduplicates on the URL, so a race here costs a
+ * wasted selection rather than a duplicate riff. This is what stops the
+ * selection being wasted in the first place.
+ */
+async function unriffedSignals(
+  userId: string,
+  limit: number
+): Promise<
+  {
+    id: string
+    origin: SignalOrigin
+    externalId: string
+    url: string
+    body: string
+    heat: string
+    handle: string
+  }[]
+> {
+  const riffed = await db
+    .select({ url: riff.adaptedFromUrl })
+    .from(riff)
+    .where(and(eq(riff.userId, userId), sql`${riff.adaptedFromUrl} <> ''`))
+
+  const used = riffed.map((row) => row.url)
+
+  const mine = and(
+    eq(sourceItem.userId, userId),
+    inArray(sourceItem.source, [...SIGNAL_ORIGINS])
+  )
+
+  const rows = await db
+    .select({
+      id: sourceItem.id,
+      source: sourceItem.source,
+      externalId: sourceItem.externalId,
+      url: sourceItem.url,
+      body: sourceItem.body,
+      meta: sourceItem.meta,
+    })
+    .from(sourceItem)
+    .where(
+      used.length > 0 ? and(mine, notInArray(sourceItem.url, used)) : mine
+    )
+    // NULLS LAST rather than Postgres's default NULLS FIRST for DESC, the same
+    // correction `unadaptedBookmarks` makes: an undated row must not win the
+    // newest-N window ahead of rows that have a date.
+    .orderBy(sql`${sourceItem.postedAt} desc nulls last`)
+    .limit(limit)
+
+  return rows.map((row) => ({
+    id: row.id,
+    // Narrowed by the `inArray` above; the column's type is the whole enum.
+    origin: row.source as SignalOrigin,
+    externalId: row.externalId,
+    url: row.url,
+    body: row.body,
+    // Strings read out of `meta`, never parsed for logic — the contract the
+    // column carries everywhere else. Both degrade to empty rather than throw,
+    // because a row written by an older version of the reader is not a bug.
+    heat: typeof row.meta?.heat === "string" ? row.meta.heat : "",
     handle: typeof row.meta?.handle === "string" ? row.meta.handle : "",
   }))
 }

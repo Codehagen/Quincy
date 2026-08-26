@@ -77,6 +77,12 @@ In short:
 - **The GitHub App** (Shipped Work) — do not fill these in by hand. Deploy
   without them, sign in, and open `/api/connect/github/app`; GitHub's
   manifest flow creates the app and hands back the values.
+- **`GITHUB_TOKEN`** (Trend Alerts) — any read-only personal access token.
+  Optional and unrelated to the GitHub App above: it raises the rate limit on
+  the public repository search. Without it the search runs unauthenticated at
+  ten requests a minute per IP, which is fine for one user and not for a
+  shared address — Trend Alerts then falls back to Hacker News alone, which
+  needs no key at all.
 - **X and LinkedIn** — OAuth apps for publishing channels.
 - **Stripe** — billing, via the Better Auth Stripe plugin.
 - **AI gateway** — model access for drafting.

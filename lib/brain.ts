@@ -619,3 +619,31 @@ export async function renderBrainForUser(
 ) {
   return renderBrain(await getBrain(userId), options)
 }
+
+/**
+ * The brain for a caller deciding **what this person may speak to**, rather
+ * than how they write.
+ *
+ * Voice pages are dropped, and that is the point. They are the bulk of a
+ * compiled brain — on the first live run of Trend Alerts, roughly three
+ * quarters of 6,000 characters — and none of it bears on standing: an emoji
+ * frequency and a median post length say nothing about what somebody has
+ * built. Two things go wrong when they are included anyway. The prompt pays
+ * for them, and worse, they are written in the imperative, so a model asked
+ * for one line of reasoning starts obeying instructions about openers and
+ * sign-offs in a field that is not a post.
+ *
+ * `stories: "full"` for the reason `renderBrain`'s own comment gives about
+ * `generateDraft`: the index names stories as the evidence and tells the model
+ * to call a story tool that does not exist. A selector with no tools must be
+ * given the stories themselves — and standing is precisely what a story
+ * records, so this is the section that decides the answer.
+ */
+export async function renderStandingBrain(userId: string): Promise<string> {
+  const pages = await getBrain(userId)
+
+  return renderBrain(
+    pages.filter((page) => page.kind !== "voice"),
+    { stories: "full" }
+  )
+}

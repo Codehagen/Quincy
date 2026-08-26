@@ -716,6 +716,29 @@ export const SOURCE_ITEM_SOURCES = [
    * bank through the front door docs/brain.md already describes.
    */
   "github",
+  /**
+   * What the world is loud about today, from the two origins that do not
+   * charge for a read. See lib/signals.ts.
+   *
+   * These are the first sources here that nobody handed over: every value
+   * above is material belonging to the user — their posts, their calls, their
+   * merges, their bookmarks. These are public, they are the same rows for
+   * every user who runs Trend Alerts on the same morning, and they are stored
+   * per user anyway because the unique index is (user, source, external_id)
+   * and a shared table would make "has this user already seen it" a join
+   * against something that does not exist.
+   *
+   * Same two rules as `x-bookmark`, and both matter more here because nobody
+   * chose this material. `compileVoice` must never read them — its `sources`
+   * parameter defaults to the user's own posts, and that default is the guard.
+   * And `proof` may not be cited from either: a stranger's benchmark is their
+   * receipt, not yours.
+   *
+   * Two values rather than one "signal" so a story id and a repository name
+   * cannot collide inside one external-id namespace.
+   */
+  "hacker-news",
+  "github-repo",
 ] as const
 
 export type SourceItemSource = (typeof SOURCE_ITEM_SOURCES)[number]

@@ -104,6 +104,23 @@ const CAPABILITIES: Capability[] = [
     vars: ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_WEBHOOK_SECRET"],
     without: "the GitHub webhook answers 503 and merged pull requests never arrive",
   },
+  /**
+   * The only capability here that still works without its variable, which is
+   * why `without` describes a rate limit rather than a dead feature.
+   *
+   * GitHub's search API allows ten requests a minute per IP unauthenticated
+   * and far more with a token. One self-hosted user never notices; a
+   * deployment with several users behind shared serverless egress will, and
+   * the symptom is Trend Alerts quietly reporting Hacker News alone — a
+   * degradation with no error attached, which is exactly the kind this file
+   * exists to name before somebody has to diagnose it.
+   */
+  {
+    name: "GitHub in Trend Alerts",
+    vars: ["GITHUB_TOKEN"],
+    without:
+      "the repository scan runs unauthenticated at ten searches a minute per IP, so on a shared address Trend Alerts falls back to Hacker News alone",
+  },
   {
     name: "Waitlist IP cooldown",
     vars: ["WAITLIST_IP_SALT"],

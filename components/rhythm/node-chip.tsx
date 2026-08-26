@@ -4,9 +4,11 @@ import {
   Calendar03Icon,
   ChartLineData01Icon,
   ConversationIcon,
+  Idea01Icon,
   Image01Icon,
   Message01Icon,
   Mic01Icon,
+  NewsIcon,
   QuillWrite01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
@@ -36,7 +38,12 @@ const NODE_ICON: Record<string, IconSvgElement> = {
   granola: Message01Icon,
   notes: Image01Icon,
   voice: Mic01Icon,
+  // Hacker News has a wordmark rather than a symbol, and a two-letter "Y" in a
+  // 13px chip reads as noise. It takes an icon from the set for the same
+  // reason Quincy's own surfaces do — see components/channels/platform-mark.
+  hackernews: NewsIcon,
   drafts: QuillWrite01Icon,
+  riffs: Idea01Icon,
   lineup: Calendar03Icon,
   chat: Message01Icon,
   brain: Brain02Icon,

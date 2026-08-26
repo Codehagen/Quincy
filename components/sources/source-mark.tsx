@@ -3,6 +3,7 @@ import {
   Image01Icon,
   Mail01Icon,
   Mic01Icon,
+  NewsIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
@@ -45,6 +46,10 @@ const SOURCE_ICON: Record<string, IconSvgElement> = {
   voice: Mic01Icon,
   email: Mail01Icon,
   photos: Image01Icon,
+  // Hacker News has a wordmark rather than a symbol, and a "Y" in a 16px tile
+  // is not one. The same glyph components/rhythm/node-chip.tsx gives the node,
+  // because the two chips describe the same thing on different pages.
+  "hacker-news": NewsIcon,
 }
 
 /**
@@ -56,6 +61,11 @@ const SOURCE_ICON: Record<string, IconSvgElement> = {
  */
 const SOURCE_MARK: Record<string, string> = {
   calendar: "googlecalendar",
+  // A riff from Trend Alerts carries the `source_item.source` value, which
+  // distinguishes a public repository from your own merges. On screen they are
+  // both GitHub and take the one mark — the difference is a fact about where
+  // the row came from, not about whose logo it is.
+  "github-repo": "github",
 }
 
 export function SourceMark({

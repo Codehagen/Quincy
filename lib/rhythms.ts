@@ -27,13 +27,13 @@ import {
  * "GitHub to X" and "Substack to X" are one rhythm with a different FROM, and
  * filing them under X hides that. Platform is a filter, not a taxonomy.
  *
- * **Three run today**, and only one of them the way it used to. `heartbeat` is
+ * **Four run today**, and only one of them the way it used to. `heartbeat` is
  * the weekly memory compile in lib/heartbeat.ts, scheduled system-wide from
  * vercel.json and switched on for everyone — it is maintenance, not something
- * you choose, which is why its card stays checked and disabled. The other two
- * — `bookmarks-to-posts` and `voice-refresh` — are subscriptions: a row in
- * `rhythm_subscription` with a time the user picked, fired by
- * lib/rhythm-run.ts. See plans/016.
+ * you choose, which is why its card stays checked and disabled. The other three
+ * — `bookmarks-to-posts`, `voice-refresh` and `trend-alerts` — are
+ * subscriptions: a row in `rhythm_subscription` with a time the user picked,
+ * fired by lib/rhythm-run.ts. See plans/016.
  *
  * Everything else is still listed with `available: false` and rendered inert,
  * because a catalogue you can read beats a page that pretends the product is
@@ -68,18 +68,43 @@ export type Node =
   | "circleback"
   | "notes"
   | "voice"
+  /**
+   * Public, and the first node here that nobody connects.
+   *
+   * Every other source node names something a user has to go and authorise —
+   * which is what makes the catalogue's rule ("a node has to name a thing you
+   * can go and connect") work. Hacker News has no account, no key and no
+   * grant, so the diagram draws a real edge to a thing that is simply always
+   * available. GitHub keeps the node it already had: Shipped Work reads your
+   * merges through it, Trend Alerts reads public repositories, and both are
+   * GitHub — a rhythm's `how` says which.
+   */
+  | "hackernews"
   | "drafts"
+  | "riffs"
   | "lineup"
   | "chat"
   | "brain"
   | "numbers"
 
-export type Makes = "brief" | "drafts" | "repost" | "alert" | "report" | "list"
+export type Makes =
+  | "brief"
+  | "drafts"
+  | "riffs"
+  | "repost"
+  | "alert"
+  | "report"
+  | "list"
 
 /** What the rhythm leaves behind, in words. An enum value is not copy. */
 export const MAKES_LABEL: Record<Makes, string> = {
   brief: "A briefing",
   drafts: "Drafts",
+  // Distinct from `drafts`, and the distinction is the product: a draft is
+  // writing waiting for approval, an angle is a direction waiting for a
+  // decision. A rhythm that reads somebody else's material should leave the
+  // second, because the first has already decided you are entering the topic.
+  riffs: "Angles",
   repost: "A repost",
   alert: "A heads-up",
   report: "A write-up",
@@ -430,16 +455,42 @@ export const RHYTHMS: Rhythm[] = [
     available: false,
   },
   {
+    /**
+     * Runs. lib/rhythm-handlers.ts:trendAlerts — read, select, riff.
+     *
+     * Three fields changed when the machinery landed, and each is a decision
+     * rather than a correction:
+     *
+     * **`from` is no longer X.** X removed its free tier in February 2026 and
+     * every post read is bought at `X_READ_COST_MICROS`. A trend scan is only
+     * useful broad, and broad on X is roughly $45 a month against a $49 plan —
+     * the one agent whose economics simply refuse. Hacker News and GitHub cost
+     * nothing to read and Hacker News is *earlier*, which is what the promise
+     * is actually about. lib/signals.ts holds the full argument, including why
+     * Reddit is not here.
+     *
+     * **`trigger` is daily rather than every two hours.** A `Cadence` is a
+     * wall-clock hour and minute (lib/rhythm-schedule.ts), so "every 2h" was
+     * a label the dispatcher had no way to honour. Daily at 07:00 is the same
+     * time People Radar takes, and it matches the promise better than a
+     * two-hourly poll does: the angle wants reading with the morning, not
+     * twelve times between meetings.
+     *
+     * **It makes riffs, not an alert.** "Hands you the angle early" is a riff
+     * — one scrap plus the angles Quincy sees in it — and the decision stays
+     * yours. An alert to chat would be a notification about somebody else's
+     * news, which is a thing to feel behind on rather than a thing to write.
+     */
     id: "trend-alerts",
     name: "Trend Alerts",
     promise: "Spots a live topic you have standing to talk about",
-    how: "Quincy watches for a topic going up that you have actually earned the right to talk about.",
+    how: "Every morning Quincy reads what Hacker News and GitHub are loud about, keeps only the topics you have first-hand standing on, and leaves the angles you could take. Most days it keeps nothing, which is the honest answer.",
     family: "engage",
-    trigger: { kind: "clock", label: "every 2h" },
-    from: ["x"],
-    makes: "alert",
-    to: ["chat"],
-    available: false,
+    trigger: { kind: "clock", label: "daily 07:00" },
+    from: ["hackernews", "github"],
+    makes: "riffs",
+    to: ["riffs"],
+    available: true,
   },
 
   // ── Learn ──────────────────────────────────────────────────────────────
@@ -563,7 +614,9 @@ export const NODE_LABEL: Record<string, string> = {
   granola: "Granola",
   notes: "Photos",
   voice: "Voice",
+  hackernews: "Hacker News",
   drafts: "Drafts",
+  riffs: "Riffs",
   lineup: "Lineup",
   chat: "Studio",
   brain: "Brain",
@@ -641,6 +694,9 @@ export const DEFAULT_CADENCE: Record<
   // Sunday evening, after the week's posting is done and before the next one
   // starts, so the voice it compiles is the voice you just used.
   "voice-refresh": { hour: 20, minute: 0, weekday: 7 },
+  // Early, because the whole promise is "early". A discussion that broke
+  // overnight is still worth entering at seven and is an old thread by two.
+  "trend-alerts": { hour: 7, minute: 0, weekday: null },
 }
 
 /** What one card needs to render its switch, its time and its last receipt. */
