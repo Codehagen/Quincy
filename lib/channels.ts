@@ -503,6 +503,7 @@ export function toSafeConnection(row: Connection): SafeConnection {
     lastErrorAt: row.lastErrorAt,
     lastError: row.lastError,
     lastImportAt: row.lastImportAt,
+    lastMetricsAt: row.lastMetricsAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     scopes: row.scope ? row.scope.split(/[\s,]+/).filter(Boolean) : [],

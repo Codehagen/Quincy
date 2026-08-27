@@ -2,19 +2,37 @@ import { describe, expect, it } from "vitest"
 
 import {
   assembleDescription,
+  beatsIncomplete,
+  briefBlocks,
   buildShippedPrompt,
   describeFacts,
+  describeShippedMaterial,
   descriptionBlocks,
+  fillBeats,
+  isOpenQuestion,
+  linkedIssues,
+  MAX_BRIEF_CHARS,
+  MAX_COMMIT_MESSAGES,
   MAX_DESCRIPTION_CHARS,
+  MAX_LINKED_ISSUES,
+  MAX_MATERIAL_FILES,
+  MAX_PATCH_BYTES,
+  MAX_PATCH_SAMPLES,
   flattenBlocks,
   flattenMarkdown,
+  NO_BEATS,
   parseShippedPayload,
   quoteFromBlocks,
   readShippedBeats,
+  readShippedBrief,
   readShippedFacts,
+  readShippedMaterial,
+  readShippedQuestion,
   SELECTION_KEYS,
+  selectionBlocks,
   shippedFacts,
   shippedGate,
+  shippedQuestionText,
 } from "./shipped-work"
 import { unwrapStringifiedObject } from "./structured-output"
 
@@ -858,5 +876,455 @@ describe("SELECTION_KEYS", () => {
     expect(object.did).toBe("Switched models.")
     expect(object.happened).toBe("83/100 to 100/100.")
     expect(object.learned).toBe("It took an afternoon.")
+  })
+})
+
+/**
+ * Plan 027 phase 1a. The material is fetched over the network and stored in
+ * jsonb, so the two things worth testing without either are the *caps* and the
+ * *round trip* — a ceiling that only holds in the fetcher is a ceiling that a
+ * row written by an older deploy walks straight through.
+ */
+describe("readShippedMaterial", () => {
+  it("answers with nothing for a merge read before the material existed", () => {
+    expect(readShippedMaterial(undefined)).toEqual({
+      commits: [],
+      files: [],
+      issues: [],
+      samples: [],
+      truncated: [],
+    })
+    expect(readShippedMaterial({ repository: "a/b" }).commits).toEqual([])
+  })
+
+  it("round-trips what the fetcher stored", () => {
+    const stored = {
+      commits: ["Read the commits, not the diff", "Cap the patch sample"],
+      files: [{ path: "lib/shipped-work.ts", additions: 210, deletions: 12 }],
+      issues: [{ number: 282, title: "The riffs are thin" }],
+      samples: [
+        { path: "lib/shipped-work.ts", patch: "@@ -1 +1 @@\n+material" },
+      ],
+      truncated: ["files"],
+    }
+
+    expect(readShippedMaterial(stored)).toEqual(stored)
+  })
+
+  it("caps the commit list, so an older deploy's row cannot spend a prompt", () => {
+    const many = Array.from({ length: 60 }, (_, i) => `commit ${i}`)
+    const read = readShippedMaterial({ commits: many })
+
+    expect(read.commits).toHaveLength(MAX_COMMIT_MESSAGES)
+    expect(read.commits[0]).toBe("commit 0")
+  })
+
+  it("caps the file list and the issue list", () => {
+    const files = Array.from({ length: 120 }, (_, i) => ({
+      path: `lib/file-${i}.ts`,
+      additions: i,
+      deletions: 0,
+    }))
+    const issues = Array.from({ length: 12 }, (_, i) => ({
+      number: i + 1,
+      title: `issue ${i}`,
+    }))
+
+    const read = readShippedMaterial({ files, issues })
+
+    expect(read.files).toHaveLength(MAX_MATERIAL_FILES)
+    expect(read.issues).toHaveLength(MAX_LINKED_ISSUES)
+  })
+
+  /**
+   * The cap that matters most, because it is the one standing between this and
+   * the diff. It is a budget across every sample rather than a limit per file:
+   * three files at 6 KB each is 18 KB, which is the thing plans/021 decision 1
+   * refused.
+   */
+  it("spends the patch budget across the samples, not per file", () => {
+    const read = readShippedMaterial({
+      samples: [
+        { path: "a.ts", patch: "a".repeat(5_000) },
+        { path: "b.ts", patch: "b".repeat(5_000) },
+        { path: "c.ts", patch: "c".repeat(5_000) },
+      ],
+    })
+
+    const total = read.samples.reduce((n, s) => n + s.patch.length, 0)
+
+    expect(total).toBeLessThanOrEqual(MAX_PATCH_BYTES)
+    expect(read.samples.length).toBeLessThanOrEqual(MAX_PATCH_SAMPLES)
+  })
+
+  it("drops entries that are not what we wrote, rather than trusting jsonb", () => {
+    const read = readShippedMaterial({
+      commits: ["ok", 42, null, "  wrapped\n  subject  "],
+      files: [{ path: "", additions: 1 }, { additions: 2 }, "lib/x.ts"],
+      issues: [{ number: 0, title: "no number" }, { number: 7 }],
+      samples: [{ path: "a.ts" }, { patch: "no path" }],
+      truncated: ["files", "nonsense"],
+    })
+
+    expect(read.commits).toEqual(["ok", "wrapped subject"])
+    expect(read.files).toEqual([])
+    expect(read.issues).toEqual([])
+    expect(read.samples).toEqual([])
+    expect(read.truncated).toEqual(["files"])
+  })
+})
+
+/**
+ * The parse that decides which issue titles are worth a request each. Getting
+ * it wrong is not a crash — it is five GitHub requests per merge spent on
+ * colours, anchors and shortened shas.
+ */
+describe("linkedIssues", () => {
+  it("puts the closing references first, because those are the ones that shipped", () => {
+    const body = "Related to #99. Closes #12 and fixes #34."
+    expect(linkedIssues(body)).toEqual([12, 34, 99])
+  })
+
+  it("reads every closing keyword GitHub does", () => {
+    expect(linkedIssues("close #1 closed #2 fix #3")).toEqual([1, 2, 3])
+    expect(
+      linkedIssues("fixes #4 fixed #5 resolve #6 resolves #7 resolved #8")
+    ).toEqual([4, 5, 6, 7, 8])
+  })
+
+  it("ignores a hash that is part of something else", () => {
+    expect(linkedIssues("colour #ff0000, sha abc#1a2b, anchor #why")).toEqual(
+      []
+    )
+  })
+
+  it("drops the pull request's own number and any duplicate", () => {
+    expect(linkedIssues("Follows #23. See #23 and #24.", 23)).toEqual([24])
+  })
+
+  it("stops at the request budget", () => {
+    const body = Array.from({ length: 20 }, (_, i) => `#${i + 1}`).join(" ")
+    expect(linkedIssues(body)).toHaveLength(MAX_LINKED_ISSUES)
+  })
+})
+
+/**
+ * A list that stops at fifty and does not say so reads exactly like a change
+ * that touched fifty files. `truncated` is the whole point of the field, so
+ * what is asserted here is that it reaches the prompt as words.
+ */
+describe("describeShippedMaterial", () => {
+  it("says nothing when nothing was fetched", () => {
+    expect(describeShippedMaterial(readShippedMaterial(null))).toBe("")
+  })
+
+  it("names the counts and admits what was cut", () => {
+    const said = describeShippedMaterial(
+      readShippedMaterial({
+        commits: ["Cap the patch sample"],
+        files: [{ path: "lib/publish.ts", additions: 40, deletions: 3 }],
+        issues: [{ number: 282, title: "The riffs are thin" }],
+        truncated: ["commits", "files"],
+      })
+    )
+
+    expect(said).toContain("Cap the patch sample")
+    expect(said).toContain("lib/publish.ts (+40 −3)")
+    expect(said).toContain("#282: The riffs are thin")
+    expect(said).toContain("there were more")
+  })
+
+  it("labels the patch as a sample, so nothing describes it as the change", () => {
+    const said = describeShippedMaterial(
+      readShippedMaterial({
+        samples: [{ path: "lib/publish.ts", patch: "@@ -1 +1 @@\n+one" }],
+      })
+    )
+
+    expect(said).toContain("This is a sample and not the change")
+    expect(said).toContain('<patch file="lib/publish.ts">')
+  })
+})
+
+/**
+ * Plan 027 phase 1b. The brief is quoted by index like everything else, so its
+ * line structure is not formatting — it is the block boundary.
+ */
+describe("readShippedBrief and briefBlocks", () => {
+  it("keeps the lines and collapses everything else", () => {
+    expect(
+      readShippedBrief(
+        "  Voice notes\tare longer now.  \n\n\n  37% used to be lost. "
+      )
+    ).toBe("Voice notes are longer now.\n37% used to be lost.")
+  })
+
+  it("is empty for anything that is not a string", () => {
+    expect(readShippedBrief(undefined)).toBe("")
+    expect(readShippedBrief(42)).toBe("")
+    expect(readShippedBrief({ brief: "x" })).toBe("")
+  })
+
+  it("caps a brief that came back as an essay", () => {
+    expect(readShippedBrief("x".repeat(2_000))).toHaveLength(MAX_BRIEF_CHARS)
+  })
+
+  it("splits into one block per line", () => {
+    expect(briefBlocks("One thing.\nAnother thing.")).toEqual([
+      "One thing.",
+      "Another thing.",
+    ])
+  })
+})
+
+/**
+ * The mechanism the whole of 1b and 1c rests on: the brief and the answer are
+ * *more blocks*, so the provenance rule at the top of lib/shipped-work.ts
+ * extends to them with nothing changed.
+ */
+describe("selectionBlocks", () => {
+  const description = ["Kjørt i prod 2026-08-26", "Alle tester grønne."]
+
+  it("numbers the brief after the description", () => {
+    const reading = selectionBlocks(
+      description,
+      "Voice notes are longer now.\n37% used to be lost."
+    )
+
+    expect(reading.blocks).toHaveLength(4)
+    expect(reading.briefFrom).toBe(2)
+    expect(reading.blocks[2]).toBe("Voice notes are longer now.")
+    expect(reading.answerAt).toBe(-1)
+  })
+
+  it("puts the owner's answer last, after the brief", () => {
+    const reading = selectionBlocks(
+      description,
+      "Voice notes are longer now.",
+      "  The old limit was throwing   away a third of every note.  "
+    )
+
+    expect(reading.briefFrom).toBe(2)
+    expect(reading.answerAt).toBe(3)
+    expect(reading.blocks[3]).toBe(
+      "The old limit was throwing away a third of every note."
+    )
+  })
+
+  it("says there is no brief rather than pretending to one", () => {
+    const reading = selectionBlocks(description, "")
+
+    expect(reading.blocks).toEqual(description)
+    expect(reading.briefFrom).toBe(-1)
+    expect(reading.answerAt).toBe(-1)
+  })
+
+  /**
+   * The whole point of appending rather than fencing: a beat may be quoted out
+   * of the brief, in the language the post is written in, and it goes through
+   * the same check the description does.
+   */
+  it("lets a beat be quoted out of the brief", () => {
+    const reading = selectionBlocks(description, "37% used to be lost.")
+
+    expect(quoteFromBlocks(reading.blocks, "37% used to be lost.")).toBe(
+      "37% used to be lost."
+    )
+    expect(assembleDescription(reading.blocks, [2])).toBe(
+      "37% used to be lost."
+    )
+  })
+})
+
+describe("buildShippedPrompt provenance", () => {
+  const facts = readShippedFacts({
+    repository: "Codehagen/Quincy",
+    number: 282,
+  })
+
+  it("names where the brief starts, so the model knows whose words are whose", () => {
+    const reading = selectionBlocks(
+      ["Kjørt i prod"],
+      "Voice notes are longer now.\n37% used to be lost."
+    )
+
+    const prompt = buildShippedPrompt({
+      blocks: reading.blocks,
+      facts,
+      briefFrom: reading.briefFrom,
+      answerAt: reading.answerAt,
+    })
+
+    expect(prompt).toContain("Blocks 1 to 2 are your own plain-language brief")
+    expect(prompt).toContain("[1] Voice notes are longer now.")
+  })
+
+  it("names the answer block", () => {
+    const reading = selectionBlocks(["Kjørt i prod"], "", "It was the limit.")
+
+    const prompt = buildShippedPrompt({
+      blocks: reading.blocks,
+      facts,
+      briefFrom: reading.briefFrom,
+      answerAt: reading.answerAt,
+    })
+
+    expect(prompt).toContain("Block 1 is the user's answer")
+  })
+
+  it("says nothing about either when there is neither", () => {
+    const prompt = buildShippedPrompt({ blocks: ["Kjørt i prod"], facts })
+
+    expect(prompt).not.toContain("plain-language brief")
+    expect(prompt).not.toContain("the user's answer")
+  })
+
+  /**
+   * `describeFacts` prints the numbers it is willing to be quoted on, and the
+   * pull request number is not one of them — see `ShippedFacts.number`.
+   */
+  it("carries the pull request number without printing it", () => {
+    expect(facts.number).toBe(282)
+    expect(describeFacts(facts)).not.toContain("282")
+  })
+})
+
+/**
+ * Plan 027 phase 1c. The answer becomes the beat the description never held.
+ */
+describe("beatsIncomplete and fillBeats", () => {
+  it("counts a missing did or happened as a hole, and ignores learned", () => {
+    expect(beatsIncomplete(NO_BEATS)).toBe(true)
+    expect(
+      beatsIncomplete({ did: "Switched models.", happened: "", learned: "x" })
+    ).toBe(true)
+    expect(
+      beatsIncomplete({
+        did: "Switched.",
+        happened: "69x cheaper.",
+        learned: "",
+      })
+    ).toBe(false)
+  })
+
+  it("puts the answer on did when there is nothing else", () => {
+    expect(
+      fillBeats(NO_BEATS, "The old limit lost a third of every note.")
+    ).toEqual({
+      did: "The old limit lost a third of every note.",
+      happened: "",
+      learned: "",
+    })
+  })
+
+  it("falls through to the first empty beat when did is already taken", () => {
+    expect(
+      fillBeats(
+        { did: "Switched models.", happened: "", learned: "" },
+        "69x cheaper."
+      )
+    ).toEqual({
+      did: "Switched models.",
+      happened: "69x cheaper.",
+      learned: "",
+    })
+  })
+
+  it("never overwrites a beat quoted out of the blocks", () => {
+    const whole = {
+      did: "Switched models.",
+      happened: "69x cheaper.",
+      learned: "It took an afternoon.",
+    }
+
+    expect(fillBeats(whole, "Something else entirely.")).toEqual(whole)
+  })
+
+  it("changes nothing when nobody answered", () => {
+    expect(fillBeats(NO_BEATS, "   ")).toEqual(NO_BEATS)
+  })
+})
+
+describe("the question", () => {
+  it("names the merge and the hour, in the user's own zone", () => {
+    const text = shippedQuestionText({
+      number: 282,
+      mergedAt: "2026-08-26T12:24:00Z",
+      timezone: "Europe/Oslo",
+    })
+
+    expect(text).toBe("You merged #282 at 14:24. What made you do it?")
+  })
+
+  it("falls back to UTC for an account that has never said", () => {
+    expect(
+      shippedQuestionText({
+        number: 282,
+        mergedAt: "2026-08-26T12:24:00Z",
+        timezone: null,
+      })
+    ).toContain("at 12:24")
+  })
+
+  it("drops the clause it cannot fill rather than inventing a time", () => {
+    expect(
+      shippedQuestionText({
+        number: 282,
+        mergedAt: "",
+        timezone: "Europe/Oslo",
+      })
+    ).toBe("You merged #282. What made you do it?")
+    expect(shippedQuestionText({ number: 0, mergedAt: "", timezone: "" })).toBe(
+      "You merged that pull request. What made you do it?"
+    )
+  })
+
+  it("reads back what was written, and refuses a half-written one", () => {
+    const asked = {
+      text: "You merged #282. What made you do it?",
+      askedAt: "2026-08-26T12:30:00Z",
+    }
+
+    expect(readShippedQuestion(asked)).toEqual(asked)
+    expect(readShippedQuestion(undefined)).toBeNull()
+    expect(readShippedQuestion({ text: "no askedAt" })).toBeNull()
+    expect(readShippedQuestion({ askedAt: "2026-08-26T12:30:00Z" })).toBeNull()
+  })
+
+  it("is open until it has an answer", () => {
+    const asked = readShippedQuestion({
+      text: "You merged #282. What made you do it?",
+      askedAt: "2026-08-26T12:30:00Z",
+    })
+    const answered = readShippedQuestion({
+      text: "You merged #282. What made you do it?",
+      askedAt: "2026-08-26T12:30:00Z",
+      answer: "The old limit was losing a third of every note.",
+      answeredAt: "2026-08-26T18:00:00Z",
+    })
+
+    expect(isOpenQuestion(asked)).toBe(true)
+    expect(isOpenQuestion(answered)).toBe(false)
+    expect(isOpenQuestion(null)).toBe(false)
+    expect(answered?.answer).toBe(
+      "The old limit was losing a third of every note."
+    )
+  })
+})
+
+/**
+ * The re-run after an answer has no `blocks` array — the merge was read days
+ * ago and `source_item.body` is all that is left. It recovers them by
+ * splitting, which is only safe because the two halves compose. This is that
+ * claim, asserted rather than assumed.
+ */
+describe("blocks recovered from a stored body", () => {
+  it("splits back into the array the ingest had", () => {
+    const blocks = descriptionBlocks({
+      title: "Say it out loud and come back to angles",
+      body: "Voice notes become riffs.\n\nThe first background job that is not a cron.\n\n| before | after |\n|---|---|\n| 6,000 | 19,200 |",
+    })
+
+    expect(flattenBlocks(blocks.join("\n\n"))).toEqual(blocks)
   })
 })

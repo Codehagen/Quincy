@@ -7,7 +7,7 @@ import { CronAlertEmail } from "@/emails/cron-alert"
  * Everything in this product that happens without a person present happens on
  * a cron: the sweep that publishes, the dispatcher that runs rhythms, the
  * liveness check that keeps channel grants honest, and the weekly heartbeat.
- * All four already answer 500 when a run goes badly and 503 when `CRON_SECRET`
+ * All five already answer 500 when a run goes badly and 503 when `CRON_SECRET`
  * is unset — and until now nothing read those answers.
  *
  * The failure that motivated it is the quiet one. Without `CRON_SECRET` the
@@ -30,8 +30,13 @@ import { CronAlertEmail } from "@/emails/cron-alert"
  * numbers are in the response and the logs.
  */
 
-/** The four jobs in vercel.json, named as their route path calls them. */
-export type CronJob = "publish" | "rhythms" | "channels" | "heartbeat"
+/** The five jobs in vercel.json, named as their route path calls them. */
+export type CronJob =
+  | "publish"
+  | "rhythms"
+  | "channels"
+  | "heartbeat"
+  | "calendar"
 
 /**
  * Why the run is being reported, kept coarse on purpose.
@@ -53,6 +58,8 @@ const CONSEQUENCE: Record<CronJob, string> = {
     "Channel connections are not being checked, so a revoked X or LinkedIn grant will be found by a failed publish instead of by an email.",
   heartbeat:
     "The brain is not being maintained. Nothing breaks today; it stops learning.",
+  calendar:
+    "Meetings are not being read, so nothing is asked about the week. Nothing is lost — the material is still in the calendar — but the reflection question never arrives.",
 }
 
 /**

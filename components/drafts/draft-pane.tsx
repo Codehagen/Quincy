@@ -10,6 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { duplicates, type Draft, type Version } from "@/lib/drafts"
+import type { RuleOffer } from "@/lib/edit-classes"
 import { measurePost } from "@/lib/post-length"
 import type { SendNowResult } from "@/lib/publish-run"
 import type { ApprovalPlacement } from "@/lib/scheduling"
@@ -34,6 +35,7 @@ import {
   useFocusOnAppear,
 } from "./draft-parts"
 import { GutterRow } from "./gutter-row"
+import { RuleOfferLine } from "./rule-offer"
 
 /**
  * What the right-hand side of /drafts shows: one piece, in one of its two
@@ -431,6 +433,7 @@ function PublishedVersion({
   twin,
   placement,
   placing,
+  offer,
   posting,
   posted,
   takeFocus,
@@ -443,6 +446,8 @@ function PublishedVersion({
   idea: string
   twin?: string
   placement?: ApprovalPlacement
+  /** A voice rule worth proposing, from the edit you just made. Usually none. */
+  offer?: RuleOffer
   /** A place request for this version is in flight. */
   placing: boolean
   /** A post request for this version is in flight. */
@@ -507,6 +512,12 @@ function PublishedVersion({
         </Clamp>
 
         {twin ? <DuplicateNotice twin={twin} label={version.label} /> : null}
+
+        {/* Under the text and above the controls, because it is a remark about
+            the writing you can still see rather than an action on the row. */}
+        {offer ? (
+          <RuleOfferLine offer={offer} channel={version.channel} />
+        ) : null}
 
         <div className="flex items-center gap-2">
           <Button
@@ -625,6 +636,7 @@ export function DonePane({
   completedBy,
   placements,
   placing,
+  offers,
   posts,
   posting,
   takeFocus,
@@ -639,6 +651,8 @@ export function DonePane({
   placements: Record<string, ApprovalPlacement | undefined>
   /** The version id whose place request is in flight. */
   placing: string | null
+  /** A rule the approval is worth proposing, per version id. Usually empty. */
+  offers: Record<string, RuleOffer | undefined>
   /** What the server said about sending it, per version id, once it has said. */
   posts: Record<string, SendNowResult | undefined>
   /** The version id whose post request is in flight. */
@@ -661,6 +675,7 @@ export function DonePane({
             twin={twins[v.channel]}
             placement={placements[v.id]}
             placing={placing === v.id}
+            offer={offers[v.id]}
             posting={posting === v.id}
             posted={posts[v.id]}
             // Only the version whose Approve button this replaced inherits

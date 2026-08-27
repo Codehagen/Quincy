@@ -1,6 +1,13 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 
+import { getConnection } from "./channels"
 import { db } from "./db"
+import {
+  METRICS_WINDOW_DAYS,
+  metricsBaseline,
+  readPostMetrics,
+  type PostMetricReading,
+} from "./post-metrics"
 import { scheduledPost, sourceItem } from "./schema-app"
 import { calendarDayIn } from "./timezone"
 
@@ -37,6 +44,16 @@ export type ScoredPost = {
   replies: number
   /** Multiple of the corpus median. 1 is exactly average for this account. */
   multiple: number
+  /**
+   * True when these numbers came from a `post_metric` reading rather than from
+   * the blob frozen into `source_item.meta` at import.
+   *
+   * Carried per post rather than assumed for the page: the series covers the
+   * last thirty days and the corpus is two years old, so on any given day this
+   * page mixes both. A reader shown one number cannot tell which they are
+   * looking at, and the page says so instead of implying everything is fresh.
+   */
+  live: boolean
 }
 
 export type AngleRow = {
@@ -104,6 +121,47 @@ export function isClipped(multiple: number): boolean {
 /** Beat your own median by 3× or better. */
 export const OUTLIER_GATE = 3
 
+/**
+ * The live baseline: what the last thirty days actually did, as measured.
+ *
+ * `metricsBaseline` in lib/post-metrics.ts computes the arithmetic; this adds
+ * the two things only the page knows — the reader's zone, so the newest
+ * reading can be named as a date, and whether X is connected at all, because
+ * the sentence shown when nothing has been measured is a different sentence in
+ * each case. "Numbers refresh every morning" is true and useless to somebody
+ * who has connected nothing.
+ */
+export type LiveBaseline = {
+  /** Posts measured in the window — one per post, not one per reading. */
+  count: number
+  median: number
+  mean: number
+  /** The best single post in the window, in impressions. */
+  best: number
+  /** Likes + replies + reposts + bookmarks + quotes, at the median. */
+  medianEngagements: number
+  /**
+   * Nothing has been measured. Every number above is a real 0, and this is what
+   * tells that apart from thirty days of posts that did nothing.
+   */
+  empty: boolean
+  /** The newest reading, formatted in the reader's zone. Null when empty. */
+  since: string | null
+  /** How many days back the readings were asked for. */
+  days: number
+  /** An active X connection exists. Decides which empty sentence is truthful. */
+  connected: boolean
+  /**
+   * Scored posts on this page whose numbers came from a reading.
+   *
+   * Not the same as `count`: a post published since the last corpus import has
+   * a reading and no `source_item` row to hang it on, so it counts toward the
+   * baseline and not toward this. The page states both rather than implying
+   * they are one number.
+   */
+  matched: number
+}
+
 export type NumbersView = {
   /** Posts that carried a number and were scored. */
   scored: number
@@ -117,6 +175,20 @@ export type NumbersView = {
   skipped: number
   median: number
   mean: number
+  /**
+   * The last thirty days, read live — beside the corpus median, never instead
+   * of it.
+   *
+   * Two different questions, and collapsing them would answer neither. The
+   * corpus median is "what does a post of mine normally do", computed over
+   * every post that carries a number, most of them frozen at import. This one
+   * is "what am I doing now", computed only from readings taken since
+   * `post_metric` started filling. On ship day it is empty and the corpus
+   * median is the whole page; thirty days later it is the number worth acting
+   * on. Overwriting the corpus median with it would silently restate two years
+   * of writing as one month of it.
+   */
+  live: LiveBaseline
   /** Formatted bounds of the window the numbers cover. */
   from: string | null
   to: string | null
@@ -196,6 +268,111 @@ export function metricOf(meta: unknown, key: string): number {
   if (typeof metrics !== "object" || metrics === null) return 0
   const raw = (metrics as Record<string, unknown>)[key]
   return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : 0
+}
+
+/** What one post's numbers are, and where they came from. */
+export type PostMeasure = {
+  /** Null means the post cannot be scored at all. The caller counts those. */
+  impressions: number | null
+  replies: number
+  live: boolean
+}
+
+/** The part of a reading this page reads. Kept structural so a test can build
+ *  one without a database row. */
+export type Reading = Pick<
+  PostMetricReading,
+  | "impressions"
+  | "likes"
+  | "replies"
+  | "reposts"
+  | "bookmarks"
+  | "quotes"
+  | "capturedAt"
+>
+
+/**
+ * A live reading beats the frozen blob, and the frozen blob stays.
+ *
+ * `source_item.meta` is written once, at import. A post read on the day it
+ * went out is otherwise compared against a post read three weeks later, and
+ * this page presents that mismatch as a ranking — the sentence plans/027 2c
+ * exists for. So when `post_metric` has measured a post, its reading wins.
+ *
+ * The fallback is not a leftover to be deleted once the series fills. It never
+ * fills for the whole corpus: readings cover the last thirty days and the
+ * writing goes back two years, so every future day still has a majority of
+ * posts whose only number is the frozen one. Removing the fallback would empty
+ * this page rather than freshen it.
+ *
+ * One post takes one source, never a splice of both. A reading of 0 with a
+ * frozen number above it is X withholding the field, not a post losing views —
+ * `metricValuesFrom` reports an absent `impression_count` as 0 — so that case
+ * keeps the frozen numbers and reports itself as frozen. A genuine 0 with
+ * nothing frozen behind it is still a real answer and is kept.
+ */
+export function metricsFor(
+  meta: unknown,
+  reading?: Pick<Reading, "impressions" | "replies"> | null
+): PostMeasure {
+  const frozen = impressionsOf(meta)
+
+  if (reading && (reading.impressions > 0 || frozen === null)) {
+    return {
+      impressions: reading.impressions,
+      replies: reading.replies,
+      live: true,
+    }
+  }
+
+  return {
+    impressions: frozen,
+    replies: metricOf(meta, "reply_count"),
+    live: false,
+  }
+}
+
+/**
+ * The thirty-day baseline the page states beside the corpus median.
+ *
+ * The arithmetic is `metricsBaseline`'s, imported rather than repeated: the
+ * number here and the number the refresh writes must be the same number, and
+ * two implementations of one median is how they stop being.
+ *
+ * The import goes one way only. lib/post-metrics.ts must never import this
+ * file — it keeps its own copy of `median` for exactly that reason, and a
+ * cycle between the two resolves to `undefined` at runtime rather than failing
+ * to compile.
+ */
+export function liveBaseline(
+  readings: Reading[],
+  zone: string,
+  {
+    connected,
+    matched,
+    days = METRICS_WINDOW_DAYS,
+  }: { connected: boolean; matched: number; days?: number }
+): LiveBaseline {
+  const base = metricsBaseline(readings)
+
+  const newest = readings.reduce<Date | null>(
+    (latest, row) =>
+      latest === null || row.capturedAt > latest ? row.capturedAt : latest,
+    null
+  )
+
+  return {
+    count: base.posts,
+    median: base.median,
+    mean: base.mean,
+    best: base.best,
+    medianEngagements: base.medianEngagements,
+    empty: base.empty,
+    since: newest ? formatPostDate(newest, zone, true) : null,
+    days,
+    connected,
+    matched,
+  }
 }
 
 /**
@@ -462,7 +639,7 @@ export async function getNumbers(
   userId: string,
   zone: string
 ): Promise<NumbersView> {
-  const [rows, published] = await Promise.all([
+  const [rows, published, readings, connection] = await Promise.all([
     db
       .select({
         id: sourceItem.id,
@@ -491,14 +668,34 @@ export async function getNumbers(
         )
       )
       .limit(1),
+    // The last thirty days as measured, newest reading per post. Concurrent
+    // with the corpus read because neither needs the other, and this page is
+    // already four round trips deep.
+    readPostMetrics(userId, { days: METRICS_WINDOW_DAYS }),
+    // Only to choose between two empty sentences. A page that says "numbers
+    // refresh every morning" to somebody who has connected nothing is telling
+    // them to wait for something that will never arrive.
+    getConnection(userId, "x"),
   ])
+
+  /**
+   * `source_item.id` → its newest reading.
+   *
+   * Readings whose `source_item_id` is empty are dropped from the map and kept
+   * in the baseline: `refreshPostMetrics` writes an empty id for a post
+   * published since the last import, which is a post the corpus does not know
+   * about yet. It has a number and it has no row here to attach it to.
+   */
+  const byItem = new Map(
+    readings.filter((r) => r.sourceItemId).map((r) => [r.sourceItemId, r])
+  )
 
   const dated = rows
     .filter((r): r is typeof r & { postedAt: Date } => r.postedAt !== null)
     .sort((a, b) => b.postedAt.getTime() - a.postedAt.getTime())
 
   const withMetrics = dated
-    .map((r) => ({ ...r, impressions: impressionsOf(r.meta) }))
+    .map((r) => ({ ...r, ...metricsFor(r.meta, byItem.get(r.id)) }))
     .filter((r): r is typeof r & { impressions: number } => r.impressions !== null)
 
   const skipped = dated.length - withMetrics.length
@@ -525,8 +722,9 @@ export async function getNumbers(
     hook: hook(r.body, 110),
     date: formatPostDate(r.postedAt, zone, showYear),
     impressions: r.impressions,
-    replies: metricOf(r.meta, "reply_count"),
+    replies: r.replies,
     multiple: middle > 0 ? r.impressions / middle : 0,
+    live: r.live,
   }))
 
   const bodies = new Map(withMetrics.map((r) => [r.id, r.body]))
@@ -545,6 +743,10 @@ export async function getNumbers(
     skipped,
     median: middle,
     mean,
+    live: liveBaseline(readings, zone, {
+      connected: connection?.state === "active",
+      matched: scored.filter((p) => p.live).length,
+    }),
     from: oldest ? formatPostDate(oldest.postedAt, zone, true) : null,
     to: newest ? formatPostDate(newest.postedAt, zone, true) : null,
     fromAxis: oldest ? formatMonth(oldest.postedAt, zone) : null,

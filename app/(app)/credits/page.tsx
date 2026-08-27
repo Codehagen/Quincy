@@ -134,9 +134,11 @@ export default async function CreditsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-section">Recent turns</CardTitle>
+              <CardTitle className="text-section">Recent spend</CardTitle>
               <CardDescription>
-                The last {turns.length} model calls, newest first.
+                The last {turns.length} charges, newest first. The kind is what
+                bought it — a model id, or a label for the reads and writes that
+                cost quota rather than tokens.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -146,19 +148,32 @@ export default async function CreditsPage() {
                     key={turn.id}
                     className="flex items-center justify-between gap-4 border-b pb-3 text-body last:border-b-0 last:pb-0"
                   >
-                    <span className="text-muted-foreground">
-                      {turn.createdAt.toLocaleString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                    {/* The date and what it was spent on, stacked rather than
+                        a fourth column: `usage_event.model` holds either a
+                        provider slug or a label, and the longest of those is
+                        wider than the two number columns put together. */}
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-muted-foreground">
+                        {turn.createdAt.toLocaleString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      {/* Verbatim, never mapped to a friendlier noun. This is
+                          the value a query would be written against, and a
+                          prettier word here would be a second vocabulary for
+                          the same column. */}
+                      <span className="truncate text-caption text-muted-foreground">
+                        {turn.model}
+                      </span>
                     </span>
-                    <span className="text-muted-foreground tabular-nums">
+                    <span className="ml-auto text-right text-muted-foreground tabular-nums">
                       {turn.inputTokens.toLocaleString("en-GB")} in ·{" "}
                       {turn.outputTokens.toLocaleString("en-GB")} out
                     </span>
-                    <span className="tabular-nums">
+                    <span className="text-right tabular-nums">
                       {formatMicros(turn.costMicros)}
                     </span>
                   </li>

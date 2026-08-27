@@ -58,6 +58,17 @@ follower charts, autoposting without approval.
 - **Numbers**: what happened, measured against your own baseline — no follower charts
 - **Cuts**: video clips rendered with Remotion
 
+## Agent access (MCP)
+
+Quincy is also a Model Context Protocol server, so an agent that is not the
+Studio chat can reach the same state. Point a client at `/api/mcp`; it
+registers itself and authorizes over OAuth 2.1 with PKCE, and you approve the
+scopes in a browser. Two scopes: `read` opens six reads, `write` adds
+capturing material and drafting an angle.
+
+It cannot approve, schedule or publish — with any scope, on purpose. See the
+[MCP guide](docs/mcp.md).
+
 ## Tech Stack
 
 - [Next.js](https://nextjs.org/) – framework

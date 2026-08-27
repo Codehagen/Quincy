@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { factsFrom } from "./heartbeat"
+import { compilePrompt, factsFrom, ledgerNote } from "./heartbeat"
+import type { LedgerEntry } from "./memory-ledger"
 
 /**
  * The distinction the whole guard exists for.
@@ -51,5 +52,92 @@ describe("factsFrom", () => {
     // The second documented mangling flattens the array into scalar properties
     // at the root, so `facts` can arrive as an object rather than a string.
     expect(factsFrom({ facts: { topic: "a", fact: "b" } })).toBeNull()
+  })
+})
+
+/**
+ * The merged ledger, on its way into the compile.
+ *
+ * `runHeartbeat` reads the week's ledger pages, merges them and hands the lines
+ * to the extractor beside the raw captures. Only two pure pieces of that decide
+ * anything: how the two blocks are written into one prompt, and what the
+ * compile note says about the lines nobody was shown. Both are here; the read
+ * and the write are exercised in scripts/verify-heartbeat.ts.
+ */
+describe("compilePrompt", () => {
+  const ledger: LedgerEntry[] = [
+    {
+      day: "2026-08-27",
+      type: "correction",
+      text: "Never open a post with an emoji.",
+    },
+    {
+      day: "2026-08-26",
+      type: "preference",
+      text: "Write my posts in English.",
+    },
+  ]
+
+  it("keeps the captures and the typed lines apart", () => {
+    const prompt = compilePrompt(["I merged 282 this morning."], ledger)
+
+    expect(prompt).toContain("- I merged 282 this morning.")
+    expect(prompt).toContain("- correction: Never open a post with an emoji.")
+    expect(prompt).toContain("- preference: Write my posts in English.")
+    // The typed block comes second, so the last thing read before the schema
+    // is the line that is allowed to overrule the rest.
+    expect(prompt.indexOf("I merged 282")).toBeLessThan(
+      prompt.indexOf("correction:")
+    )
+  })
+
+  it("says what a correction is for, so the type is not decoration", () => {
+    expect(compilePrompt([], ledger)).toContain("overruling")
+  })
+
+  it("is the captures alone when the ledger is empty", () => {
+    // What every run looked like before plan 027, and what a user whose ledger
+    // pages have all aged out of the window still gets.
+    const prompt = compilePrompt(["I merged 282 this morning."])
+
+    expect(prompt).toBe(
+      "Raw captures since the last compaction:\n- I merged 282 this morning."
+    )
+  })
+})
+
+describe("ledgerNote", () => {
+  it("says nothing when the ledger was empty", () => {
+    const note = ledgerNote("Processed 3 capture(s)", {
+      ledgerLines: 0,
+      ledgerDropped: 0,
+      ledgerCut: 0,
+    })
+
+    expect(note).toBe("Processed 3 capture(s)")
+  })
+
+  it("records what was merged and what the ceiling cut", () => {
+    // The cut is the only part of a run a later reader cannot reconstruct from
+    // the pages: the lines that were cut are the ones that left no trace.
+    const note = ledgerNote("Processed 3 capture(s)", {
+      ledgerLines: 120,
+      ledgerDropped: 7,
+      ledgerCut: 40,
+    })
+
+    expect(note).toContain("120 ledger line(s)")
+    expect(note).toContain("7 merged as duplicates")
+    expect(note).toContain("40 cut at the 12 KB cap")
+  })
+
+  it("leaves out the halves that did not happen", () => {
+    const note = ledgerNote("Processed 3 capture(s)", {
+      ledgerLines: 12,
+      ledgerDropped: 0,
+      ledgerCut: 0,
+    })
+
+    expect(note).toBe("Processed 3 capture(s) — 12 ledger line(s)")
   })
 })

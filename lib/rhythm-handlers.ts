@@ -24,17 +24,22 @@ import {
   type SignalOrigin,
   type SignalSelector,
 } from "./signals"
+import { runShipLog } from "./ship-log"
+import { user } from "./schema"
+import { resolveTimeZone } from "./timezone"
 import { recordUsage } from "./usage"
 import { compileVoice } from "./voice"
+import { runWeeklyReview } from "./weekly-review"
+import { runWeekPlan } from "./week-plan"
 
 /**
  * What a rhythm actually does, once the dispatcher has decided it should.
  *
  * The registry is the boundary between "the catalogue claims this exists"
- * (lib/rhythms.ts) and "the code can do it". `/rhythm` reads **this**, not
- * `Rhythm.available`, so the switch a user sees can never be ahead of the
- * machinery — a catalogue entry with no handler renders inert whatever its
- * `available` flag says.
+ * (lib/rhythms.ts) and "the code can do it". `/rhythm` renders **this** plus
+ * `RUNS_ELSEWHERE` below and nothing else, so a card cannot exist without
+ * code behind it — there is no longer a boolean on the catalogue entry that
+ * could say otherwise.
  *
  * Handlers are given a userId and nothing else. Entitlement, claiming,
  * scheduling and run recording all belong to lib/rhythm-run.ts, and a handler
@@ -55,6 +60,34 @@ export type RhythmHandlerResult = {
    * and never a stack trace — this renders in a paragraph, not a log viewer.
    */
   summary: string
+  /**
+   * `skipped` when the handler ran, decided there was nothing to do, and spent
+   * nothing. Defaults to `ok`.
+   *
+   * The distinction is not cosmetic and it is not for the card. `lastOkRunAt`
+   * reads `state = 'ok'` to answer "when did this last buy something", which is
+   * what the weekly cooldowns in lib/ship-log.ts and lib/week-plan.ts are
+   * built on — so a Monday that found no candidates and reported `ok` would
+   * lock the next four Mondays out of a plan they could have written.
+   */
+  state?: "ok" | "skipped"
+  /**
+   * What the run produced, in numbers and ids. Plan 027 asks for this on
+   * `rhythm_run.result`, and that column now exists — see
+   * scripts/rhythm-run-result.sql.
+   *
+   * Three handlers set it and they answer in three shapes, which is why the
+   * column is jsonb: Ship Log returns its merge count and the two ids it made,
+   * Weekly Review returns the message and its two facts, Week Plan returns
+   * what it proposed, critiqued, drafted and placed. Nothing is obliged to
+   * return anything, and most runs do not.
+   *
+   * `summary` still carries the part a person reads, and this is still not the
+   * durable artefact — a riff, a draft and a ledger line are. It is the record
+   * behind the receipt, bounded on the way in by `boundResult` in
+   * lib/rhythm-run.ts.
+   */
+  result?: Record<string, unknown>
 }
 
 export type RhythmHandlerDeps = {
@@ -427,6 +460,77 @@ export const trendAlerts: RhythmHandler = async ({ userId, deps }) => {
 }
 
 /**
+ * The zone this account's week is measured in.
+ *
+ * Read off the user row rather than taken from the dispatcher, which resolves
+ * it for scheduling and does not pass it on. `session.user` is cookie-cached
+ * and there is no session here anyway; `resolveTimeZone` answers UTC for an
+ * account that has never reported one, which is lib/timezone.ts's honest
+ * default.
+ */
+async function zoneOf(userId: string): Promise<string> {
+  const [row] = await db
+    .select({ timezone: user.timezone })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+
+  return resolveTimeZone(row?.timezone)
+}
+
+/**
+ * Ship Log. Plan 027, 2d.
+ *
+ * A week of merges nobody posted about becomes one riff and one draft. The
+ * judgment — which merges, the minimum of two, the caps, the cooldown — is in
+ * lib/ship-log.ts, and this is the four lines that turn its answer into a card.
+ *
+ * A refusal is a `skipped` run rather than a thrown error. Two merges in a
+ * quiet week is not a fault, and a red card every Sunday for a rhythm behaving
+ * exactly as designed is how a surface stops being read.
+ */
+export const shipLog: RhythmHandler = async ({ userId }) => {
+  const run = await runShipLog({ userId })
+
+  return run.ok
+    ? { summary: run.summary, result: run.result }
+    : { summary: run.summary, state: "skipped" }
+}
+
+/**
+ * Weekly Review. Plan 027, 4b.
+ *
+ * Sunday evening, two facts, no model call. The message is the product; the
+ * ledger line is the copy that survives the card scrolling away.
+ *
+ * Never `skipped`: "nothing went out this week" is the review, not the absence
+ * of one, and it is the week the owner most needs to read.
+ */
+export const weeklyReview: RhythmHandler = async ({ userId }) => {
+  const review = await runWeeklyReview({
+    userId,
+    timezone: await zoneOf(userId),
+  })
+
+  return { summary: review.message, result: { ...review } }
+}
+
+/**
+ * Week Plan. Plan 027, 4c.
+ *
+ * Read strategy, propose, critique, draft. Nothing is approved and nothing is
+ * scheduled — see the header of lib/week-plan.ts for why a draft cannot be put
+ * in a slot without the user's press, and what is recorded instead.
+ */
+export const weekPlan: RhythmHandler = async ({ userId }) => {
+  const plan = await runWeekPlan({ userId, timezone: await zoneOf(userId) })
+
+  return plan.ok
+    ? { summary: plan.summary, result: plan.result }
+    : { summary: plan.summary, state: "skipped" }
+}
+
+/**
  * Which rhythms actually do something.
  *
  * Keyed by the `id` in lib/rhythms.ts. Adding a rhythm to the catalogue does
@@ -436,10 +540,65 @@ export const RHYTHM_HANDLERS: Record<string, RhythmHandler> = {
   "bookmarks-to-posts": bookmarksToPosts,
   "voice-refresh": refreshVoice,
   "trend-alerts": trendAlerts,
+  "ship-log": shipLog,
+  "weekly-review": weeklyReview,
+  "week-plan": weekPlan,
 }
 
 export function hasHandler(rhythmId: string): boolean {
   return rhythmId in RHYTHM_HANDLERS
+}
+
+/**
+ * The rhythms that run without going through the dispatcher.
+ *
+ * `RHYTHM_HANDLERS` is the whole answer for a clock rhythm and cannot be the
+ * answer for these four. Voice Notes, Meeting Notes and Shipped Work fire on
+ * an event — a recording finishing, a transcript arriving, a pull request
+ * merging — so a handler for one of them would be a clock trying to run
+ * something that only happens when a person does something. Heartbeat runs
+ * system-wide from vercel.json for everybody and has no per-user row at all.
+ *
+ * They are listed because `/rhythm` asks this file one question — is there
+ * code behind this card — and for these four the honest answer is yes. The
+ * value is where the user controls it, which is never a switch on the card:
+ * an event rhythm is turned on by connecting its source, and Heartbeat is not
+ * a choice.
+ *
+ * Hand-written, and the alternative was worse. Importing the routes to prove
+ * they exist would pull `node:crypto` and a database connection into a module
+ * every page in the app renders; a `Rhythm.available` boolean was the thing
+ * this replaces. What keeps it honest is that it is four lines next to the
+ * registry it completes, rather than a flag on the far side of a catalogue.
+ */
+export type ElsewhereRun =
+  /** Fires on something the user did. `switchedAt` is where they stop it. */
+  | { kind: "event"; runs: string; switchedAt: string }
+  /** Runs for everybody on a system cron. Not a choice, so no control. */
+  | { kind: "system"; runs: string }
+
+export const RUNS_ELSEWHERE: Record<string, ElsewhereRun> = {
+  "voice-notes": {
+    kind: "event",
+    runs: "workflows/run-voice-riff.ts",
+    switchedAt: "/sources",
+  },
+  "meeting-notes": {
+    kind: "event",
+    runs: "app/api/webhooks/circleback/[token]/route.ts",
+    switchedAt: "/sources",
+  },
+  "shipped-work": {
+    kind: "event",
+    runs: "app/api/webhooks/github/route.ts",
+    switchedAt: "/sources",
+  },
+  heartbeat: { kind: "system", runs: "lib/heartbeat.ts" },
+}
+
+/** Whether code runs this rhythm at all, by either route. */
+export function runsToday(rhythmId: string): boolean {
+  return hasHandler(rhythmId) || rhythmId in RUNS_ELSEWHERE
 }
 
 /**
@@ -545,9 +704,7 @@ async function unriffedSignals(
       meta: sourceItem.meta,
     })
     .from(sourceItem)
-    .where(
-      used.length > 0 ? and(mine, notInArray(sourceItem.url, used)) : mine
-    )
+    .where(used.length > 0 ? and(mine, notInArray(sourceItem.url, used)) : mine)
     // NULLS LAST rather than Postgres's default NULLS FIRST for DESC, the same
     // correction `unadaptedBookmarks` makes: an undated row must not win the
     // newest-N window ahead of rows that have a date.

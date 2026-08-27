@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm"
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { session } from "@/lib/schema"
+import { oauthApplication, session } from "@/lib/schema"
 import { getSession } from "@/lib/session"
 import { ZONES } from "@/lib/zones"
 
@@ -268,6 +268,60 @@ export async function revokeOtherSessions(): Promise<ActionResult> {
       ok: false,
       message: readable(error, "The other sessions could not be signed out."),
     }
+  }
+
+  revalidatePath("/settings")
+  return { ok: true }
+}
+
+/**
+ * Disconnect an MCP client, which is what revocation is here.
+ *
+ * **Why the application row and not the tokens.** Access tokens are opaque and
+ * stored, and deleting them buys an hour: the client's refresh token is a
+ * separate row with its own week-long expiry, and presenting it mints a fresh
+ * access token with a fresh week on it. Refreshing forever is the plugin's
+ * design (`plugins/mcp/index.mjs` writes a new row on every refresh grant), so
+ * the only thing that actually ends the connection is removing the client it
+ * was issued to. `oauth_access_token.client_id` and `oauth_consent.client_id`
+ * both reference `oauth_application.client_id` with `ON DELETE CASCADE`
+ * (lib/schema.ts:194 and scripts/mcp-oauth.sql), so one delete takes every
+ * token and the consent record with it.
+ *
+ * Named by `client_id` rather than by row id because that is what the whole
+ * schema joins on, and it is not a credential: it travels in the query string
+ * of every authorization request and is public by design. The `userId` sits in
+ * the same WHERE clause as the delete, so a guessed id is worthless — the same
+ * rule `revokeSessions` above follows, and for the same reason: ownership is
+ * checked in the statement that writes, never in a caller that could forget.
+ *
+ * A row with a null `userId` is unreachable from here, and that is a fact about
+ * history rather than a hole. Anonymous registration was open until the
+ * before-hook in lib/auth.ts closed it; anything registered before that belongs
+ * to nobody and cannot be listed under an account either. Those rows never held
+ * a token, because a token needs an owner to authorize it.
+ */
+export async function removeConnectedAgent(
+  clientId: string
+): Promise<ActionResult> {
+  const user = await requireUser()
+
+  if (!clientId) {
+    return { ok: false, message: "That agent is already gone." }
+  }
+
+  const removed = await db
+    .delete(oauthApplication)
+    .where(
+      and(
+        eq(oauthApplication.clientId, clientId),
+        eq(oauthApplication.userId, user.id)
+      )
+    )
+    .returning({ clientId: oauthApplication.clientId })
+
+  if (removed.length === 0) {
+    return { ok: false, message: "That agent is already gone." }
   }
 
   revalidatePath("/settings")

@@ -1,44 +1,43 @@
-"use client"
-
 import Link from "next/link"
-import { useQueryState } from "nuqs"
 
 import { cn } from "@/lib/utils"
 import {
   FAMILY_LABEL,
   FAMILY_NOTE,
   FAMILY_ORDER,
-  RHYTHMS,
+  LIVE_RHYTHMS,
   type Rhythm,
 } from "@/lib/rhythms"
+import { RUNS_ELSEWHERE } from "@/lib/rhythm-handlers"
 import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty"
 import { Flow } from "./node-chip"
-import { platformParser, PlatformFilter } from "./platform-filter"
 import { RhythmSwitch } from "./rhythm-switch"
 
 /**
- * Grouped by what the rhythm does, never by platform.
+ * Every rhythm that runs, and nothing else.
  *
- * Each card answers three questions in the order a person asks them: what is it
- * called, what does it do for me, and how does it actually work. The third is
- * the one usually missing — a name and four 24px glyphs asks the reader to
+ * This used to render the whole catalogue — twenty-seven cards, twenty of them
+ * inert under the word "soon". The argument for that was that a catalogue you
+ * can read beats a page pretending the product is smaller than the plan, and
+ * it was wrong in the one way that matters: a reader counts, and twenty
+ * promises against seven facts is a page arguing the product is mostly a plan.
+ * `LIVE_RHYTHMS` derives from the handler registry, so a card cannot exist
+ * without code behind it, and the twenty are still in lib/rhythms.ts waiting
+ * for theirs. See plans/027, 4a.
+ *
+ * A server component now. The one reason it was `"use client"` was the
+ * platform filter's URL state, and the filter went with the inert cards: of
+ * the seven that run, six of the seven chips answered with an empty state.
+ *
+ * Grouped by what a rhythm does, never by platform — "GitHub to X" and
+ * "Substack to X" are one rhythm with a different source. A family with
+ * nothing in it renders nothing, so the grouping shrinks with the list rather
+ * than leaving three headings over empty ground.
+ *
+ * Each card answers three questions in the order a person asks them: what is
+ * it called, what does it do for me, and how does it actually work. The third
+ * is the one usually missing — a name and four 24px glyphs asks the reader to
  * infer a mechanism, and most will not bother.
- *
- * Three run today. Heartbeat's switch stays checked and disabled because it is
- * maintenance rather than a choice; the two subscription rhythms have a real
- * switch; everything else is still inert, because a toggle that toggles nothing
- * is worse than no toggle.
- *
- * The card carries the switch and the receipt and nothing else. Time is set on
- * the detail page — the grid is a surface for glancing and toggling, and a time
- * control per card would put three of them in a row on a page whose whole job
- * is to be readable at a glance.
  */
 export function RhythmGrid({
   lastRun,
@@ -52,39 +51,24 @@ export function RhythmGrid({
    *  rendering a timestamp produces a different string than the server did. */
   cards: Record<string, RhythmCardState | undefined>
 }) {
-  const [platform] = useQueryState("platform", platformParser)
-
-  const visible = platform
-    ? RHYTHMS.filter(
-        (r) => r.from.includes(platform) || r.to.includes(platform)
-      )
-    : RHYTHMS
-
   return (
     <>
-      <PlatformFilter showing={visible.length} total={RHYTHMS.length} />
-
-      {visible.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>Nothing touches that channel yet</EmptyTitle>
-            <EmptyDescription>
-              No rhythm reads from or writes to it. Clear the filter to see
-              everything Quincy can do.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : null}
+      {/* Counted, not written. The page is short and a reader is owed the
+          reason: this is everything, not the first screen of something. */}
+      <p className="px-3 text-caption text-muted-foreground">
+        {LIVE_RHYTHMS.length} rhythms run today. A new one appears here when the
+        code behind it does, never before.
+      </p>
 
       {FAMILY_ORDER.map((family) => {
-        const rhythms = visible.filter((r) => r.family === family)
+        const rhythms = LIVE_RHYTHMS.filter((r) => r.family === family)
         if (rhythms.length === 0) return null
 
         return (
           <section key={family} className="flex flex-col gap-5">
             <div className="flex max-w-2xl flex-col gap-1.5 px-3">
               <h2 className="text-section">{FAMILY_LABEL[family]}</h2>
-              <p className="text-body text-muted-foreground text-pretty">
+              <p className="text-body text-pretty text-muted-foreground">
                 {FAMILY_NOTE[family]}
               </p>
             </div>
@@ -109,10 +93,11 @@ export function RhythmGrid({
 /**
  * One card's worth of subscription state, already turned into strings.
  *
- * `when` and `receipt` are formatted server-side. The card is a client
- * component and formatting a timestamp here would render a different string
- * than the server did in the seconds either side of midnight — the same rule
- * `Riff.capturedAt` and `Draft.from.at` follow.
+ * `when` and `receipt` are formatted server-side. The card used to be a client
+ * component and this stays true regardless: a timestamp formatted in the
+ * browser renders a different string than the server did in the seconds either
+ * side of midnight — the same rule `Riff.capturedAt` and `Draft.from.at`
+ * follow.
  */
 export type RhythmCardState = {
   enabled: boolean
@@ -134,21 +119,33 @@ function RhythmCard({
   card: RhythmCardState | undefined
   heartbeatLastRun: string | null
 }) {
-  // Heartbeat is on for everybody and has no per-user row, so its "live" is
-  // the catalogue's claim rather than a subscription. Everything else is live
-  // only when the user switched it on.
+  // Heartbeat is on for everybody and has no per-user row, so its "live" is a
+  // fact about the deployment rather than a subscription.
   const locked = rhythm.id === "heartbeat"
   const runnable = card?.runnable ?? false
-  const live = locked ? rhythm.available : (card?.enabled ?? false)
+  const elsewhere = RUNS_ELSEWHERE[rhythm.id]
 
-  // Three different sentences for three different states, and the difference
-  // matters: "soon" means we have not built it, "not run yet" means you turned
-  // it on and it has not fired, and a receipt means it did something.
+  /**
+   * Brass, and it means what it always means: this is running.
+   *
+   * An event rhythm is deliberately not live. It runs — that is why it is on
+   * this page — but whether its source is connected right now is a question
+   * this card cannot ask without a query per card, and a brass dot next to
+   * Shipped Work for somebody who never connected GitHub is the one lie the
+   * colour must not tell.
+   */
+  const live = locked || (runnable && (card?.enabled ?? false))
+
+  /**
+   * Three states, three sentences, and the difference is what a person came to
+   * find out. "on Sources" means the control is elsewhere, "off" means you
+   * turned it off here, and a date means it did something.
+   */
   const footer = locked
     ? (heartbeatLastRun ?? "not run yet")
-    : !runnable
-      ? "soon"
-      : !live
+    : elsewhere?.kind === "event"
+      ? "on Sources"
+      : !card?.enabled
         ? "off"
         : (card?.receipt ?? "not run yet")
 
@@ -156,7 +153,7 @@ function RhythmCard({
     <Card
       data-live={live || undefined}
       className={cn(
-        "group/rhythm relative h-full ring-0 shadow-xs",
+        "group/rhythm relative h-full shadow-xs ring-0",
         "transition-[box-shadow,background-color] duration-150 ease-out",
         // Hover confirms an affordance that is real: the whole card opens the
         // rhythm, through the overlay on the title link below.
@@ -164,23 +161,33 @@ function RhythmCard({
         // The ring goes on the card, not on the link inside it. The click
         // target is the whole card, so a focus indicator around a short word
         // would tell a keyboard user something different than it tells a mouse.
-        "has-[a:focus-visible]:ring-ring/50 has-[a:focus-visible]:ring-2",
-        "data-live:bg-signal-surface"
+        "has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring/50",
+        // A ring, not a tint. This was `bg-signal-surface`, which put brass
+        // under a control you press — the one thing AGENTS.md says the colour
+        // never does. The ring is also what /rhythm/[id] already draws around a
+        // live rhythm, so the two surfaces now say "running" the same way.
+        "data-live:ring-1 data-live:ring-signal-border"
       )}
     >
       <CardHeader>
         <Flow rhythm={rhythm} live={live} />
-        {/* z-10 keeps the switch above the title link's full-card overlay.
+        {/* Nothing at all for an event rhythm. It has no hour to choose and
+            nothing for the dispatcher to fire, so a disabled switch here would
+            be a second control over a fact /sources owns — and a control that
+            cannot move is worse than no control.
+
+            z-10 keeps the switch above the title link's full-card overlay.
             Without it, reaching for the toggle navigates instead. */}
-        <CardAction className="relative z-10">
-          <RhythmSwitch
-            rhythmId={rhythm.id}
-            name={rhythm.name}
-            enabled={live}
-            runnable={runnable}
-            locked={locked}
-          />
-        </CardAction>
+        {runnable || locked ? (
+          <CardAction className="relative z-10">
+            <RhythmSwitch
+              rhythmId={rhythm.id}
+              name={rhythm.name}
+              enabled={live}
+              locked={locked}
+            />
+          </CardAction>
+        ) : null}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-1.5">
@@ -205,16 +212,16 @@ function RhythmCard({
           </p>
         </div>
 
-        <p className="text-caption text-foreground text-pretty">
+        <p className="text-caption text-pretty text-foreground">
           {rhythm.promise}
         </p>
-        <p className="text-caption text-muted-foreground text-pretty">
+        <p className="text-caption text-pretty text-muted-foreground">
           {rhythm.how}
         </p>
       </CardContent>
 
       <CardContent className="mt-auto flex items-center justify-between gap-3">
-        <span className="text-caption text-muted-foreground font-mono whitespace-nowrap tabular-nums">
+        <span className="font-mono text-caption whitespace-nowrap text-muted-foreground tabular-nums">
           {/* The user's own time once they have chosen one, the catalogue's
               default before that. A card claiming "daily 14:00" for somebody
               who moved it to 08:00 is the one lie this row can tell. */}
@@ -222,7 +229,7 @@ function RhythmCard({
         </span>
         <span
           className={cn(
-            "text-caption min-w-0 truncate font-mono tabular-nums",
+            "min-w-0 truncate font-mono text-caption tabular-nums",
             card?.failed ? "text-destructive" : "text-muted-foreground"
           )}
         >

@@ -163,7 +163,21 @@ export const config = {
      * cookie — the route verifies the Svix headers and refuses anything it
      * cannot verify.
      *
-     * `.well-known/workflow` is the third of exactly the same shape, and the
+     * /api/mcp is the fourth, and it is the one that would have been found the
+     * slowest. An MCP client authenticates with an OAuth bearer token and has
+     * no cookie and no browser — matched, its POST comes back 307 to /login,
+     * which the client's HTTP layer follows into an HTML page, and the failure
+     * it reports is "the server did not speak MCP". The route authenticates
+     * itself with `withMcpAuth` and answers 401 with the WWW-Authenticate
+     * header that tells a client where to authorize.
+     *
+     * The two `.well-known/oauth-*` documents are the same argument one step
+     * earlier: they exist to be read by a client that has *not* authenticated
+     * yet, so a redirect to /login is the one answer that cannot be right.
+     * Both are public by definition — issuer, endpoints and supported scopes,
+     * per RFC 8414 and RFC 9728.
+     *
+     * `.well-known/workflow` is the fifth of exactly the same shape, and the
      * Workflow docs call it out because Next 16's rename of `middleware.ts` to
      * `proxy.ts` makes it easy to miss. The runtime talks to itself over
      * `POST /.well-known/workflow/v1/flow` with no cookie; matched, that POST
@@ -172,6 +186,13 @@ export const config = {
      * message — which names neither auth nor this file. Two of the three
      * precedents above were found in production; this one is free.
      */
-    "/((?!api/auth|api/cron|api/webhooks|\\.well-known/workflow|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
+    /**
+     * Each API prefix is anchored with `(?:/|$)` so it matches the segment and
+     * not merely the start of one. Unanchored, `api/mcp` also excluded
+     * `/api/mcpanything` — a path this app does not serve today, and a
+     * gate-shaped hole waiting for the day somebody adds one. The three
+     * `.well-known` entries are whole names already.
+     */
+    "/((?!api/auth(?:/|$)|api/cron(?:/|$)|api/mcp(?:/|$)|api/webhooks(?:/|$)|\\.well-known/oauth-authorization-server|\\.well-known/oauth-protected-resource|\\.well-known/workflow|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
   ],
 }

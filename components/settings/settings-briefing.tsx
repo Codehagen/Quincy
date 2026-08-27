@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { HoldToConfirm } from "@/components/hold-to-confirm"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import {
 import { timeIn, zoneLabel, zoneOptions } from "@/lib/zones"
 import {
   changePassword,
+  removeConnectedAgent,
   revokeOtherSessions,
   revokeSessions,
   saveName,
@@ -49,6 +51,21 @@ type SessionGroup = {
   count: number
   lastSeen: string
   current: boolean
+}
+
+/**
+ * One MCP client, already worded by the server.
+ *
+ * The two dates arrive as finished sentence fragments rather than as `Date`s,
+ * for the reason the session list gives: "Yesterday" depends on the account's
+ * zone, the server knows the zone, and formatting on the client would make the
+ * first paint disagree with the second.
+ */
+type ConnectedAgent = {
+  clientId: string
+  name: string
+  connected: string
+  lastToken: string
 }
 
 /**
@@ -147,6 +164,7 @@ export function SettingsBriefing({
   email,
   timezone,
   sessionGroups,
+  connectedAgents,
   supportEmail,
   nowIso,
 }: {
@@ -154,6 +172,7 @@ export function SettingsBriefing({
   email: string
   timezone: string
   sessionGroups: SessionGroup[]
+  connectedAgents: ConnectedAgent[]
   /**
    * Passed in rather than imported. `MAIL_REPLY_TO` lives in lib/mail.ts beside
    * the Resend client, and importing it here would pull the mail SDK into the
@@ -471,6 +490,83 @@ export function SettingsBriefing({
                   Sign out everywhere else
                 </Button>
               </div>
+            </div>
+          </Drawer>
+        ) : null}
+      </div>
+
+      {/* Connected agents ------------------------------------------------ */}
+      <div>
+        <p className="max-w-prose text-body text-pretty">
+          {connectedAgents.length === 0 ? (
+            <>
+              No agents connected. Connect one with the MCP URL in{" "}
+              <span className="font-mono text-[0.9em]">docs/mcp.md</span>.
+            </>
+          ) : (
+            <>
+              <Inline
+                label="Show the agents that can reach Quincy"
+                open={open === "agents"}
+                onToggle={() => {
+                  setProblem(null)
+                  toggle("agents")
+                }}
+              >
+                {connectedAgents.length === 1
+                  ? "One agent"
+                  : `${connectedAgents.length} agents`}
+              </Inline>{" "}
+              can reach Quincy over MCP — reading what you have and drafting.
+              None of them can approve, schedule or publish.
+            </>
+          )}
+        </p>
+
+        {open === "agents" && connectedAgents.length > 0 ? (
+          <Drawer>
+            <div className="flex flex-col gap-3">
+              <ul className="flex flex-col">
+                {connectedAgents.map((agent) => (
+                  <li
+                    key={agent.clientId}
+                    className="flex items-center gap-3 border-b border-foreground/8 py-2.5 last:border-b-0"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-body">{agent.name}</span>
+                      <span className="truncate text-caption text-muted-foreground">
+                        {agent.connected} · {agent.lastToken}
+                      </span>
+                    </div>
+                    {/* A hold rather than a dialog, per AGENTS.md: this ends a
+                        connection and cannot be undone from here — the agent
+                        has to ask again and be consented to again. */}
+                    <div className="ml-auto">
+                      <HoldToConfirm
+                        onConfirm={async () => {
+                          setProblem(null)
+                          const result = await removeConnectedAgent(
+                            agent.clientId
+                          )
+                          if (!result.ok) {
+                            setProblem(result.message)
+                            throw new Error(result.message)
+                          }
+                        }}
+                        doneLabel="Removed"
+                      >
+                        Remove
+                      </HoldToConfirm>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Problem message={problem} />
+              <p className="text-caption text-pretty text-muted-foreground">
+                Removing one takes its keys with it, including the refresh key
+                that would otherwise mint a new one every week. There is no
+                other way to end a connection.
+              </p>
             </div>
           </Drawer>
         ) : null}

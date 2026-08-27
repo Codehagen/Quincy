@@ -6,6 +6,7 @@ import { RULE_CAP, type EditablePage } from "@/lib/brain"
 import type { BrainKind } from "@/lib/schema-app"
 import { EditorShell, useBrainForm } from "@/components/brain/editor-shell"
 import { StringList } from "@/components/brain/string-list"
+import { VoicePreview } from "@/components/brain/voice-preview"
 import { savePage } from "@/app/(app)/brain/actions"
 
 /**
@@ -70,6 +71,12 @@ export function RulesEditor({
             : "Never invent numbers or client names"
         }
       />
+
+      {/* Voice only. Hard rules are constraints the writer may not break, and
+          "here is the same post with and without your constraints" is not a
+          question anybody has — the interesting comparison is the one about
+          how you sound. See components/brain/voice-preview.tsx. */}
+      {kind === "voice" ? <VoicePreview /> : null}
     </EditorShell>
   )
 }

@@ -29,13 +29,15 @@ describe("isSettled", () => {
   })
 
   it("stops on a refusal, which is an answer rather than a silence", () => {
-    expect(isSettled({ state: "refused", why: "A dependency bump." })).toBe(true)
+    expect(isSettled({ state: "refused", why: "A dependency bump." })).toBe(
+      true
+    )
   })
 
   it("stops on a failure", () => {
-    expect(isSettled({ state: "failed", message: "No angles came back." })).toBe(
-      true
-    )
+    expect(
+      isSettled({ state: "failed", message: "No angles came back." })
+    ).toBe(true)
   })
 
   it("treats a missing row as settled, so the poll cannot run forever", () => {
@@ -89,5 +91,54 @@ describe("sayOutcome", () => {
     expect(
       sayOutcome({ state: "failed", message: "No angles came back." })
     ).toBe("The write failed: No angles came back.")
+  })
+})
+
+/**
+ * The two answers plan 027 added, and the distinction they exist to draw.
+ *
+ * `refused` is a judgement about the merge. `stopped` is a fact about the
+ * account — unentitled, paused, over the ceiling, or a workflow that never
+ * started — and saying "there was no post in it" about a merge nobody read is
+ * the confident sentence this module exists to stop. `asked` is the third
+ * thing again: read, refused, and now waiting on a person.
+ */
+describe("the answers plan 027 added", () => {
+  it("stops the poller on both, because both are final", () => {
+    expect(
+      isSettled({ state: "stopped", why: "Your subscription lapsed." })
+    ).toBe(true)
+    expect(
+      isSettled({
+        state: "asked",
+        question: "You merged #282. What made you do it?",
+      })
+    ).toBe(true)
+  })
+
+  it("never says a merge nobody read had no post in it", () => {
+    const said = sayOutcome({
+      state: "stopped",
+      why: "Your subscription was not active when this merged, so it was stored and not read.",
+    })
+
+    expect(said).toContain("stored it and did not read it")
+    expect(said).not.toContain("no post in it")
+  })
+
+  it("puts the refusal and the question in one sentence", () => {
+    const said = sayOutcome({
+      state: "asked",
+      question: "You merged #282 at 14:24. What made you do it?",
+    })
+
+    expect(said).toContain("could not find the story")
+    expect(said).toContain("You merged #282 at 14:24. What made you do it?")
+  })
+
+  it("still says the flat thing when it does not know why", () => {
+    expect(sayOutcome({ state: "stopped", why: "" })).toBe(
+      "I stored it and did not read it."
+    )
   })
 })

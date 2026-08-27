@@ -1,15 +1,28 @@
-import { generateObject, jsonSchema } from "ai"
+import { createIdGenerator, generateObject, jsonSchema } from "ai"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 import {
   appendEvent,
+  getBrainByKind,
   getPage,
   putPage,
   RULE_CAP,
   type StoryData,
+  type VoiceData,
 } from "./brain"
 import { db } from "./db"
-import { sourceItem, type SourceItemSource } from "./schema-app"
+import {
+  classifyEdit,
+  clearClass,
+  normaliseRule,
+  recordEdits,
+  ruleOfferFor,
+  RULE_FOR_CLASS,
+  type EditClass,
+  type EditLedger,
+  type RuleOffer,
+} from "./edit-classes"
+import { brainPage, sourceItem, type SourceItemSource } from "./schema-app"
 import {
   retryMalformed,
   unwrapStringifiedObject,
@@ -643,4 +656,279 @@ export async function voiceExamples({
       .map((item) => item.body.trim())
       .filter(Boolean)
   )
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * The voice as a thing that changes: the edit ledger, and the one way a rule
+ * gets added without a compile. See plans/027 item 3e.
+ * ---------------------------------------------------------------------------
+ *
+ * Everything below is bookkeeping around `brain_page`, kept in this file
+ * because it is the voice's own file. The judgment — what counts as an edit,
+ * when three of them become an offer — is pure and lives in
+ * lib/edit-classes.ts.
+ */
+
+/**
+ * Where the counters live, and why they are not on `draft_version`.
+ *
+ * `draft_version` has no `meta`/`jsonb` column, and there is one production
+ * database (see AGENTS.md) — so adding one is a migration against live rows
+ * for a counter that is three integers. `brain_page.data` is already the
+ * repo's "structured state code reads", already per user, and already
+ * snapshot-and-restore-able.
+ *
+ * A page of its own rather than the voice page itself, and that is the part
+ * worth reading twice. Both real voice pages are rewritten wholesale by
+ * somebody: `voice` by `RulesEditor`, which saves `{ rules }` and nothing
+ * else, and `voice/x` by `compileVoice`, which saves `{ rules, habits }`. A
+ * counter stored on either would be silently erased by an ordinary save — and
+ * so would the preview cooldown stamp, which is a spending guard and therefore
+ * the worst possible thing to lose to an unrelated button.
+ *
+ * It is invisible everywhere it could be seen: `renderBrain` skips a voice
+ * page whose `renderRules` is empty, and `rules` here is always `[]`; the
+ * brain tree lists only stories and notes beside the three singletons. So this
+ * costs one row and appears in no prompt and on no screen.
+ */
+export const VOICE_LEDGER_SLUG = "voice/ledger"
+
+const newLedgerId = createIdGenerator({ prefix: "bp", size: 16 })
+
+export type VoiceLedger = {
+  /** When "Show the difference" last spent money for this user. */
+  previewAt?: string
+  edits: EditLedger
+}
+
+const EMPTY_LEDGER: VoiceLedger = { edits: {} }
+
+export async function readVoiceLedger(userId: string): Promise<VoiceLedger> {
+  const page = await getPage(userId, VOICE_LEDGER_SLUG)
+  if (!page) return EMPTY_LEDGER
+
+  const data = page.data as Partial<VoiceLedger>
+  return {
+    previewAt: typeof data.previewAt === "string" ? data.previewAt : undefined,
+    // Never trusted as a shape. This is jsonb read back out of a column that
+    // an older version of this code wrote, which is the same contract
+    // `riff.context` carries: degrade to empty, never throw on a page
+    // somebody is watching.
+    edits:
+      data.edits && typeof data.edits === "object"
+        ? (data.edits as EditLedger)
+        : {},
+  }
+}
+
+/**
+ * Merge a patch into the ledger.
+ *
+ * A direct upsert rather than `putPage`, deliberately. `putPage` snapshots the
+ * previous state into `brain_page_version` before every write — right for a
+ * page a person edits, wrong for a counter written on every approval and every
+ * preview, where it would add a row per press forever to protect a number that
+ * is derived from behaviour anyway.
+ *
+ * Last write wins. Two approvals landing in the same millisecond can lose one
+ * increment, which costs a user one extra edit before an offer appears; the
+ * alternative is a transaction around a bookkeeping write on the approval
+ * path, and approval is the one thing here that must not fail.
+ */
+export async function writeVoiceLedger(
+  userId: string,
+  patch: Partial<VoiceLedger>
+): Promise<void> {
+  const current = await readVoiceLedger(userId)
+  const data: VoiceLedger & { rules: string[] } = {
+    ...current,
+    ...patch,
+    // `assertValid` requires a rules array on a voice page, and an empty one is
+    // what keeps this page out of every prompt.
+    rules: [],
+  }
+
+  const now = new Date()
+
+  await db
+    .insert(brainPage)
+    .values({
+      id: newLedgerId(),
+      userId,
+      slug: VOICE_LEDGER_SLUG,
+      kind: "voice",
+      title: "Voice — ledger",
+      body: "",
+      data: data as unknown as Record<string, unknown>,
+      // Not `user`: nobody wrote this and nobody should be shown it as
+      // something they said. It is Quincy's own counting.
+      provenance: "inferred",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [brainPage.userId, brainPage.slug],
+      set: { data: data as unknown as Record<string, unknown>, updatedAt: now },
+    })
+}
+
+/** Every voice page that says something, ledger excluded. */
+async function realVoicePages(userId: string) {
+  const pages = await getBrainByKind(userId, "voice")
+  return pages.filter((page) => page.slug !== VOICE_LEDGER_SLUG)
+}
+
+/** Every rule the voice states, wherever it states it. */
+function rulesOf(page: { data: Record<string, unknown> }): string[] {
+  const rules = (page.data as Partial<VoiceData>).rules
+  return Array.isArray(rules) ? rules.filter((r) => typeof r === "string") : []
+}
+
+/**
+ * The page an accepted rule offer is written to.
+ *
+ * **Never the compiled page, unless the user already owns it.** `compileVoice`
+ * refuses to overwrite a page whose provenance is `user` — that is the
+ * ownership rule the whole brain runs on — so writing one accepted rule onto
+ * `voice/x` would take the measured fifteen-rule voice away from the compiler
+ * permanently, in exchange for a sentence about emoji. The user-owned `voice`
+ * page is the one the brain editor already shows and the one `renderBrain`
+ * already reads, so a rule written there is visible, editable and costs
+ * nothing.
+ */
+async function ruleTarget(userId: string, channel: string) {
+  const pages = await realVoicePages(userId)
+  const channelPage = pages.find((p) => p.slug === `voice/${channel}`)
+
+  const owned =
+    channelPage?.provenance === "user"
+      ? channelPage
+      : (pages.find((p) => p.slug === "voice") ?? null)
+
+  return {
+    slug: owned?.slug ?? "voice",
+    title: owned?.title ?? "Voice",
+    body: owned?.body ?? "",
+    data: owned?.data ?? {},
+    rules: owned ? rulesOf(owned) : [],
+    allRules: pages.flatMap(rulesOf),
+  }
+}
+
+/**
+ * Add one rule to the voice, in the user's name.
+ *
+ * `provenance: "user"` because a rule only ever gets here by somebody pressing
+ * "Add to voice" — see `approveVersion`. That is also what makes it outrank a
+ * later compile, which is correct: the user watched themselves make the same
+ * edit three times and said yes.
+ *
+ * The cap is enforced by `putPage`, which throws a `BrainInvariantError`
+ * carrying a sentence written for a person. The offer is not made at fifteen
+ * rules, so reaching that throw means the voice was filled in another tab.
+ */
+export async function appendVoiceRule(
+  userId: string,
+  channel: string,
+  text: string
+): Promise<void> {
+  const rule = text.trim()
+  if (!rule) return
+
+  const target = await ruleTarget(userId, channel)
+
+  if (target.rules.some((r) => normaliseRule(r) === normaliseRule(rule))) return
+
+  const page = await putPage({
+    userId,
+    slug: target.slug,
+    kind: "voice",
+    title: target.title,
+    body: target.body,
+    // Merged rather than replaced: the page may carry `habits` from a compile,
+    // and dropping those would delete the arithmetic that outranks the rules.
+    data: { ...target.data, rules: [...target.rules, rule] },
+    provenance: "user",
+  })
+
+  await appendEvent({
+    pageId: page.id,
+    kind: "correction",
+    source: "user",
+    confidence: "high",
+    summary: `Added a rule from a repeated edit: ${rule}`,
+  })
+}
+
+/**
+ * Count what the user changed, and say whether it is worth a rule yet.
+ *
+ * Called from `approveVersion` after the approval has already been written, so
+ * a failure here can only cost a count. The caller swallows it for that reason
+ * — the same posture `compileVoice` takes around `recordUsage`.
+ *
+ * Returns the offer rather than acting on it. **Nothing here writes a rule.**
+ */
+export async function noteApprovalEdit({
+  userId,
+  channel,
+  before,
+  after,
+  now = new Date(),
+}: {
+  userId: string
+  channel: string
+  before: string
+  after: string
+  now?: Date
+}): Promise<RuleOffer | null> {
+  const classes = classifyEdit(before, after)
+  if (classes.length === 0) return null
+
+  const ledger = await readVoiceLedger(userId)
+  const edits = recordEdits(ledger.edits, classes, now)
+  await writeVoiceLedger(userId, { edits })
+
+  const target = await ruleTarget(userId, channel)
+
+  return ruleOfferFor({
+    ledger: edits,
+    targetRules: target.rules,
+    allRules: target.allRules,
+    cap: RULE_CAP,
+    now,
+    prefer: classes,
+  })
+}
+
+/**
+ * Answer an offer: yes writes the rule, no writes nothing.
+ *
+ * Both answers zero the counter, and that is the anti-nag half. Leaving the
+ * count at three after a "Not now" would re-offer the same rule on the next
+ * approval that touches the same habit, which turns a helpful noticing into a
+ * dialog box that will not take no for an answer. Zeroed, the offer comes back
+ * only after the user has made the same edit three more times — by which point
+ * asking again is fair.
+ */
+export async function answerRuleOffer({
+  userId,
+  channel,
+  cls,
+  accept,
+  text,
+}: {
+  userId: string
+  channel: string
+  cls: EditClass
+  accept: boolean
+  text?: string
+}): Promise<void> {
+  if (accept) {
+    await appendVoiceRule(userId, channel, text?.trim() || RULE_FOR_CLASS[cls])
+  }
+
+  const ledger = await readVoiceLedger(userId)
+  await writeVoiceLedger(userId, { edits: clearClass(ledger.edits, cls) })
 }

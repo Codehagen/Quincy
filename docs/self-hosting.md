@@ -83,9 +83,56 @@ In short:
   ten requests a minute per IP, which is fine for one user and not for a
   shared address — Trend Alerts then falls back to Hacker News alone, which
   needs no key at all.
-- **X and LinkedIn** — OAuth apps for publishing channels.
+- **X and LinkedIn** — OAuth apps for publishing channels. These two are the
+  only first-party publishers.
+- **`EXTERNAL_PUBLISHER_URL`, `EXTERNAL_PUBLISHER_TOKEN`** — an external
+  scheduler, reached over its REST API, for every other channel. Both or
+  neither. Off in a default deployment, and that is the intended state: a post
+  scheduled to a channel with no first-party publisher is refused with "No
+  publisher for {channel}" until you point these at a service you run. No code
+  from that service is vendored here — Quincy POSTs to `{URL}/posts` with the
+  token as a bearer, so its licence stays your deployment's question.
+- **`GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`** — the
+  calendar as a read-only source. A *second* Google client, not the sign-in
+  pair above: sharing one would put `calendar.events.readonly` on the consent
+  screen everybody signing in has to read. Redirect URI
+  `${BETTER_AUTH_URL}/api/connect/google-calendar/callback`, scope
+  `https://www.googleapis.com/auth/calendar.events.readonly`. Unset, the
+  calendar row on `/sources` hides its Connect button.
 - **Stripe** — billing, via the Better Auth Stripe plugin.
 - **AI gateway** — model access for drafting.
+
+## Quincy over MCP
+
+An agent that is not the Studio chat can read your riffs, drafts, lineup and
+numbers, and can put material in — it cannot approve, schedule or publish with
+any token. It needs no environment variables; it needs three database tables.
+[`docs/mcp.md`](mcp.md) is the whole story: the endpoint, the OAuth 2.1 flow,
+the scopes and the eight tools.
+
+## Migrations `db:push` does not cover
+
+A fresh database gets everything from `pnpm db:push` — every table below is
+declared in `lib/schema.ts` or `lib/schema-app.ts`, so a first install needs
+nothing here.
+
+An instance that already has data is the other case. `drizzle/` has no
+baseline, so a generated migration would carry `CREATE TABLE` for the whole
+app; these two are hand-written instead. Both are `IF NOT EXISTS` throughout
+and verify what they made, so a second run changes nothing.
+
+```bash
+npx tsx --env-file=.env.local scripts/apply-mcp-oauth.ts
+npx tsx --env-file=.env.local scripts/apply-post-metric.ts
+```
+
+- **`apply-mcp-oauth.ts`** — `oauth_application`, `oauth_access_token` and
+  `oauth_consent`, the three tables Better Auth's MCP plugin needs. Without
+  them the server runs and the first client to connect fails inside somebody
+  else's tool.
+- **`apply-post-metric.ts`** — the `post_metric` table and
+  `channel_connection.last_metrics_at`. Without them `/numbers` has no series
+  and the daily metrics refresh has nowhere to write.
 
 ## Deploying
 

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { cn } from "@/lib/utils"
@@ -21,12 +21,14 @@ import {
   NODE_LABEL,
   type Node,
 } from "@/lib/rhythms"
+import { RUNS_ELSEWHERE, runsToday } from "@/lib/rhythm-handlers"
 import { RhythmSettings } from "@/components/rhythm/rhythm-settings"
 import { RhythmSwitch } from "@/components/rhythm/rhythm-switch"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
@@ -41,12 +43,17 @@ import { constructMetadata } from "@/lib/metadata"
  * makes, lands in — because a detail page that invents a different vocabulary
  * than the list it opened from makes the user learn the product twice.
  *
- * Run history is real for every rhythm that can run, and it comes from two
- * tables: `rhythm_run` for subscriptions, `brain_event` for Heartbeat, which
- * has no subscription row (plans/016, decision 8). A rhythm with no handler
- * still gets the honest line instead — showing invented runs under something
- * that has never fired is the one thing a page people make decisions from
- * must not do.
+ * **404 for a rhythm that does not run.** The index renders only what has code
+ * behind it (plans/027, 4a), so a detail page for one of the twenty in the
+ * catalogue would be a URL nothing links to, describing a thing that cannot
+ * happen. `getRhythm` still finds all twenty-seven, because the catalogue is
+ * what a card comes back from.
+ *
+ * Run history is real and comes from two tables: `rhythm_run` for
+ * subscriptions, `brain_event` for Heartbeat, which has no subscription row
+ * (plans/016, decision 8). An event rhythm has neither — nothing schedules it
+ * — so it gets the control it actually has instead of an empty list, which is
+ * a link to the source that starts it.
  *
  * This is where the time is set, not the card. See components/rhythm/
  * rhythm-settings.tsx, which reuses the slot composer's control rather than
@@ -69,7 +76,7 @@ export default async function RhythmDetailPage({
   }
 
   const rhythm = getRhythm(id)
-  if (!rhythm) {
+  if (!rhythm || !runsToday(rhythm.id)) {
     notFound()
   }
 
@@ -86,6 +93,14 @@ export default async function RhythmDetailPage({
    */
   const locked = rhythm.id === "heartbeat"
   const runnable = isRunnable(rhythm)
+  /**
+   * Set for the three rhythms that fire on an event rather than on a clock.
+   * Carries the path the user actually controls them from, which is never this
+   * page — a merge, a transcript and a recording all start where the source is
+   * connected.
+   */
+  const elsewhere = RUNS_ELSEWHERE[rhythm.id]
+  const eventControl = elsewhere?.kind === "event" ? elsewhere : null
 
   // The branches that do not apply resolve immediately, so whichever of these
   // reads this rhythm needs run concurrently instead of queueing behind each
@@ -112,6 +127,19 @@ export default async function RhythmDetailPage({
       ? formatSlotTime(state.nextRunAt, zone, now)
       : null
 
+  /**
+   * Brass means running, and it has to mean it here too.
+   *
+   * This used to read `rhythm.available`, a catalogue boolean that said "this
+   * has been built" — so a rhythm you had switched off still wore the signal
+   * ring. Heartbeat runs for everyone; a subscription runs when you turned it
+   * on; an event rhythm is not claimed either way, because whether its source
+   * is connected is a question this page would have to go and ask, and a brass
+   * ring around Shipped Work for somebody with no GitHub connection is the one
+   * lie the colour must not tell.
+   */
+  const live = locked || (runnable && state.enabled)
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-8 py-6">
       <Button
@@ -137,28 +165,29 @@ export default async function RhythmDetailPage({
           </p>
         </div>
         {/* The same switch as the card, so a rhythm can be turned off from
-            wherever you noticed it should be. `mt-2` optically centres it
+            wherever you noticed it should be — and nothing at all for an event
+            rhythm, whose control is on /sources. `mt-2` optically centres it
             against the display-size heading rather than its box. */}
-        <div className="mt-2 shrink-0">
-          <RhythmSwitch
-            rhythmId={rhythm.id}
-            name={rhythm.name}
-            enabled={locked ? rhythm.available : state.enabled}
-            runnable={runnable}
-            locked={locked}
-          />
-        </div>
+        {runnable || locked ? (
+          <div className="mt-2 shrink-0">
+            <RhythmSwitch
+              rhythmId={rhythm.id}
+              name={rhythm.name}
+              enabled={live}
+              locked={locked}
+            />
+          </div>
+        ) : null}
       </header>
 
       <section
         className={cn(
           "flex flex-col gap-4 rounded-2xl p-5",
-          // Ring, not fill. On the index brass separates what runs from what
-          // does not; here there is one object, so a tinted surface would add
-          // no information and tint the block the page exists to have you read.
-          rhythm.available
-            ? "bg-card ring-1 ring-signal-border"
-            : "bg-card shadow-xs"
+          // Ring, not fill, and the card on /rhythm now draws the same one.
+          // Brass is never a surface: a tint here would colour the block the
+          // page exists to have you read, and on the index it sat under a
+          // control you press.
+          live ? "bg-card ring-1 ring-signal-border" : "bg-card shadow-xs"
         )}
       >
         <p className="text-body text-pretty">{rhythm.how}</p>
@@ -186,15 +215,15 @@ export default async function RhythmDetailPage({
           <Field term="Makes">{MAKES_LABEL[rhythm.makes]}</Field>
 
           <Field term="Lands in">
-            <NodeList nodes={rhythm.to} live={rhythm.available} />
+            <NodeList nodes={rhythm.to} live={live} />
           </Field>
 
           <Field term="Family">{FAMILY_LABEL[rhythm.family]}</Field>
         </dl>
 
-        {/* Only for rhythms that can actually run. Heartbeat has no time to
-            set — it runs for everyone on a system cron — and an unbuilt rhythm
-            has nothing to schedule. */}
+        {/* Only for a subscription. Heartbeat has no time to set — it runs for
+            everyone on a system cron — and an event rhythm has no clock at
+            all. */}
         {runnable && !locked ? (
           <>
             <Separator />
@@ -211,32 +240,90 @@ export default async function RhythmDetailPage({
         ) : null}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1 px-3">
-          <h2 className="text-section">Recent runs</h2>
-          <p className="text-caption text-pretty text-muted-foreground">
-            The only honest reason to leave a rhythm on.
-          </p>
-        </div>
+      {/* An event rhythm gets this instead of a run list, not beside it.
+          Nothing schedules it, so `rhythm_run` has no rows for it and "Recent
+          runs" would be a heading over a permanent empty state — the section
+          that exists only to explain why it is empty. */}
+      {eventControl ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="px-3 text-section">Turning it on and off</h2>
 
-        {!runnable && !locked ? (
           <Empty className="rounded-xl bg-card shadow-xs">
             <EmptyHeader>
-              <EmptyTitle>Not available yet</EmptyTitle>
+              <EmptyTitle>There is no switch here</EmptyTitle>
               <EmptyDescription>
-                Quincy cannot run this one yet. When it can, every run will show
-                up here with what it touched.
+                It fires {rhythm.trigger.label} and stops when you disconnect
+                the source, so Sources is where it goes on and off.
               </EmptyDescription>
             </EmptyHeader>
+            <EmptyContent>
+              <Button
+                nativeButton={false}
+                render={<Link href={eventControl.switchedAt} />}
+              >
+                Open sources
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  data-icon="inline-end"
+                  icon={ArrowRight01Icon}
+                />
+              </Button>
+            </EmptyContent>
           </Empty>
-        ) : locked ? (
-          heartbeatRuns.length === 0 ? (
+        </section>
+      ) : (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1 px-3">
+            <h2 className="text-section">Recent runs</h2>
+            <p className="text-caption text-pretty text-muted-foreground">
+              The only honest reason to leave a rhythm on.
+            </p>
+          </div>
+
+          {locked ? (
+            heartbeatRuns.length === 0 ? (
+              <Empty className="rounded-xl bg-card shadow-xs">
+                <EmptyHeader>
+                  <EmptyTitle>Has not run yet</EmptyTitle>
+                  <EmptyDescription>
+                    It fires {rhythm.trigger.label}. The first run will show up
+                    here with the pages it wrote.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ul
+                role="list"
+                className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
+              >
+                {heartbeatRuns.map((run) => (
+                  <li
+                    key={run.at.toISOString()}
+                    className="flex items-center gap-4 px-4 py-3"
+                  >
+                    <span className="w-24 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
+                      {formatConversationDate(run.at, zone, now)}
+                    </span>
+                    <p className="min-w-0 flex-1 truncate text-body">
+                      Compiled the inbox
+                    </p>
+                    <span className="shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
+                      {run.pages} {run.pages === 1 ? "page" : "pages"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : rhythmRuns.length === 0 ? (
             <Empty className="rounded-xl bg-card shadow-xs">
               <EmptyHeader>
-                <EmptyTitle>Has not run yet</EmptyTitle>
+                <EmptyTitle>
+                  {state.enabled ? "Has not run yet" : "Switched off"}
+                </EmptyTitle>
                 <EmptyDescription>
-                  It fires {rhythm.trigger.label}. The first run will show up
-                  here with the pages it wrote.
+                  {state.enabled
+                    ? `It fires ${describeCadence(state)}. Press Run now if you would rather not wait.`
+                    : "Turn it on and every run will show up here with what it left behind."}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -245,7 +332,7 @@ export default async function RhythmDetailPage({
               role="list"
               className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
             >
-              {heartbeatRuns.map((run) => (
+              {rhythmRuns.map((run) => (
                 <li
                   key={run.at.toISOString()}
                   className="flex items-center gap-4 px-4 py-3"
@@ -253,66 +340,31 @@ export default async function RhythmDetailPage({
                   <span className="w-24 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
                     {formatConversationDate(run.at, zone, now)}
                   </span>
-                  <p className="min-w-0 flex-1 truncate text-body">
-                    Compiled the inbox
-                  </p>
-                  <span className="shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
-                    {run.pages} {run.pages === 1 ? "page" : "pages"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )
-        ) : rhythmRuns.length === 0 ? (
-          <Empty className="rounded-xl bg-card shadow-xs">
-            <EmptyHeader>
-              <EmptyTitle>
-                {state.enabled ? "Has not run yet" : "Switched off"}
-              </EmptyTitle>
-              <EmptyDescription>
-                {state.enabled
-                  ? `It fires ${describeCadence(state)}. Press Run now if you would rather not wait.`
-                  : "Turn it on and every run will show up here with what it left behind."}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <ul
-            role="list"
-            className="divide-y divide-border overflow-hidden rounded-xl bg-card shadow-xs"
-          >
-            {rhythmRuns.map((run) => (
-              <li
-                key={run.at.toISOString()}
-                className="flex items-center gap-4 px-4 py-3"
-              >
-                <span className="w-24 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
-                  {formatConversationDate(run.at, zone, now)}
-                </span>
-                {/* Not truncated. A summary is the whole content of the row and
+                  {/* Not truncated. A summary is the whole content of the row and
                     the one thing a person came here to read — the heartbeat
                     list above can truncate because its rows all say the same
                     thing. */}
-                <p
-                  className={cn(
-                    "min-w-0 flex-1 text-body text-pretty",
-                    run.state === "failed" && "text-destructive"
-                  )}
-                >
-                  {run.summary || "Nothing to report."}
-                </p>
-                {/* Only the states worth a badge. Labelling every `ok` run
+                  <p
+                    className={cn(
+                      "min-w-0 flex-1 text-body text-pretty",
+                      run.state === "failed" && "text-destructive"
+                    )}
+                  >
+                    {run.summary || "Nothing to report."}
+                  </p>
+                  {/* Only the states worth a badge. Labelling every `ok` run
                     "ok" is noise on a list where ok is the default. */}
-                {run.state !== "ok" || run.manual ? (
-                  <span className="shrink-0 font-mono text-caption text-muted-foreground">
-                    {run.state === "ok" ? "by hand" : run.state}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  {run.state !== "ok" || run.manual ? (
+                    <span className="shrink-0 font-mono text-caption text-muted-foreground">
+                      {run.state === "ok" ? "by hand" : run.state}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   )
 }

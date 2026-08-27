@@ -4,6 +4,15 @@ import { eq } from "drizzle-orm"
 import { isEntitled, resolveEntitlement } from "./entitlement"
 import { appendEvent, getEvents, getPage, putPage } from "./brain"
 import { db } from "./db"
+import {
+  appendLedger,
+  boundLedger,
+  classifyCapture,
+  LEDGER_COMPILE_BYTES,
+  mergeLedger,
+  renderLedgerLines,
+  type LedgerEntry,
+} from "./memory-ledger"
 import { user } from "./schema"
 import { brainPage } from "./schema-app"
 import {
@@ -48,7 +57,18 @@ a passing reaction, or a question. Most input is not worth keeping. Returning an
 empty list is the correct answer more often than not.
 
 Never invent a detail. If a date, number or name is not stated, leave it out.
-Write each fact as one sentence, in the language the user wrote it in.`
+Write each fact as one sentence, in the language the user wrote it in.
+
+A second block may follow, holding typed ledger lines from the last seven days.
+They are already deduplicated. Read them as follows:
+
+- "fact:" something that happened or is true. Keep it if it will still matter.
+- "preference:" how this user wants the work done. Keep it as a preference.
+- "correction:" the user overruling something. A correction wins: write it as a
+  rule ("Never ...", "Always ..."), keep it even when the same week's other
+  lines disagree, and discard whatever it contradicts.
+- "question:" something Quincy asked and has not had answered. Never keep one as
+  a fact — an unanswered question is not knowledge.`
 
 const EXTRACTION_SCHEMA = jsonSchema<{
   facts: { topic: string; fact: string }[]
@@ -94,7 +114,8 @@ export type Extraction = { topic: string; fact: string }[]
  * has one — spends nothing and should not have to pretend otherwise.
  */
 export type Extractor = (
-  captures: string[]
+  captures: string[],
+  ledger?: LedgerEntry[]
 ) => Promise<{ facts: Extraction | null; usage?: StructuredUsage }>
 
 /**
@@ -120,8 +141,34 @@ export function factsFrom(object: { facts: unknown }): Extraction | null {
   return Array.isArray(object.facts) ? object.facts : null
 }
 
-const modelExtractor: Extractor = async (captures) => {
+/**
+ * The two blocks the compile reads, in one prompt.
+ *
+ * Two blocks and not one list. The captures are raw turns in the order they
+ * were said; the ledger lines are typed, deduplicated and newest first.
+ * Flattening them together would lose exactly the thing the types carry — a
+ * `correction:` reads as one more sentence somebody typed, rather than as the
+ * line that overrules the three above it.
+ *
+ * Exported for the test, like `factsFrom`: this is the only place the merged
+ * ledger becomes something a model can act on, and it is pure.
+ */
+export function compilePrompt(
+  captures: string[],
+  ledger: LedgerEntry[] = []
+): string {
+  const raw = captures.length
+    ? `Raw captures since the last compaction:\n${captures
+        .map((c) => `- ${c}`)
+        .join("\n")}`
+    : ""
+
+  return [raw, renderLedgerLines(ledger)].filter(Boolean).join("\n\n")
+}
+
+const modelExtractor: Extractor = async (captures, ledger = []) => {
   const spent = usageAccumulator()
+  const prompt = compilePrompt(captures, ledger)
 
   const object = await retryMalformed(
     async () => {
@@ -130,7 +177,7 @@ const modelExtractor: Extractor = async (captures) => {
         providerOptions: REASONING,
         schema: EXTRACTION_SCHEMA,
         system: EXTRACT_PROMPT,
-        prompt: captures.map((c) => `- ${c}`).join("\n"),
+        prompt,
       })
 
       // Counted before the result is judged. A malformed answer costs exactly
@@ -150,15 +197,31 @@ const modelExtractor: Extractor = async (captures) => {
  * The inline write. One insert per turn, no model call, no judgment. Judgment
  * is Heartbeat's job, and it is cheaper to discard a row later than to decide
  * mid-conversation that something was not worth keeping.
+ *
+ * Two destinations since plan 027's 3c, and the order matters. The inbox event
+ * is written first and is unchanged — it is what the watermark counts and what
+ * the weekly compile reads, so nothing about the ledger may put it at risk.
+ * The ledger line is written second, typed by `classifyCapture`, and its
+ * failure is logged rather than thrown: a ledger that cannot be appended to is
+ * a worse memory, while a capture that was never stored is a lost turn.
+ *
+ * The classifier is pure. A model call here would sit between the user pressing
+ * enter and the turn being saved, to pick a label that is cheap to get wrong —
+ * and "cannot classify" falls back to `fact`, which is what capture did before
+ * this existed.
  */
 export async function captureTurn({
   userId,
   source,
   text,
+  at = new Date(),
+  timezone,
 }: {
   userId: string
   source: string
   text: string
+  at?: Date
+  timezone?: string | null
 }) {
   const trimmed = text.replace(/\s+/g, " ").trim()
   if (trimmed.length < MIN_CAPTURE_LENGTH) {
@@ -177,11 +240,28 @@ export async function captureTurn({
     })
   }
 
-  return appendEvent({
+  const event = await appendEvent({
     pageId: inbox.id,
     source,
     summary: trimmed.slice(0, 2000),
   })
+
+  try {
+    await appendLedger(userId, {
+      type: classifyCapture(trimmed),
+      text: trimmed,
+      source: "chat",
+      at,
+      timezone,
+    })
+  } catch (cause) {
+    console.error(
+      `[heartbeat] could not append the ledger for ${userId}:`,
+      cause
+    )
+  }
+
+  return event
 }
 
 export type HeartbeatResult = {
@@ -190,6 +270,12 @@ export type HeartbeatResult = {
   factsWritten: number
   pagesTouched: string[]
   skipped: string[]
+  /** Typed ledger lines the compile was shown, after dedupe and the cap. */
+  ledgerLines: number
+  /** Lines the dedupe rule merged away while reading the week. */
+  ledgerDropped: number
+  /** Lines the 12 KB ceiling cut, oldest first. */
+  ledgerCut: number
 }
 
 /**
@@ -214,6 +300,9 @@ export async function runHeartbeat({
     factsWritten: 0,
     pagesTouched: [],
     skipped: [],
+    ledgerLines: 0,
+    ledgerDropped: 0,
+    ledgerCut: 0,
   }
 
   const inbox = await getPage(userId, INBOX_SLUG)
@@ -231,7 +320,29 @@ export async function runHeartbeat({
   result.captures = captures.length
   if (captures.length === 0) return result
 
-  const { facts, usage } = await extract(captures.map((c) => c.summary))
+  /**
+   * The week's ledger, merged before the model sees it.
+   *
+   * Every ledger line came from a capture, so a run with no new captures has
+   * nothing new in the ledger either — which is why this sits after the early
+   * return rather than before it, and why "no captures" still costs nothing.
+   *
+   * Deduped across days with the same rule `appendLedger` uses within a day: a
+   * preference said on Monday and again on Thursday is one line, not two votes.
+   * Then bounded, newest first, so a talkative fortnight cannot decide what one
+   * compile costs. The compile note below says what was cut.
+   */
+  const merged = await mergeLedger(userId, { now })
+  const bounded = boundLedger(merged.lines)
+
+  result.ledgerLines = bounded.lines.length
+  result.ledgerDropped = merged.dropped
+  result.ledgerCut = bounded.cut
+
+  const { facts, usage } = await extract(
+    captures.map((c) => c.summary),
+    bounded.lines
+  )
 
   /**
    * Metered here rather than inside `modelExtractor`, matching every other
@@ -337,14 +448,53 @@ export async function runHeartbeat({
 
   // The watermark, written last. If anything above threw, the next run reads
   // the same captures again — which is exactly what we want.
+  //
+  // It is also the compile note, and it says what the model was not shown. A
+  // ceiling that silently drops the oldest half of a fortnight is the kind of
+  // thing that is only ever noticed as "it forgot".
   await appendEvent({
     pageId: inbox.id,
     kind: "compile",
     source: "heartbeat",
-    summary: `Processed ${captures.length} capture(s) at ${now.toISOString()}`,
+    summary: ledgerNote(
+      `Processed ${captures.length} capture(s) at ${now.toISOString()}`,
+      result
+    ),
   })
 
   return result
+}
+
+/**
+ * What the compile saw of the ledger, in one sentence, appended to the note.
+ *
+ * Exported for the test: the cut is the only part of a heartbeat run that a
+ * later reader cannot reconstruct from the pages, because the lines that were
+ * cut are exactly the ones that left no trace.
+ */
+export function ledgerNote(
+  prefix: string,
+  result: Pick<HeartbeatResult, "ledgerLines" | "ledgerDropped" | "ledgerCut">
+): string {
+  if (
+    result.ledgerLines === 0 &&
+    result.ledgerDropped === 0 &&
+    result.ledgerCut === 0
+  ) {
+    return prefix
+  }
+
+  const parts = [`${result.ledgerLines} ledger line(s)`]
+  if (result.ledgerDropped > 0) {
+    parts.push(`${result.ledgerDropped} merged as duplicates`)
+  }
+  if (result.ledgerCut > 0) {
+    parts.push(
+      `${result.ledgerCut} cut at the ${LEDGER_COMPILE_BYTES / 1024} KB cap`
+    )
+  }
+
+  return `${prefix} — ${parts.join(", ")}`
 }
 
 function titleFor(slug: string) {

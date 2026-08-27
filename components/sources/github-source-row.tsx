@@ -5,18 +5,25 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
 import {
+  answerMergeQuestion,
   disconnectGithub,
   readLastMergedPull,
   readMergeOutcome,
   saveGithubLogin,
   type GithubSetup,
+  type MergeQuestion,
 } from "@/app/(app)/sources/actions"
 import { isSettled, sayOutcome } from "@/lib/shipped-outcome"
 import type { Connection } from "@/lib/sources"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HoldToConfirm } from "@/components/hold-to-confirm"
+import { AnswerQuestion } from "@/components/sources/answer-question"
 import { SourceMark } from "@/components/sources/source-mark"
 
 /**
@@ -98,12 +105,22 @@ export function GithubSourceRow({
   connection,
   setup,
   outcome,
+  question,
 }: {
   /** null = never connected. */
   connection: Connection | null
   setup: GithubSetup
   /** `?github=…` from the install callback. Undefined on an ordinary visit. */
   outcome?: string
+  /**
+   * The one thing Quincy is waiting to be told, or null. See plans/027 1c.
+   *
+   * Read on the server and handed down, because the row is a client component
+   * and the answer to "is anything waiting on me" is a database question. Null
+   * for nearly every visit — the form is the exception, not a field the row
+   * always carries.
+   */
+  question?: MergeQuestion | null
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -258,7 +275,7 @@ export function GithubSourceRow({
 
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-card-title">GitHub</p>
-          <p className="text-caption text-muted-foreground text-pretty">
+          <p className="text-caption text-pretty text-muted-foreground">
             Pull requests as they merge
           </p>
 
@@ -266,7 +283,7 @@ export function GithubSourceRow({
               without this a 390px row cannot tell "installed and waiting" from
               "material arriving" — the distinction the page exists to draw. */}
           {needsLogin ? (
-            <p className="text-caption text-muted-foreground pt-0.5 text-pretty">
+            <p className="pt-0.5 text-caption text-pretty text-muted-foreground">
               Installed on {setup.account} — say which username is yours
             </p>
           ) : connection?.state === "waiting" ? (
@@ -293,7 +310,7 @@ export function GithubSourceRow({
               )}
             </div>
           ) : connection?.state === "arriving" ? (
-            <p className="text-caption text-muted-foreground pt-0.5">
+            <p className="pt-0.5 text-caption text-muted-foreground">
               Last merge {connection.lastAt}
             </p>
           ) : null}
@@ -334,8 +351,8 @@ export function GithubSourceRow({
         <p
           className={
             notice.tone === "error"
-              ? "text-destructive text-caption text-pretty"
-              : "text-caption text-muted-foreground text-pretty"
+              ? "text-caption text-pretty text-destructive"
+              : "text-caption text-pretty text-muted-foreground"
           }
         >
           {notice.message}
@@ -347,11 +364,42 @@ export function GithubSourceRow({
           message that vanishes in four seconds is the wrong home for a reason
           somebody may want to read twice. */}
       {said ? (
-        <p className="text-caption text-muted-foreground text-pretty">{said}</p>
+        <p className="text-caption text-pretty text-muted-foreground">{said}</p>
+      ) : null}
+
+      {/* The one question, at row level rather than inside a state branch —
+          the same lesson `said` is hoisted for. An answer flips the row's own
+          state, and a form living inside the branch that drew it would be
+          unmounted by its own success. */}
+      {question ? (
+        <AnswerQuestion
+          question={question}
+          onAnswer={answerMergeQuestion}
+          inputId="merge-answer"
+          placeholder="The old one was throwing away a third of every note."
+          lead={
+            <>
+              I could not find the story in{" "}
+              {question.url ? (
+                <a
+                  href={question.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
+                >
+                  {question.about}
+                </a>
+              ) : (
+                question.about
+              )}
+              . One line is enough — I will write from it.
+            </>
+          }
+        />
       ) : null}
 
       {!connected && !setup.installUrl ? (
-        <p className="text-caption text-muted-foreground text-pretty">
+        <p className="text-caption text-pretty text-muted-foreground">
           This deployment has no GitHub App yet. Whoever runs it creates one
           once, at <code className="font-mono">/api/connect/github/app</code>.
         </p>
@@ -361,8 +409,8 @@ export function GithubSourceRow({
         /* Derived nested radius: the list around this is `rounded-xl` (20px)
            with 16px of padding, so a child sits at `rounded-xs` (4px). See
            AGENTS.md — inner = outer − padding. */
-        <div className="bg-muted flex flex-col gap-4 rounded-xs p-4">
-          <p className="text-caption text-foreground text-pretty">
+        <div className="flex flex-col gap-4 rounded-xs bg-muted p-4">
+          <p className="text-caption text-pretty text-foreground">
             Installed on <span className="font-medium">{setup.account}</span>.
             Quincy reads the title and the description of pull requests{" "}
             {setup.login ? (
@@ -409,7 +457,7 @@ export function GithubSourceRow({
                       Merges by {setup.login} are being read.
                     </p>
                   ) : (
-                    <p className="text-caption text-muted-foreground text-pretty">
+                    <p className="text-caption text-pretty text-muted-foreground">
                       Until this is set, every merge is skipped — Quincy will
                       not guess which of your organisation is you.
                     </p>
@@ -420,15 +468,15 @@ export function GithubSourceRow({
           ) : null}
 
           {error ? (
-            <p className="text-destructive text-caption text-pretty">{error}</p>
+            <p className="text-caption text-pretty text-destructive">{error}</p>
           ) : null}
 
           {/* Away from the confirm button above, per AGENTS.md on forms. */}
-          <div className="border-border/60 flex flex-col gap-2 border-t pt-3">
+          <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
             <HoldToConfirm onConfirm={remove} doneLabel="Disconnected">
               Disconnect GitHub
             </HoldToConfirm>
-            <p className="text-caption text-muted-foreground text-pretty">
+            <p className="text-caption text-pretty text-muted-foreground">
               Quincy stops reading merges immediately. The app stays installed
               on GitHub until you remove it there — nothing here can uninstall
               it, and an integration that could would be one that could do it
@@ -439,7 +487,7 @@ export function GithubSourceRow({
       ) : null}
 
       {!open && error ? (
-        <p className="text-destructive text-caption text-pretty">{error}</p>
+        <p className="text-caption text-pretty text-destructive">{error}</p>
       ) : null}
     </li>
   )

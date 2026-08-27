@@ -185,6 +185,28 @@ describe("describeBeats", () => {
   })
 
   /**
+   * Plan 027 phase 1e. `did` and `happened` are quoted out of a description
+   * written for a repository, and in this corpus that description is in
+   * Norwegian while the post is in English — so a beat reached the writer as a
+   * Norwegian clause and was printed verbatim into an English post. The rule
+   * that fixes it has to be in this block, because this is the only place the
+   * beats are named.
+   */
+  it("tells the writer to translate a beat and keep its number", () => {
+    const block = describeBeats({
+      did: "Kjørt i prod 2026-08-26",
+      happened: "37% av notatet gikk tapt.",
+      learned: "",
+    })
+
+    expect(block).toContain("translated, not quoted")
+    expect(block).toContain("Every number in it survives the translation")
+    expect(block).toContain(
+      "Nothing goes out verbatim in a language the reader does not read"
+    )
+  })
+
+  /**
    * One beat is enough to print the block. A merge that only described a state
    * has no "did", and the writer is told to write the two it has — which is a
    * different instruction from being handed nothing.

@@ -65,7 +65,9 @@ export function RhythmSettings({
   )
   // "any" rather than "" for the daily case: an empty string is what a Select
   // reports when nothing is chosen, and the two would be indistinguishable.
-  const [day, setDay] = React.useState(weekday === null ? "any" : String(weekday))
+  const [day, setDay] = React.useState(
+    weekday === null ? "any" : String(weekday)
+  )
   const [saving, setSaving] = React.useState(false)
   const [running, setRunning] = React.useState(false)
   const [message, setMessage] = React.useState<{
@@ -74,7 +76,8 @@ export function RhythmSettings({
   } | null>(null)
 
   const dirty =
-    time !== `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` ||
+    time !==
+      `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` ||
     day !== (weekday === null ? "any" : String(weekday))
 
   async function save() {
@@ -188,7 +191,11 @@ export function RhythmSettings({
       {/* The answer to the question the two fields ask. `aria-live` because it
           changes without the focus moving — a screen-reader user editing the
           time would otherwise never learn the next run moved a week. */}
-      <div aria-live="polite" className="bg-muted/50 rounded-lg px-3 py-2.5">
+      {/* `rounded-xs`, derived rather than chosen: the panel around this sits
+          in a `rounded-2xl` (24px) block with 20px of padding, so a child
+          takes 4px. `rounded-lg` was 16px inside 24px and read as a card
+          floating in a card. */}
+      <div aria-live="polite" className="rounded-xs bg-muted/50 px-3 py-2.5">
         {message ? (
           <p
             className={cn(
@@ -199,11 +206,11 @@ export function RhythmSettings({
             {message.text}
           </p>
         ) : !enabled ? (
-          <p className="text-caption text-muted-foreground text-pretty">
+          <p className="text-caption text-pretty text-muted-foreground">
             Switched off. Turn it on to choose when it runs.
           </p>
         ) : dirty ? (
-          <p className="text-caption text-muted-foreground text-pretty">
+          <p className="text-caption text-pretty text-muted-foreground">
             Not saved yet — it still runs at the old time.
           </p>
         ) : (

@@ -1,5 +1,5 @@
 import { createIdGenerator } from "ai"
-import { and, asc, desc, eq, isNull, lte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { isEntitled, resolveEntitlement } from "./entitlement"
@@ -14,10 +14,11 @@ import { RHYTHM_HANDLERS, type RhythmHandlerDeps } from "./rhythm-handlers"
 import {
   rhythmRun,
   rhythmSubscription,
+  usageEvent,
   type RhythmRunState,
 } from "./schema-app"
 import { user } from "./schema"
-import { resolveTimeZone } from "./timezone"
+import { calendarDayIn, resolveTimeZone, startOfDayIn } from "./timezone"
 
 /**
  * The sweep that runs rhythms. Scheduled in vercel.json. See plans/016.
@@ -74,6 +75,125 @@ const TIME_BUDGET_MS = 255_000
  */
 export const MANUAL_RUN_COOLDOWN_MS = 10 * 60 * 1000
 
+/**
+ * The most one account may spend in a day on runs nobody asked for, in micros.
+ * $0.50.
+ *
+ * AGENTS.md names this as the one missing guard: the rhythm dispatcher "is the
+ * first thing in the product that spends on a schedule with nobody present.
+ * Per-run costs are capped; a per-user daily total is not." Every handler
+ * bounds what a single run buys — `DRAFTS_PER_RUN`, `MAX_MERGES`, `MAX_DRAFTS`
+ * — and nothing bounded the sum, so an account with six rhythms switched on had
+ * a daily bill decided by arithmetic nobody had done.
+ *
+ * The number comes from the measured turn cost in plans/README's 008 note: p95
+ * is 4.1c a turn, so $0.50 is about twelve of the most expensive calls this
+ * product makes, in one day, without anybody asking for any of them. The live
+ * account's entire spend since 2026-08-04 is about $5.35, so this bounds the
+ * accident rather than the normal case, which is what a ceiling is for.
+ */
+export const RHYTHM_DAILY_CEILING_MICROS = 500_000
+
+/**
+ * What this account has spent today, in its own day.
+ *
+ * **Every `usage_event`, not only the ones a rhythm caused**, and that is a
+ * decision rather than a shortcut. Nothing on the row says which spender wrote
+ * it: `conversation_id` is a chat id for a chat turn, a spend tag for a
+ * cooldown, and null for everything a server action or a cron bought. A
+ * ceiling that could see only part of the spend would be a ceiling that
+ * undercounts, and AGENTS.md is explicit that a persuasive argument for a
+ * weaker guard is the smell that section exists for.
+ *
+ * The consequence is the right way round: it only ever stops a *rhythm*. A
+ * person mid-conversation is never cut off by it, and an unattended cron is
+ * exactly the thing that should yield when an account has already spent its
+ * day.
+ *
+ * The user's own calendar day, not UTC. A ceiling that resets at 01:00 or
+ * 16:00 local is a ceiling nobody can predict, and lib/timezone.ts exists so
+ * this file never has to guess.
+ */
+export async function dailyRhythmSpend(
+  userId: string,
+  zone: string,
+  now = new Date()
+): Promise<number> {
+  const [row] = await db
+    .select({
+      micros: sql<number>`coalesce(sum(${usageEvent.costMicros}), 0)::int`,
+    })
+    .from(usageEvent)
+    .where(
+      and(
+        eq(usageEvent.userId, userId),
+        gte(usageEvent.createdAt, startOfDayIn(calendarDayIn(now, zone), zone))
+      )
+    )
+
+  return row?.micros ?? 0
+}
+
+/** "$0.50". The ceiling and the spend read the same way in a summary. */
+function dollars(micros: number): string {
+  return `$${(micros / 1_000_000).toFixed(2)}`
+}
+
+/**
+ * The sentence a ceilinged run is recorded with, or null when it may run.
+ *
+ * Pure and exported so the rule and the words are testable without a database
+ * — the same split lib/heartbeat.ts draws between `factsFrom` and
+ * `runHeartbeat`. Both numbers are in the sentence because neither is enough
+ * alone: "you hit the ceiling" is unactionable, and a ceiling with no spend
+ * beside it cannot be checked against /credits.
+ */
+export function ceilingSkip(spentMicros: number): string | null {
+  if (spentMicros < RHYTHM_DAILY_CEILING_MICROS) return null
+
+  return `Skipped — this account has spent ${dollars(spentMicros)} today, and the daily ceiling for unattended runs is ${dollars(RHYTHM_DAILY_CEILING_MICROS)}.`
+}
+
+/**
+ * When this user's last successful run of one rhythm was.
+ *
+ * Read off `rhythm_run` rather than a new column, the same call the manual
+ * cooldown below makes — the receipt table already records "when did this last
+ * go". Keyed on the user rather than the subscription, which is what a weekly
+ * rhythm's cooldown needs: deleting a subscription and switching it on again
+ * must not buy a second week's drafts on the same Monday.
+ *
+ * `state = 'ok'` only. A run that failed or skipped bought nothing, and a
+ * cooldown armed by a no-op would lock the next four weeks out of work they
+ * could have done. See `RhythmHandlerResult.state`.
+ *
+ * Exported for lib/ship-log.ts and lib/week-plan.ts, which each hold a cooldown
+ * of their own for what one run buys. That makes this file and those two an
+ * import cycle, and it is safe by the same construction lib/brain.ts and
+ * lib/memory-ledger.ts rely on: nothing crossing the boundary is called at
+ * module-evaluation time, and `RHYTHM_HANDLERS` is read inside functions
+ * rather than at the top level.
+ */
+export async function lastOkRunAt(
+  userId: string,
+  rhythmId: string
+): Promise<Date | null> {
+  const [row] = await db
+    .select({ startedAt: rhythmRun.startedAt })
+    .from(rhythmRun)
+    .where(
+      and(
+        eq(rhythmRun.userId, userId),
+        eq(rhythmRun.rhythmId, rhythmId),
+        eq(rhythmRun.state, "ok")
+      )
+    )
+    .orderBy(desc(rhythmRun.startedAt))
+    .limit(1)
+
+  return row?.startedAt ?? null
+}
+
 export type RhythmOutcome = RhythmRunState | "claimed-elsewhere"
 
 export type RhythmSweep = {
@@ -89,6 +209,11 @@ export type RhythmSweep = {
 export type RhythmRunDeps = RhythmHandlerDeps & {
   /** Overrides the registry. Only tests and verify scripts pass this. */
   handlers?: typeof RHYTHM_HANDLERS
+  /**
+   * What this account has spent today. Injectable so a test of the ceiling is
+   * a test of the ceiling rather than of `usage_event`.
+   */
+  spend?: (userId: string, zone: string, now: Date) => Promise<number>
 }
 
 function emptyOutcomes(): Record<RhythmOutcome, number> {
@@ -106,36 +231,38 @@ function emptyOutcomes(): Record<RhythmOutcome, number> {
 async function dueSubscriptions(now: Date, limit: number) {
   const staleBefore = new Date(now.getTime() - STALE_CLAIM_MS)
 
-  return db
-    .select({
-      id: rhythmSubscription.id,
-      userId: rhythmSubscription.userId,
-      rhythmId: rhythmSubscription.rhythmId,
-      hour: rhythmSubscription.hour,
-      minute: rhythmSubscription.minute,
-      weekday: rhythmSubscription.weekday,
-      nextRunAt: rhythmSubscription.nextRunAt,
-      timezone: user.timezone,
-      trialEndsAt: user.trialEndsAt,
-    })
-    .from(rhythmSubscription)
-    // Joined to `user` for two things the subscription cannot answer:
-    // entitlement, and which zone the wall clock above belongs to.
-    .innerJoin(user, eq(user.id, rhythmSubscription.userId))
-    .where(
-      and(
-        eq(rhythmSubscription.enabled, true),
-        lte(rhythmSubscription.nextRunAt, now),
-        or(
-          isNull(rhythmSubscription.runningSince),
-          lte(rhythmSubscription.runningSince, staleBefore)
+  return (
+    db
+      .select({
+        id: rhythmSubscription.id,
+        userId: rhythmSubscription.userId,
+        rhythmId: rhythmSubscription.rhythmId,
+        hour: rhythmSubscription.hour,
+        minute: rhythmSubscription.minute,
+        weekday: rhythmSubscription.weekday,
+        nextRunAt: rhythmSubscription.nextRunAt,
+        timezone: user.timezone,
+        trialEndsAt: user.trialEndsAt,
+      })
+      .from(rhythmSubscription)
+      // Joined to `user` for two things the subscription cannot answer:
+      // entitlement, and which zone the wall clock above belongs to.
+      .innerJoin(user, eq(user.id, rhythmSubscription.userId))
+      .where(
+        and(
+          eq(rhythmSubscription.enabled, true),
+          lte(rhythmSubscription.nextRunAt, now),
+          or(
+            isNull(rhythmSubscription.runningSince),
+            lte(rhythmSubscription.runningSince, staleBefore)
+          )
         )
       )
-    )
-    // Oldest first, so a truncated sweep serves the rhythms closest to missing
-    // their window rather than whichever the planner happened to return.
-    .orderBy(asc(rhythmSubscription.nextRunAt))
-    .limit(limit)
+      // Oldest first, so a truncated sweep serves the rhythms closest to missing
+      // their window rather than whichever the planner happened to return.
+      .orderBy(asc(rhythmSubscription.nextRunAt))
+      .limit(limit)
+  )
 }
 
 /**
@@ -204,6 +331,59 @@ async function release(
     .where(eq(rhythmSubscription.id, row.id))
 }
 
+/**
+ * The most one run's record may weigh, serialised.
+ *
+ * Sixteen kilobytes, where `MAX_SCRAP_BYTES` in lib/ship-log.ts is six. The
+ * two bound different things: that one bounds a prompt, and this bounds a row
+ * nobody is charged for. Week Plan's record carries a critique line and a
+ * placement for every draft of the week and is the largest of the three by a
+ * long way, and it is still nowhere near this — which is what a ceiling should
+ * look like. It bounds the accident, not the normal case.
+ *
+ * The accident it bounds is a handler that one day returns the drafts rather
+ * than their ids. `rhythm_run` has a row per subscription per fire, forever,
+ * and jsonb has no width to stop it.
+ */
+export const MAX_RESULT_BYTES = 16 * 1024
+
+/**
+ * The record as it goes into `rhythm_run.result`, or null.
+ *
+ * Pure and exported for the reason `ceilingSkip` above is: the rule is worth
+ * testing without a database.
+ *
+ * Over the cap it degrades to `{ truncated: true, summary }` rather than being
+ * dropped. A row with nothing in it says "this run produced no record", which
+ * is a different and wrong fact — the truncation flag is what tells a reader
+ * that something was produced and this is not it. The summary rides along
+ * because it is the part a person would have read anyway.
+ *
+ * Anything that will not serialise gets the same treatment. A `BigInt` or a
+ * cycle in a handler's return is a bug in the handler, and it must not be a
+ * throw inside the receipt — see `recordRun`'s caller, which already treats
+ * losing a receipt as the lesser harm.
+ */
+export function boundResult(result: unknown, summary: string): unknown {
+  if (result === undefined || result === null) return null
+
+  let serialised: string | undefined
+
+  try {
+    serialised = JSON.stringify(result)
+  } catch {
+    return { truncated: true, summary: summary.slice(0, 500) }
+  }
+
+  // `undefined` back from JSON.stringify is a function or a bare undefined —
+  // nothing a column can hold, and the same nothing as no result at all.
+  if (serialised === undefined) return null
+
+  if (Buffer.byteLength(serialised, "utf8") <= MAX_RESULT_BYTES) return result
+
+  return { truncated: true, summary: summary.slice(0, 500) }
+}
+
 async function recordRun(input: {
   subscriptionId: string
   userId: string
@@ -212,6 +392,7 @@ async function recordRun(input: {
   summary: string
   startedAt: Date
   manual?: boolean
+  result?: unknown
 }) {
   await db.insert(rhythmRun).values({
     id: newRunId(),
@@ -222,6 +403,9 @@ async function recordRun(input: {
     // Bounded so a handler that returns something enormous cannot make a card
     // unreadable or a row unreasonable.
     summary: input.summary.slice(0, 500),
+    // Bounded for the same reason, on bytes rather than characters because
+    // this one is not read by a person. See `boundResult`.
+    result: boundResult(input.result, input.summary),
     manual: input.manual ?? false,
     startedAt: input.startedAt,
     finishedAt: new Date(),
@@ -233,6 +417,7 @@ export async function runDueRhythms(
   deps: RhythmRunDeps = {}
 ): Promise<RhythmSweep> {
   const handlers = deps.handlers ?? RHYTHM_HANDLERS
+  const spend = deps.spend ?? dailyRhythmSpend
   const startedSweep = Date.now()
 
   // One more than the cap, so truncation is a fact rather than a guess.
@@ -256,7 +441,9 @@ export async function runDueRhythms(
       // dropped: a sweep that quietly served half its queue every run looks
       // identical to one that served all of it.
       truncated = true
-      console.warn("[rhythm] sweep hit its time budget — remaining rows stay due.")
+      console.warn(
+        "[rhythm] sweep hit its time budget — remaining rows stay due."
+      )
       break
     }
 
@@ -274,6 +461,12 @@ export async function runDueRhythms(
     let state: RhythmRunState = "ok"
     let summary = ""
     let ranAt: Date | null = null
+    /**
+     * What the handler produced. Only a handler that ran sets it, so every
+     * skip, every miss and every throw below leaves it null — which is exactly
+     * what the column means by null. See `boundResult`.
+     */
+    let result: unknown = null
 
     try {
       const handler = handlers[row.rhythmId]
@@ -307,9 +500,33 @@ export async function runDueRhythms(
               ? "Skipped — your subscription is no longer active."
               : "Skipped — your free day is over."
         } else {
-          const result = await handler({ userId: row.userId, deps })
-          summary = result.summary
-          ranAt = new Date()
+          const ceilinged = ceilingSkip(await spend(row.userId, zone, now))
+
+          if (ceilinged) {
+            /**
+             * The daily ceiling, checked after entitlement and immediately
+             * before the handler. See `RHYTHM_DAILY_CEILING_MICROS`.
+             *
+             * A skip rather than a failure, and a *recorded* one: an account
+             * whose rhythms quietly stopped one morning is indistinguishable
+             * from a broken dispatcher, and the number in the summary is the
+             * only thing that tells the two apart. The cursor still advances,
+             * so tomorrow's run happens on time rather than the row staying
+             * due and being re-read on every tick for the rest of the day.
+             */
+            state = "skipped"
+            summary = ceilinged
+          } else {
+            const outcome = await handler({ userId: row.userId, deps })
+            summary = outcome.summary
+            // A handler that ran and found nothing to do says so. See
+            // `RhythmHandlerResult.state`: `lastOkRunAt` above is what the
+            // weekly cooldowns read, and a no-op recorded as `ok` would arm
+            // one for a week.
+            state = outcome.state ?? "ok"
+            result = outcome.result ?? null
+            ranAt = new Date()
+          }
         }
       }
     } catch (cause) {
@@ -342,6 +559,7 @@ export async function runDueRhythms(
         rhythmId: row.rhythmId,
         state,
         summary,
+        result,
         startedAt,
       })
     } catch (cause) {
@@ -442,10 +660,15 @@ export async function runRhythmOnce({
 
   let state: RhythmRunState = "ok"
   let summary = ""
+  let result: unknown = null
 
   try {
-    const result = await handler({ userId, deps })
-    summary = result.summary
+    const outcome = await handler({ userId, deps })
+    summary = outcome.summary
+    state = outcome.state ?? "ok"
+    // Recorded here too. A run by hand is the one people actually watch, so it
+    // is the last place a receipt should be thinner than the scheduled one's.
+    result = outcome.result ?? null
   } catch (cause) {
     console.error(`[rhythm] manual ${row.rhythmId} failed:`, cause)
     state = "failed"
@@ -469,6 +692,7 @@ export async function runRhythmOnce({
       rhythmId: row.rhythmId,
       state,
       summary,
+      result,
       startedAt: now,
       manual: true,
     })

@@ -1,5 +1,5 @@
 import { createIdGenerator } from "ai"
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm"
 
 import {
   ADAPT_MODEL,
@@ -18,6 +18,7 @@ import { recentKinds } from "./drafts"
 import { formatConversationDate } from "./format-date"
 import { draft, draftVersion, riff, riffAngle, sourceItem } from "./schema-app"
 import type { ShippedOutcome } from "./shipped-outcome"
+import { readShippedQuestion } from "./shipped-work"
 import { resolveTimeZone } from "./timezone"
 import { recordUsage } from "./usage"
 import { MAX_AUDIO_SECONDS } from "./voice-note"
@@ -325,6 +326,27 @@ export type Riff = {
    * own material.
    */
   adaptedFrom: { url: string; handle: string } | null
+  /**
+   * The delivery this riff came out of, when there was one — a `source_item`
+   * id. Empty for anything typed or pasted, since nothing sits upstream of
+   * those.
+   *
+   * Optional rather than required: the prototypes under app/prototypes build
+   * `Riff` literals by hand, and a field they cannot know about should not be
+   * a compile error in a page nobody ships.
+   */
+  sourceItemId?: string
+  /**
+   * What the writer is told about the material that is not the material —
+   * `{ forUser, beats, facts }` for a merge. jsonb, handed over whole and
+   * never parsed here.
+   *
+   * On the read model because the chat reasons about a merge from it. Until
+   * 2026-08-27 `read_riffs` returned a scrap cut at 400 characters and none of
+   * this, so the chat could see that a pull request existed and nothing about
+   * what it did.
+   */
+  context?: Record<string, unknown>
   angles: Angle[]
 }
 
@@ -444,6 +466,8 @@ export async function getRiffs(user: {
       row.adaptedFromUrl || row.adaptedFromHandle
         ? { url: row.adaptedFromUrl, handle: row.adaptedFromHandle }
         : null,
+    sourceItemId: row.sourceItemId,
+    context: row.context,
     angles: angles
       .filter((a) => a.riffId === row.id)
       .map((a) => ({
@@ -986,6 +1010,20 @@ export async function readShippedOutcome(input: {
     return { state: "ready", riffId: id }
   }
 
+  /**
+   * The question, before the refusal, because it is the newer fact.
+   *
+   * A merge that was refused *and* asked about carries both keys, and the two
+   * sentences say different things to the person reading: one is a verdict and
+   * the other is a way out of it. The question wins because it is the one with
+   * something for them to do. See plans/027 phase 1c.
+   */
+  const question = readShippedQuestion(item.meta?.question)
+
+  if (question && !question.answer) {
+    return { state: "asked", question: question.text }
+  }
+
   const refusal = item.meta?.refusal
   const why = item.meta?.refusalWhy
 
@@ -993,7 +1031,191 @@ export async function readShippedOutcome(input: {
     return { state: "refused", why: typeof why === "string" ? why : "" }
   }
 
+  /**
+   * Stored and never read — an unentitled account, a paused connection, the
+   * daily ceiling, or a workflow that failed to start. Last, because a row that
+   * later got a verdict has both keys and the verdict is the better answer.
+   */
+  const stopped = item.meta?.stopped
+  const stoppedWhy = item.meta?.stoppedWhy
+
+  if (typeof stopped === "string") {
+    return {
+      state: "stopped",
+      why: typeof stoppedWhy === "string" ? stoppedWhy : "",
+    }
+  }
+
   return { state: "pending" }
+}
+
+/* ── One merge, read back whole ───────────────────────────────────────────
+   What `readShippedOutcome` answers in one word, this answers in full: the
+   item as it arrived, everything the ingest wrote onto it, and whatever riffs
+   came out of it. See `read_source` in lib/chat-tools.ts, which is its only
+   caller and the reason it exists — the chat could describe a merge it had
+   never read, and could not reach one the user named.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * How the caller named the item.
+ *
+ * Parsed before it gets here, never inside the `where` clause. A pull request
+ * number is a number and a source id is an id, and deciding which one a string
+ * is belongs with the tool that took it from a model, not with the query.
+ */
+export type SourceRef =
+  | { by: "id"; id: string }
+  /** The number is the fallback: a link to a pull request names it twice, and
+   *  the stored `url` may differ from the one somebody pasted. */
+  | { by: "url"; url: string; number: number | null }
+  | { by: "number"; number: number }
+
+export type SourceRiff = {
+  id: string
+  state: string
+  failure: string
+  scrap: string
+  /** jsonb, handed over whole. The reader narrows it; this does not parse it. */
+  context: Record<string, unknown>
+  angles: {
+    id: string
+    hook: string
+    shape: string
+    why: string
+    drafted: boolean
+  }[]
+}
+
+export type SourceRecord = {
+  id: string
+  source: string
+  url: string
+  externalId: string
+  postedAt: Date | null
+  createdAt: Date
+  /** The whole scrap as it arrived. Cutting it is the caller's decision. */
+  body: string
+  /** jsonb, verbatim. Never parsed here — see `source_item.meta`. */
+  meta: Record<string, unknown>
+  riffs: SourceRiff[]
+}
+
+/**
+ * One source item and everything downstream of it, for the user who owns it.
+ *
+ * **The ownership filter is in every branch by construction.** The three ways
+ * of naming an item are `or`-ed into one predicate and that predicate is
+ * `and`-ed with the user — so there is no ref shape that can reach somebody
+ * else's merge, including the one that looks up a pull request number, which is
+ * the guessable one. A number is `#282` in any repository on earth.
+ *
+ * The riff join takes both edges, because there are two. `riff.source_item_id`
+ * is the column plans/026 added; every riff written before it carries an empty
+ * string and is instead findable by `shippedRiffId`, which derives the riff id
+ * from the item id. Reading only the column would lose the ten live merges.
+ */
+export async function readSourceByRef(input: {
+  userId: string
+  ref: SourceRef
+}): Promise<SourceRecord | null> {
+  // `meta->>'number'` rather than a column: the pull request number is the
+  // platform's own fact and lives in jsonb with the rest of them. Compared as
+  // text because that is what `->>` returns, and bound as a parameter so the
+  // number never reaches the SQL string.
+  const byNumber = (n: number) =>
+    sql`${sourceItem.meta}->>'number' = ${String(n)}`
+
+  const named =
+    input.ref.by === "id"
+      ? eq(sourceItem.id, input.ref.id)
+      : input.ref.by === "number"
+        ? byNumber(input.ref.number)
+        : input.ref.number === null
+          ? eq(sourceItem.url, input.ref.url)
+          : or(eq(sourceItem.url, input.ref.url), byNumber(input.ref.number))
+
+  const [item] = await db
+    .select()
+    .from(sourceItem)
+    .where(and(eq(sourceItem.userId, input.userId), named))
+    // A number can match twice — the same pull request number in two
+    // repositories — and the newest is the one somebody just merged.
+    .orderBy(desc(sourceItem.createdAt))
+    .limit(1)
+
+  if (!item) return null
+
+  const [rows, draftedRows] = await Promise.all([
+    db
+      .select({
+        id: riff.id,
+        state: riff.state,
+        failure: riff.failure,
+        scrap: riff.scrap,
+        context: riff.context,
+      })
+      .from(riff)
+      .where(
+        and(
+          eq(riff.userId, input.userId),
+          or(
+            eq(riff.sourceItemId, item.id),
+            eq(riff.id, shippedRiffId(item.id))
+          )
+        )
+      )
+      .orderBy(desc(riff.createdAt)),
+    // The same derivation `getRiffs` uses: an angle is drafted exactly when a
+    // draft carries its hook. Stored in one place, read in two.
+    db
+      .select({ riffHook: draft.riffHook })
+      .from(draft)
+      .where(eq(draft.userId, input.userId)),
+  ])
+
+  const angles =
+    rows.length === 0
+      ? []
+      : await db
+          .select()
+          .from(riffAngle)
+          .where(
+            inArray(
+              riffAngle.riffId,
+              rows.map((r) => r.id)
+            )
+          )
+          .orderBy(asc(riffAngle.position))
+
+  const draftedHooks = new Set(draftedRows.map((d) => d.riffHook))
+
+  return {
+    id: item.id,
+    source: item.source,
+    url: item.url,
+    externalId: item.externalId,
+    postedAt: item.postedAt,
+    createdAt: item.createdAt,
+    body: item.body,
+    meta: item.meta,
+    riffs: rows.map((row) => ({
+      id: row.id,
+      state: row.state,
+      failure: row.failure,
+      scrap: row.scrap,
+      context: row.context,
+      angles: angles
+        .filter((a) => a.riffId === row.id)
+        .map((a) => ({
+          id: a.id,
+          hook: a.hook,
+          shape: a.shape,
+          why: a.why,
+          drafted: draftedHooks.has(a.hook),
+        })),
+    })),
+  }
 }
 
 export async function startSpokenRiff(

@@ -2,6 +2,13 @@ import { createIdGenerator } from "ai"
 import { and, asc, eq } from "drizzle-orm"
 
 import { db } from "./db"
+// The ledger's own module imports this one for its write path, which makes the
+// pair a cycle. Safe by construction: nothing crosses at module evaluation
+// time, and both directions cross on hoisted function declarations only.
+import { isLedgerSlug, renderLedgerSection } from "./memory-ledger"
+// One-way: lib/story-gaps.ts imports nothing from here at run time, precisely
+// so this import cannot become a second cycle. See the note at the top of it.
+import { storyGapThemes } from "./story-gaps"
 import { renderHabits, type Habits } from "./voice-habits"
 import {
   brainEvent,
@@ -49,6 +56,13 @@ export type InstructionData = { rules: string[] }
 export type PolicyData = {
   platform: string
   goal?: string
+  /**
+   * The date the goal is measured on, as `YYYY-MM-DD`. Plan 027 asks for "a
+   * goal with a date", and the date is its own field rather than a clause
+   * inside `goal` because a deadline is the half a weekly review has to read.
+   * Optional: every policy page written before this has none.
+   */
+  goalDate?: string
   positioning?: string
   audience?: { primary?: string; secondary?: string }
   pillars: { name: string; weight: number; note?: string }[]
@@ -429,7 +443,11 @@ function renderPolicy(page: BrainPage) {
   const p = page.data as Partial<PolicyData>
   const lines: string[] = []
 
-  if (p.goal) lines.push(`Goal: ${p.goal}`)
+  // The date rides on the goal line rather than on one of its own: a deadline
+  // with no goal beside it is a date, and a goal with the date two lines away
+  // is a goal the model reads as open-ended.
+  if (p.goal)
+    lines.push(`Goal: ${p.goal}${p.goalDate ? ` (by ${p.goalDate})` : ""}`)
   if (p.positioning) lines.push(`Positioning: ${p.positioning}`)
   if (p.audience?.primary) lines.push(`Primary audience: ${p.audience.primary}`)
   if (p.audience?.secondary) {
@@ -513,26 +531,97 @@ function renderStoryFull(page: BrainPage): string {
 }
 
 /**
+ * One story, whole, for a caller that went and asked for it.
+ *
+ * `renderStoryFull` is written for a prompt section that carries four of them,
+ * so it leaves the narrative out: `data` is what picks a story and `body` is
+ * the prose only the model reads. A caller that named one title wants the
+ * prose — that is the whole reason it asked — so this is the pair.
+ */
+export function renderStory(page: BrainPage): string {
+  const body = page.body.trim()
+  return body ? `${renderStoryFull(page)}\n\n${body}` : renderStoryFull(page)
+}
+
+/**
+ * The story the chat asked for, by id, slug or title.
+ *
+ * Three keys because three things name a story and only one of them is typed
+ * by a person. `renderBrain`'s index prints **titles**, so a title is what a
+ * model reading that index will send back; a slug is what the URL on /brain
+ * carries; an id is what anything holding the row already has. Matching all
+ * three costs one comparison each and removes an entire class of "call the
+ * tool, get nothing" turn.
+ *
+ * Titles are matched loosely — case-folded, then by containment — because the
+ * model retypes them and a capital letter is not a reason to answer no. The
+ * titles are returned either way so the caller can say what does exist rather
+ * than only that this one does not. An unknown title with no list beside it is
+ * how a model starts guessing.
+ */
+export async function getStory(
+  userId: string,
+  ref: string
+): Promise<{ page: BrainPage | null; titles: string[] }> {
+  const stories = await getBrainByKind(userId, "story")
+  const titles = stories.map((page) => page.title)
+  const wanted = ref.trim().toLowerCase()
+
+  if (!wanted) return { page: null, titles }
+
+  const page =
+    stories.find((p) => p.id === ref.trim() || p.slug === ref.trim()) ??
+    stories.find((p) => p.title.toLowerCase() === wanted) ??
+    stories.find((p) => p.slug.toLowerCase() === wanted) ??
+    stories.find(
+      (p) =>
+        p.title.toLowerCase().includes(wanted) ||
+        wanted.includes(p.title.toLowerCase())
+    ) ??
+    null
+
+  return { page, titles }
+}
+
+/**
  * The brain as a prompt section. Returns "" when the brain is empty, so a new
  * account gets the plain system prompt rather than a page of empty headings.
  *
  * **`stories` exists because the index form lied to every tool-less caller.**
  * It renders each story as a title and a one-line point, then instructs the
- * model to "call the story tool to read one in full before citing anything from
- * it" — and there is no story tool anywhere in this codebase. In the chat route
- * that is merely aspirational; in `generateDraft`, which is a single
- * `generateObject` with no tools, it is a contradiction: the same prompt names
- * four stories as the evidence to draw on, forbids inventing anything not in
- * them, and provides no way to open them. The correct behaviour under those
- * instructions is to write something short and unspecific, which is exactly
- * what came back on 2026-08-16.
+ * model to go and read one in full before citing anything from it. The chat
+ * route can: `read_story` in lib/chat-tools.ts is that tool, and this text
+ * names it exactly rather than describing it, because a model cannot call "the
+ * story tool". `generateDraft` cannot — it is a single `generateObject` with no
+ * tools, so for it the same prompt would name four stories as the evidence to
+ * draw on, forbid inventing anything not in them, and provide no way to open
+ * them. The correct behaviour under those instructions is to write something
+ * short and unspecific, which is exactly what came back on 2026-08-16.
  *
  * `"index"` stays the default so the chat route and anything else built around
  * a catalogue keeps the shape it expects. Callers with no tools pass `"full"`.
  */
 export function renderBrain(
   pages: BrainPage[],
-  { stories: storyMode = "index" }: { stories?: "index" | "full" } = {}
+  {
+    stories: storyMode = "index",
+    gaps = [],
+    ledger,
+  }: {
+    stories?: "index" | "full"
+    /**
+     * Themes the corpus returns to with no story page — `storyGapThemes` in
+     * lib/story-gaps.ts. Passed in rather than read here, because this
+     * function is pure over the pages it is given and every test of it says so.
+     */
+    gaps?: string[]
+    /**
+     * Which day "the last seven days" ends on. A caller that holds the user
+     * row passes their zone; without one the window is read in UTC and its
+     * upper edge stays open, so a user ahead of UTC still sees today's page.
+     */
+    ledger?: { now?: Date; timezone?: string | null }
+  } = {}
 ): string {
   const of = (kind: BrainKind) => pages.filter((p) => p.kind === kind)
   const sections: string[] = []
@@ -584,6 +673,24 @@ export function renderBrain(
   }
 
   const stories = of("story")
+
+  /**
+   * What the story bank is missing, in one line. See lib/story-gaps.ts.
+   *
+   * Index mode only, and that is not an oversight. The index form is written
+   * for the chat, which can act on a gap — it can ask the question, and the
+   * answer becomes the story. `"full"` is for a single `generateObject` with
+   * no tools that is about to write a post: telling it what the user has never
+   * written about is telling it what it may not draw on, which is the one
+   * reading of this line that would make a draft worse.
+   */
+  const missing =
+    storyMode === "index" && gaps.length
+      ? `Needs material: ${gaps.join(", ")} — subjects their posts keep returning to with no ` +
+        `story page behind them. If one of these comes up, ask for the story rather than ` +
+        `writing around it.`
+      : ""
+
   if (stories.length) {
     sections.push(
       storyMode === "full"
@@ -591,17 +698,41 @@ export function renderBrain(
             `Use them for specifics — a real quote, a real link, a thing that actually ` +
             `happened — rather than writing around the subject. Never invent a detail that ` +
             `is not below.\n\n${stories.map(renderStoryFull).join("\n\n")}`
-        : `## Story bank\n\n${stories.length} stories are available. Titles and when to use ` +
-            `them are below; call the story tool to read one in full before citing ` +
-            `anything from it. Never invent a detail that is not in the story.\n\n` +
-            renderStoryIndex(stories)
+        : [
+            `## Story bank\n\n${stories.length} stories are available. Titles and when to use ` +
+              `them are below; call read_story with the title to read one in full before ` +
+              `citing anything from it. Never invent a detail that is not in the story.\n\n` +
+              renderStoryIndex(stories),
+            missing,
+          ]
+            .filter(Boolean)
+            .join("\n\n")
     )
+  } else if (missing) {
+    // No stories and gaps anyway is the state a new account is in for its first
+    // week, and it is the state where the line is worth the most.
+    sections.push(`## Story bank\n\nNo stories yet. ${missing}`)
   }
 
+  /**
+   * The compiled memory pages, then the raw ledger — in that order, and the
+   * order is the point.
+   *
+   * A ledger page is a memory page too (`memory/YYYY-MM-DD`), so without the
+   * filter this section would dump every day of the year as an undated blob of
+   * `- preference: ...` lines. `renderLedgerSection` renders the last seven
+   * days instead: typed, newest first, capped, and read *after* the compiled
+   * pages so a correction from this morning is the last thing the model reads
+   * on a subject the compile last touched on Sunday.
+   */
   const memories = of("memory")
+    .filter((p) => !isLedgerSlug(p.slug))
     .map((p) => p.body.trim())
     .filter(Boolean)
   if (memories.length) sections.push(`## Notes\n\n${memories.join("\n\n")}`)
+
+  const lately = renderLedgerSection(of("memory"), ledger)
+  if (lately) sections.push(lately)
 
   return sections.join("\n\n")
 }
@@ -615,9 +746,29 @@ export function renderBrain(
  */
 export async function renderBrainForUser(
   userId: string,
-  options?: { stories?: "index" | "full" }
+  options?: {
+    stories?: "index" | "full"
+    ledger?: { now?: Date; timezone?: string | null }
+  }
 ) {
-  return renderBrain(await getBrain(userId), options)
+  const pages = await getBrain(userId)
+
+  /**
+   * The gap line is index-mode only, so the query is too — a tool-less caller
+   * would pay a round trip for a section it is never shown. The story pages go
+   * in from the read that just happened, so this is one extra query rather
+   * than two, and `storyGapThemes` swallows its own failures: a decorative
+   * line must not be what takes a chat turn down.
+   */
+  const gaps =
+    (options?.stories ?? "index") === "index"
+      ? await storyGapThemes(
+          userId,
+          pages.filter((page) => page.kind === "story")
+        )
+      : []
+
+  return renderBrain(pages, { ...options, gaps })
 }
 
 /**
@@ -635,7 +786,7 @@ export async function renderBrainForUser(
  *
  * `stories: "full"` for the reason `renderBrain`'s own comment gives about
  * `generateDraft`: the index names stories as the evidence and tells the model
- * to call a story tool that does not exist. A selector with no tools must be
+ * to call `read_story`, which a selector with no tools cannot reach. A selector with no tools must be
  * given the stories themselves — and standing is precisely what a story
  * records, so this is the section that decides the answer.
  */

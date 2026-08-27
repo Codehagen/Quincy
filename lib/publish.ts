@@ -1,16 +1,25 @@
-import { eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 
 import {
-  channelLabel,
   getAccessToken,
+  isConnectableChannel,
   markConnectionState,
-  PLATFORM_TIMEOUT_MS,
-  type Connection,
 } from "./channels"
 import { db } from "./db"
 import { containsUrl, measurePost } from "./post-length"
-import { channelConnection, type ConnectableChannel } from "./schema-app"
-import { usageEvent } from "./schema-app"
+import {
+  canPublish,
+  labelFor,
+  publisherFor,
+  type Channel,
+  type PublishConnection,
+  type PublishResult,
+} from "./publisher"
+import {
+  channelConnection,
+  usageEvent,
+  type ConnectableChannel,
+} from "./schema-app"
 
 /**
  * The last step. Text goes out under someone's name.
@@ -24,40 +33,23 @@ import { usageEvent } from "./schema-app"
  * Nothing in here decides *whether* to post. `docs/vision.md` is explicit that
  * Quincy drafts and the human sends; this function is the mechanism behind an
  * approval that already happened, and it has no path that runs on its own.
+ *
+ * **What lives here and what does not.** Since plan 027 item 4f, the platform
+ * requests live behind `Publisher` in lib/publisher.ts. This file keeps
+ * everything that is a decision rather than a request: the length check that
+ * runs before a token is spent, the credential, what a refusal writes to
+ * `channel_connection`, and the meter. A publisher owns one HTTP call and
+ * touches no table.
  */
 
-/* ── What can go wrong ────────────────────────────────────────────────────── */
-
-export type PublishFailure =
-  /** No connection row at all. The channel was never connected. */
-  | "not-connected"
-  /** Token aged out. Expected on LinkedIn every 60 days. Reconnect fixes it. */
-  | "needs_reauth"
-  /** They removed us upstream. Never retry; never publish on this row. */
-  | "revoked"
-  | "empty"
-  | "too-long"
-  /** X refuses to post the same text twice. Not a transport failure. */
-  | "duplicate"
-  /** Their limit or ours. Backing off is the only correct response. */
-  | "rate-limited"
-  /**
-   * The platform said yes and we could not read what it gave back.
-   *
-   * **The one failure that is not a failure.** A 2xx means the post was taken;
-   * only the id was unreadable. It is separated from `rejected` because the two
-   * demand opposite responses: a rejected post should be sent again, and this
-   * one must not be — retrying double-posts on LinkedIn and pays X to be told
-   * the text is a duplicate. Anything automated that sees this has to stop and
-   * leave it to a person who can go and look.
-   */
-  | "unconfirmed"
-  /** Everything else, with the platform's own words in `message`. */
-  | "rejected"
-
-export type PublishResult =
-  | { ok: true; url: string; externalId: string }
-  | { ok: false; reason: PublishFailure; message: string }
+/**
+ * The vocabulary of a refusal, defined with the interface that returns it.
+ *
+ * Re-exported rather than moved outright: `publish` is what most callers
+ * import, and lib/publish-run.ts and scripts/verify-publish-run.ts read the
+ * result type from here.
+ */
+export type { PublishFailure, PublishResult } from "./publisher"
 
 /* ── What it costs ────────────────────────────────────────────────────────── */
 
@@ -81,7 +73,9 @@ const X_COST_MICROS = { plain: 15_000, withUrl: 200_000 } as const
  * `model` carries `x:post` rather than a model name, which is the one place
  * this stretches: the column means "what was bought". If a third kind of
  * non-model cost ever appears, that is the point to add a `kind` discriminator
- * rather than stretch it a second time.
+ * rather than stretch it a second time. (`external:post` in
+ * lib/publisher-external.ts is the second kind, and it deliberately spends the
+ * same stretch rather than widening it.)
  */
 async function recordPostCost(userId: string, text: string): Promise<void> {
   try {
@@ -100,238 +94,121 @@ async function recordPostCost(userId: string, text: string): Promise<void> {
   }
 }
 
-/* ── Reading a platform's refusal ─────────────────────────────────────────── */
-
-function classify(status: number, body: string): PublishFailure {
-  if (status === 401) return "needs_reauth"
-  if (status === 429) return "rate-limited"
-
-  // X answers 403 for a repeat of text already posted. It is not an auth
-  // problem despite the status, and the user needs to be told what actually
-  // happened rather than being sent to reconnect a working account.
-  if (status === 403 && /duplicate/i.test(body)) return "duplicate"
-
-  return "rejected"
-}
+/* ── Who we are posting as ────────────────────────────────────────────────── */
 
 /**
- * A response body's `id`, or undefined when the body is not JSON.
+ * There is no account and there never was one to look for.
  *
- * Both callers run **after** the platform has already accepted the post, so a
- * throw here is a lie: it turns a published post into a reported failure, and
- * the user retries — double-posting on LinkedIn, or paying X to be told the
- * text is a duplicate. A 2xx carrying something other than JSON is rare
- * (a gateway interstitial, a proxy rewrite, a plain-text acknowledgement) and
- * nothing about it means the post did not go out.
- *
- * Exported for lib/publish.test.ts — the parse is where the bug was, so it is
- * the thing worth pinning.
+ * Handed to a publisher that has already been established as "no publisher",
+ * so it can answer in its own words instead of this file carrying a second
+ * copy of the sentence. Nothing reads it.
  */
-export function idFromBody(body: string): string | undefined {
-  try {
-    const parsed = JSON.parse(body || "{}") as {
-      id?: string
-      data?: { id?: string }
-    }
-    return parsed.data?.id ?? parsed.id
-  } catch {
-    return undefined
-  }
+const NO_CONNECTION: PublishConnection = {
+  id: "",
+  externalId: "",
+  handle: null,
 }
 
-/* ── X ────────────────────────────────────────────────────────────────────── */
-
-async function publishToX(
-  connection: Connection,
-  accessToken: string,
-  text: string
-): Promise<PublishResult> {
-  const response = await fetch("https://api.x.com/2/tweets", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ text }),
-    signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-  })
-
-  const raw = await response.text()
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      reason: classify(response.status, raw),
-      message: `X refused the post (${response.status}): ${raw.slice(0, 300)}`,
-    }
-  }
-
-  const id = idFromBody(raw)
-
-  if (!id) {
-    // Deliberately not phrased as "the post failed". X answered 2xx, which
-    // means it took the post; we only failed to read the id back. Telling the
-    // user it failed is what makes them retry into a duplicate.
-    return {
-      ok: false,
-      reason: "unconfirmed",
-      message:
-        "X accepted the post but returned no id that could be read. The post " +
-        "has most likely gone out — check the account before retrying.",
-    }
-  }
-
-  // The handle-shaped URL is the one a person can read and share. `/i/web/` is
-  // the fallback that always resolves, for a connection made before we started
-  // storing handles.
-  const handle = connection.handle?.replace(/^@/, "")
-
-  return {
-    ok: true,
-    externalId: id,
-    url: handle
-      ? `https://x.com/${handle}/status/${id}`
-      : `https://x.com/i/web/status/${id}`,
-  }
-}
-
-/* ── LinkedIn ─────────────────────────────────────────────────────────────── */
+type Credentials =
+  | { ok: true; connection: PublishConnection; accessToken: string }
+  | { ok: false; failure: PublishResult & { ok: false } }
 
 /**
- * The endpoint question, answered at runtime rather than by reading docs.
+ * The row for a channel this codebase holds no OAuth credentials for.
  *
- * LinkedIn's own documentation contradicts itself: the June 2023 changelog
- * says unversioned Content APIs including `/v2/ugcPosts` were sunset, while
- * the Share on LinkedIn page still documents `/v2/ugcPosts` as the way to
- * post, with no deprecation banner. One page is stale and there is no way to
- * tell which from the outside.
+ * `channel_connection.channel` is a plain text column — the Drizzle enum on it
+ * is TS-level only, per plans/025 — so a row for such a channel is storable
+ * today and the cast below is a type assertion rather than a lie to Postgres.
+ * What the schema does *not* allow yet is writing one: `access_token` is
+ * `NOT NULL` and an external integration has no per-user token. That is a
+ * schema question and this plan does not answer it.
  *
- * So we try `/rest/posts` first, because it is the one with a future, and fall
- * back exactly once on the specific 403 that means "your token is not allowed
- * here". A 403 creates nothing, so the fallback cannot double-post.
- *
- * **The first real post settles this, and it logs the answer.** When it does,
- * delete the loser and this comment — carrying two code paths for a question
- * that has been answered is how the answer gets lost again.
+ * `external_id` is the integration id. It already means "the platform's own id
+ * for this account", which is exactly what an external scheduler's per-channel
+ * integration id is, so nothing new is needed to hold it.
  */
-async function publishToLinkedIn(
-  connection: Connection,
-  accessToken: string,
-  text: string
-): Promise<PublishResult> {
-  const version = process.env.LINKEDIN_API_VERSION
+async function externalCredentials(
+  userId: string,
+  channel: Channel
+): Promise<Credentials> {
+  const [row] = await db
+    .select({
+      id: channelConnection.id,
+      externalId: channelConnection.externalId,
+      handle: channelConnection.handle,
+      state: channelConnection.state,
+    })
+    .from(channelConnection)
+    .where(
+      and(
+        eq(channelConnection.userId, userId),
+        eq(channelConnection.channel, channel as ConnectableChannel)
+      )
+    )
+    // Same reason as getConnectionRow: LIMIT 1 without ORDER BY is a promise
+    // Postgres does not make, and every caller must agree on the same row.
+    .orderBy(desc(channelConnection.updatedAt))
+    .limit(1)
 
-  if (!version) {
+  if (!row) {
     return {
       ok: false,
-      reason: "rejected",
-      message:
-        "LINKEDIN_API_VERSION is not set. The versioned Posts API rejects a " +
-        "request without it, and guessing a version is how a post silently " +
-        "changes shape between deploys.",
+      failure: {
+        ok: false,
+        reason: "not-connected",
+        message: `No ${labelFor(channel)} account is connected.`,
+      },
     }
   }
 
-  const author = `urn:li:person:${connection.externalId}`
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-    "LinkedIn-Version": version,
-    "X-Restli-Protocol-Version": "2.0.0",
-  }
-
-  const versioned = await fetch("https://api.linkedin.com/rest/posts", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      author,
-      commentary: text,
-      visibility: "PUBLIC",
-      distribution: {
-        feedDistribution: "MAIN_FEED",
-        targetEntities: [],
-        thirdPartyDistributionChannels: [],
-      },
-      lifecycleState: "PUBLISHED",
-      isReshareDisabledByAuthor: false,
-    }),
-    signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-  })
-
-  if (versioned.ok) {
-    console.info("[publish] LinkedIn /rest/posts works on this token.")
-    return linkedInResult(versioned, await versioned.text())
-  }
-
-  const versionedBody = (await versioned.text()).slice(0, 300)
-
-  if (versioned.status !== 403 || !/ACCESS_DENIED/i.test(versionedBody)) {
+  if (row.state === "revoked") {
     return {
       ok: false,
-      reason: classify(versioned.status, versionedBody),
-      message: `LinkedIn refused the post (${versioned.status}): ${versionedBody}`,
-    }
-  }
-
-  console.warn(
-    "[publish] /rest/posts returned 403 ACCESS_DENIED — the versioned Posts " +
-      "API is gated behind Community Management. Falling back to /v2/ugcPosts."
-  )
-
-  const legacy = await fetch("https://api.linkedin.com/v2/ugcPosts", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      author,
-      lifecycleState: "PUBLISHED",
-      specificContent: {
-        "com.linkedin.ugc.ShareContent": {
-          shareCommentary: { text },
-          shareMediaCategory: "NONE",
-        },
+      failure: {
+        ok: false,
+        reason: "revoked",
+        message: `The ${labelFor(channel)} connection was removed.`,
       },
-      visibility: {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
-      },
-    }),
-    signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-  })
-
-  const legacyBody = await legacy.text()
-
-  if (!legacy.ok) {
-    return {
-      ok: false,
-      reason: classify(legacy.status, legacyBody),
-      message: `LinkedIn refused the post (${legacy.status}): ${legacyBody.slice(0, 300)}`,
-    }
-  }
-
-  console.info("[publish] LinkedIn /v2/ugcPosts works; /rest/posts does not.")
-  return linkedInResult(legacy, legacyBody)
-}
-
-/**
- * The post id arrives in the `x-restli-id` **response header**, not the body —
- * both endpoints do this, and reading the body instead is a silent null.
- */
-function linkedInResult(response: Response, body: string): PublishResult {
-  const urn = response.headers.get("x-restli-id") ?? idFromBody(body)
-
-  if (!urn) {
-    return {
-      ok: false,
-      reason: "unconfirmed",
-      message:
-        "LinkedIn accepted the post but returned no id. The post has most " +
-        "likely gone out — check the profile before retrying.",
     }
   }
 
   return {
     ok: true,
-    externalId: urn,
-    url: `https://www.linkedin.com/feed/update/${urn}/`,
+    connection: { id: row.id, externalId: row.externalId, handle: row.handle },
+    // The external scheduler authenticates as the deployment, not as the user.
+    // Its credential is EXTERNAL_PUBLISHER_TOKEN, held in the publisher.
+    accessToken: "",
+  }
+}
+
+async function credentialsFor(
+  userId: string,
+  channel: Channel
+): Promise<Credentials> {
+  if (!isConnectableChannel(channel)) {
+    return externalCredentials(userId, channel)
+  }
+
+  const access = await getAccessToken(userId, channel)
+
+  if (!access.ok) {
+    return {
+      ok: false,
+      failure: {
+        ok: false,
+        reason: access.reason === "missing" ? "not-connected" : access.reason,
+        message:
+          access.reason === "missing"
+            ? `No ${labelFor(channel)} account is connected.`
+            : `The ${labelFor(channel)} connection needs attention.`,
+      },
+    }
+  }
+
+  return {
+    ok: true,
+    connection: access.connection,
+    accessToken: access.accessToken,
   }
 }
 
@@ -341,10 +218,20 @@ export async function publish({
   userId,
   channel,
   text,
+  postId = null,
+  scheduledFor = new Date(),
 }: {
   userId: string
-  channel: ConnectableChannel
+  channel: Channel
   text: string
+  /**
+   * `scheduled_post.id`, passed through as the idempotency key. Optional
+   * because scripts/verify-publish.ts exercises the guards below with no row
+   * behind them; every real send has one.
+   */
+  postId?: string | null
+  /** The moment this was queued for. `now` when a person pressed send. */
+  scheduledFor?: Date
 }): Promise<PublishResult> {
   const trimmed = text.trim()
 
@@ -367,47 +254,64 @@ export async function publish({
     return {
       ok: false,
       reason: "too-long",
-      message: `${length.over} over the ${channelLabel(channel)} limit of ${length.limit}.`,
+      message: `${length.over} over the ${labelFor(channel)} limit of ${length.limit}.`,
     }
   }
 
-  const access = await getAccessToken(userId, channel)
+  const publisher = publisherFor(channel)
 
-  if (!access.ok) {
-    return {
-      ok: false,
-      reason: access.reason === "missing" ? "not-connected" : access.reason,
-      message:
-        access.reason === "missing"
-          ? `No ${channelLabel(channel)} account is connected.`
-          : `The ${channelLabel(channel)} connection needs attention.`,
-    }
+  /**
+   * Nothing can send this channel, so nothing is looked up.
+   *
+   * Asked before the connection read rather than after, because "no publisher
+   * for threads" is the true answer and "no threads account is connected"
+   * would send someone off to connect one that still could not be published
+   * to. The refusal itself comes from the publisher, so the sentence exists
+   * once.
+   */
+  if (!canPublish(channel)) {
+    return publisher.publish({
+      userId,
+      channel,
+      connection: NO_CONNECTION,
+      accessToken: "",
+      body: trimmed,
+      idempotencyKey: postId,
+      scheduledFor,
+    })
+  }
+
+  const credentials = await credentialsFor(userId, channel)
+
+  if (!credentials.ok) {
+    return credentials.failure
   }
 
   /**
    * The try/catch is for the transport underneath the API, exactly as in
-   * lib/mail.ts. Both platform adapters read a status code and return a
-   * result, so neither throws on a refusal — but a DNS failure, a dropped
-   * socket or a timeout throws out of `fetch` itself, and this function
-   * promises a value. A caller written against that promise has no catch, so
-   * the exception would surface as an unhandled rejection somewhere up the
-   * stack instead of as "the post did not go out".
+   * lib/mail.ts. Every publisher reads a status code and returns a result, so
+   * none throws on a refusal — but a DNS failure, a dropped socket or a
+   * timeout throws out of `fetch` itself, and this function promises a value.
+   * A caller written against that promise has no catch, so the exception would
+   * surface as an unhandled rejection somewhere up the stack instead of as
+   * "the post did not go out".
    */
   let result: PublishResult
   try {
-    result =
-      channel === "x"
-        ? await publishToX(access.connection, access.accessToken, trimmed)
-        : await publishToLinkedIn(
-            access.connection,
-            access.accessToken,
-            trimmed
-          )
+    result = await publisher.publish({
+      userId,
+      channel,
+      connection: credentials.connection,
+      accessToken: credentials.accessToken,
+      body: trimmed,
+      idempotencyKey: postId,
+      scheduledFor,
+    })
   } catch (cause) {
     return {
       ok: false,
       reason: "rejected",
-      message: `Could not reach ${channelLabel(channel)}: ${
+      message: `Could not reach ${labelFor(channel)}: ${
         cause instanceof Error ? cause.message : String(cause)
       }`,
     }
@@ -429,7 +333,7 @@ export async function publish({
      */
     if (result.reason === "needs_reauth") {
       await markConnectionState(
-        access.connection.id,
+        credentials.connection.id,
         "needs_reauth",
         result.message
       )
@@ -452,7 +356,7 @@ export async function publish({
           lastErrorAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(channelConnection.id, access.connection.id))
+        .where(eq(channelConnection.id, credentials.connection.id))
     }
 
     /**
@@ -484,7 +388,7 @@ export async function publish({
       lastErrorAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(channelConnection.id, access.connection.id))
+    .where(eq(channelConnection.id, credentials.connection.id))
 
   if (channel === "x") {
     await recordPostCost(userId, trimmed)

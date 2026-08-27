@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 
 import { db } from "./db"
-import { hasHandler } from "./rhythm-handlers"
+import { hasHandler, runsToday } from "./rhythm-handlers"
 import { weekdayLabel } from "./slots"
 import {
   brainEvent,
@@ -14,8 +14,8 @@ import {
 /**
  * What Quincy does on its own.
  *
- * Every rhythm — the one that runs today and the twenty-three that do not yet —
- * is the same four fields:
+ * Every rhythm — the ten that run today and the nineteen that do not yet — is
+ * the same four fields:
  *
  *     TRIGGER  what starts it     a clock, an event, a threshold
  *     FROM     what it reads      a channel, a source, Quincy's own memory
@@ -25,24 +25,30 @@ import {
  * Naming those four is what makes adding one a row in this file rather than a
  * component. It is also why the page groups by `family` and never by platform:
  * "GitHub to X" and "Substack to X" are one rhythm with a different FROM, and
- * filing them under X hides that. Platform is a filter, not a taxonomy.
+ * filing them under X hides that. Platform was a filter instead — a row of
+ * chips above the grid — and it went with the inert cards. Of the ones that
+ * run, one platform matches anything at all, so almost every chip answered
+ * with an empty state. It comes back when the list is long enough to need it.
  *
- * **Four run today**, and only one of them the way it used to. `heartbeat` is
- * the weekly memory compile in lib/heartbeat.ts, scheduled system-wide from
- * vercel.json and switched on for everyone — it is maintenance, not something
- * you choose, which is why its card stays checked and disabled. The other three
- * — `bookmarks-to-posts`, `voice-refresh` and `trend-alerts` — are
- * subscriptions: a row in `rhythm_subscription` with a time the user picked,
- * fired by lib/rhythm-run.ts. See plans/016.
+ * **Ten of the twenty-nine below run today, and the page shows those ten.**
+ * Six are subscriptions fired by lib/rhythm-run.ts — `bookmarks-to-posts`,
+ * `voice-refresh`, `trend-alerts`, and the three plan 027 added: `ship-log`,
+ * `weekly-review`, `week-plan`. Each is a row in `rhythm_subscription` with a
+ * time the user picked (plans/016). Three fire on an event — `voice-notes`,
+ * `meeting-notes`, `shipped-work` — and are switched on by connecting their
+ * source. `heartbeat` is the weekly memory compile, running system-wide from
+ * vercel.json for everyone, which is maintenance rather than a choice.
  *
- * Everything else is still listed with `available: false` and rendered inert,
- * because a catalogue you can read beats a page that pretends the product is
- * smaller than the plan — and a switch that cannot switch anything is worse
- * than no switch.
+ * **The other nineteen stay here and are not rendered.** A catalogue you can
+ * read is worth having; a *page* of it is not, because a screen of inert cards
+ * teaches a reader that most of this product is a promise. They come back one
+ * at a time, each with the code that makes it true — see plans/027, 4a.
  *
- * **`available` is the catalogue's claim; the handler registry is the code's.**
- * `isRunnable` below reads lib/rhythm-handlers.ts rather than this flag, so a
- * rhythm cannot be offered a switch it has no way to honour.
+ * **The code decides, and there is nothing else to consult.** `runsToday` in
+ * lib/rhythm-handlers.ts is the only claim about what runs; the `available`
+ * boolean that used to sit on every entry is gone, because a flag a person
+ * maintains beside a registry the machine maintains is a second answer waiting
+ * to disagree with the first.
  */
 
 export type Trigger =
@@ -88,13 +94,7 @@ export type Node =
   | "numbers"
 
 export type Makes =
-  | "brief"
-  | "drafts"
-  | "riffs"
-  | "repost"
-  | "alert"
-  | "report"
-  | "list"
+  "brief" | "drafts" | "riffs" | "repost" | "alert" | "report" | "list"
 
 /** What the rhythm leaves behind, in words. An enum value is not copy. */
 export const MAKES_LABEL: Record<Makes, string> = {
@@ -167,8 +167,6 @@ export type Rhythm = {
   from: Node[]
   makes: Makes
   to: Node[]
-  /** False until the machinery behind it exists. Renders inert, never fake. */
-  available: boolean
 }
 
 export const RHYTHMS: Rhythm[] = [
@@ -183,22 +181,17 @@ export const RHYTHMS: Rhythm[] = [
     from: ["voice"],
     makes: "drafts",
     to: ["drafts"],
-    available: false,
   },
   /**
-   * Built in plans/019, and still `available: false` — which is not an
-   * oversight and is the same state Voice Notes sits in having shipped.
+   * Runs — plans/019 — and is deliberately **not** in `RHYTHM_HANDLERS`. That
+   * registry is what the cron dispatcher iterates, and a handler there would
+   * be a clock trying to run something that only happens when a call ends. It
+   * is in `RUNS_ELSEWHERE` instead, which is what puts it on the page.
    *
-   * `available` and `isRunnable` both describe the switch on /rhythm, and
-   * `isRunnable` requires `trigger.kind === "clock"`. An event rhythm has no
-   * switch to offer: there is no hour to choose and nothing for the dispatcher
-   * to fire. Its on/off lives where the event comes from — connecting or
-   * disconnecting Circleback on /sources — and claiming a switch here would be
-   * offering a second control over the same fact.
-   *
-   * For the same reason it is deliberately **not** in `RHYTHM_HANDLERS`. That
-   * registry is what the cron dispatcher iterates, and a handler there would be
-   * a clock trying to run something that only happens when a call ends.
+   * `isRunnable` is false for it and stays false: an event rhythm has no
+   * switch to offer, since there is no hour to choose and nothing to fire. Its
+   * on and off is connecting or disconnecting Circleback on /sources, and a
+   * second control over that one fact is how two surfaces come to disagree.
    */
   {
     id: "meeting-notes",
@@ -210,14 +203,12 @@ export const RHYTHMS: Rhythm[] = [
     from: ["circleback"],
     makes: "drafts",
     to: ["drafts"],
-    available: false,
   },
   /**
-   * Built in plans/021, and `available: false` for the reason `meeting-notes`
-   * directly above is — see the note there. An event rhythm has no switch to
-   * offer: there is no hour to choose and nothing for the dispatcher to fire,
-   * so its on and off live on /sources as connecting and disconnecting GitHub.
-   * It is deliberately not in `RHYTHM_HANDLERS` either.
+   * Runs — plans/021, and plans/026 for what the writer is now told about a
+   * merge. Switchless here for the reason `meeting-notes` directly above is:
+   * see the note there. Its on and off is connecting and disconnecting GitHub
+   * on /sources, and it is in `RUNS_ELSEWHERE` rather than `RHYTHM_HANDLERS`.
    */
   {
     id: "shipped-work",
@@ -236,7 +227,26 @@ export const RHYTHMS: Rhythm[] = [
     from: ["github"],
     makes: "drafts",
     to: ["drafts"],
-    available: false,
+  },
+  {
+    /**
+     * Runs — plan 027, 2d. lib/ship-log.ts, dispatched weekly.
+     *
+     * The counterpart to Shipped Work above rather than a competitor to it.
+     * That one refuses most merges on purpose ("most merged pull requests are
+     * not posts") and the refusal is right; this reads the pile the refusals
+     * leave behind and writes the one post that pile actually is. The bar on a
+     * single merge does not move.
+     */
+    id: "ship-log",
+    name: "Ship Log",
+    promise: "Turns the week's small merges into the one post they add up to",
+    how: "Once a week Quincy lists every pull request you merged and never posted about, and drafts them as one list in your own format. Fewer than two and it writes nothing.",
+    family: "capture",
+    trigger: { kind: "clock", label: "weekly" },
+    from: ["github"],
+    makes: "drafts",
+    to: ["drafts"],
   },
   {
     id: "comment-mining",
@@ -248,7 +258,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x", "linkedin", "substack"],
     makes: "list",
     to: ["brain"],
-    available: false,
   },
   {
     /**
@@ -270,7 +279,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x"],
     makes: "drafts",
     to: ["drafts"],
-    available: true,
   },
 
   // ── Multiply ───────────────────────────────────────────────────────────
@@ -292,7 +300,6 @@ export const RHYTHMS: Rhythm[] = [
       "youtube",
       "substack",
     ],
-    available: false,
   },
   {
     id: "five-hooks",
@@ -304,7 +311,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["drafts"],
     makes: "drafts",
     to: ["x", "tiktok", "instagram"],
-    available: false,
   },
   {
     id: "native-recut",
@@ -316,7 +322,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["youtube"],
     makes: "drafts",
     to: ["tiktok", "instagram", "youtube"],
-    available: false,
   },
   {
     id: "notes-ladder",
@@ -328,7 +333,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["brain"],
     makes: "drafts",
     to: ["substack"],
-    available: false,
   },
   {
     id: "repurpose-winners",
@@ -340,7 +344,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "drafts",
     to: ["linkedin", "threads"],
-    available: false,
   },
   {
     id: "photo-carousels",
@@ -352,21 +355,36 @@ export const RHYTHMS: Rhythm[] = [
     from: ["notes"],
     makes: "drafts",
     to: ["instagram"],
-    available: false,
   },
 
   // ── Timing ─────────────────────────────────────────────────────────────
   {
+    /**
+     * Runs — plan 027, 4c. lib/week-plan.ts, dispatched Monday morning.
+     *
+     * **Monday, not Sunday evening, and it reads angles rather than drafts.**
+     * The old card promised to fill next week's slots from the drafts you
+     * already had, which is a sorting job: a plan made only from finished
+     * writing can never propose the post nobody has written yet. So it reads
+     * the angles waiting on /riffs, argues with each against the strategy, and
+     * writes the survivors. Monday because the week it is planning is the one
+     * starting, and a plan read on Sunday evening is a plan read on the one
+     * evening nobody wants to think about work.
+     *
+     * It leaves drafts, and the slot each would take is a proposal on the run
+     * rather than a row: a `scheduled_post` is an approved version with a
+     * time, and approving is yours.
+     */
     id: "week-plan",
     name: "Week Plan",
-    promise: "Fills next week across every channel before Monday",
-    how: "Sunday evening Quincy fills next week’s slots from the drafts you have, so Monday is not a blank calendar.",
+    promise:
+      "Plans the week from the angles you already have, and argues with each one",
+    how: "Monday morning Quincy reads your strategy, proposes the week's posts from the angles waiting, criticises each against your pillars, your avoid list and what you have written lately, and drafts the ones that survive. It never approves and never schedules.",
     family: "timing",
-    trigger: { kind: "clock", label: "Sun 17:00" },
-    from: ["drafts"],
-    makes: "report",
-    to: ["lineup"],
-    available: false,
+    trigger: { kind: "clock", label: "Mon 07:00" },
+    from: ["riffs", "brain"],
+    makes: "drafts",
+    to: ["drafts"],
   },
   {
     id: "second-wave",
@@ -378,7 +396,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "repost",
     to: ["x", "linkedin"],
-    available: false,
   },
   {
     id: "auto-cta",
@@ -390,7 +407,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "drafts",
     to: ["x"],
-    available: false,
   },
 
   // ── Engage ─────────────────────────────────────────────────────────────
@@ -404,7 +420,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x", "linkedin", "instagram", "substack"],
     makes: "drafts",
     to: ["drafts"],
-    available: false,
   },
   {
     id: "reply-ideas",
@@ -416,7 +431,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x", "linkedin"],
     makes: "drafts",
     to: ["drafts"],
-    available: false,
   },
   {
     id: "post-momentum",
@@ -428,7 +442,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "alert",
     to: ["chat"],
-    available: false,
   },
   {
     id: "opportunity-watch",
@@ -440,7 +453,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x", "linkedin", "instagram"],
     makes: "alert",
     to: ["chat"],
-    available: false,
   },
   {
     id: "people-radar",
@@ -452,7 +464,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x", "linkedin"],
     makes: "list",
     to: ["brain"],
-    available: false,
   },
   {
     /**
@@ -490,7 +501,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["hackernews", "github"],
     makes: "riffs",
     to: ["riffs"],
-    available: true,
   },
 
   // ── Learn ──────────────────────────────────────────────────────────────
@@ -509,7 +519,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["chat"],
     makes: "list",
     to: ["brain"],
-    available: true,
   },
   {
     /**
@@ -525,7 +534,28 @@ export const RHYTHMS: Rhythm[] = [
     from: ["x"],
     makes: "list",
     to: ["brain"],
-    available: true,
+  },
+  {
+    /**
+     * Runs — plan 027, 4b. lib/weekly-review.ts, dispatched Sunday evening.
+     *
+     * **Two facts, tracked separately: posted, and worked.** A digest that
+     * averages them tells you to fix neither — nothing going out is a
+     * scheduling problem, and everything going out under your own median is a
+     * writing problem. No model call: every number in it is a count or a
+     * median, and paying a model to phrase arithmetic is how a review starts
+     * saying things the arithmetic does not support.
+     */
+    id: "weekly-review",
+    name: "Weekly Review",
+    promise:
+      "Grades the week you just had against the numbers you already have",
+    how: "Sunday evening, in one message: what went out and where, what is approved and still has no time, and how the week's posts did against your own median. No advice.",
+    family: "learn",
+    trigger: { kind: "clock", label: "Sun 19:00" },
+    from: ["lineup", "numbers"],
+    makes: "report",
+    to: ["brain"],
   },
   {
     id: "outliers",
@@ -537,7 +567,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "report",
     to: ["brain"],
-    available: false,
   },
   {
     id: "receipt-watch",
@@ -549,7 +578,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers", "brain"],
     makes: "list",
     to: ["brain"],
-    available: false,
   },
 
   // ── Check-ins ──────────────────────────────────────────────────────────
@@ -563,7 +591,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["lineup", "numbers"],
     makes: "brief",
     to: ["chat"],
-    available: false,
   },
   {
     id: "evening-report",
@@ -575,7 +602,6 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "brief",
     to: ["chat"],
-    available: false,
   },
   {
     id: "weekly-analytics",
@@ -587,11 +613,19 @@ export const RHYTHMS: Rhythm[] = [
     from: ["numbers"],
     makes: "report",
     to: ["chat"],
-    available: false,
   },
 ]
 
-export const AVAILABLE_RHYTHMS = RHYTHMS.filter((r) => r.available)
+/**
+ * What `/rhythm` renders: the rhythms with code behind them.
+ *
+ * Derived, never declared. `runsToday` reads the handler registry and the
+ * event registry beside it, so adding a card to `RHYTHMS` above does not put
+ * it on the page — writing the code that runs it does. That is the whole point
+ * of the list: a screen of cards saying "soon" is a page arguing that the
+ * product is mostly a plan.
+ */
+export const LIVE_RHYTHMS = RHYTHMS.filter((r) => runsToday(r.id))
 
 export function getRhythm(id: string) {
   return RHYTHMS.find((r) => r.id === id) ?? null
@@ -622,17 +656,6 @@ export const NODE_LABEL: Record<string, string> = {
   brain: "Brain",
   numbers: "Numbers",
 }
-
-/** Platforms only — what the filter offers, and what a channel can be. */
-export const FILTERABLE_NODES = [
-  "x",
-  "linkedin",
-  "threads",
-  "instagram",
-  "tiktok",
-  "youtube",
-  "substack",
-] as const
 
 export type RhythmRun = { at: Date; pages: number }
 
@@ -697,6 +720,14 @@ export const DEFAULT_CADENCE: Record<
   // Early, because the whole promise is "early". A discussion that broke
   // overnight is still worth entering at seven and is an old thread by two.
   "trend-alerts": { hour: 7, minute: 0, weekday: null },
+  // Friday evening, when the week's merging is done. Saturday would be more
+  // literal and lands the draft on the day the owner is least likely to send it.
+  "ship-log": { hour: 18, minute: 0, weekday: 5 },
+  // Sunday evening, after the week's posting is finished and before the plan
+  // for the next one is written. It reads the week; Week Plan writes the next.
+  "weekly-review": { hour: 19, minute: 0, weekday: 7 },
+  // Monday morning, early enough that the week it plans has not started.
+  "week-plan": { hour: 7, minute: 0, weekday: 1 },
 }
 
 /** What one card needs to render its switch, its time and its last receipt. */
@@ -718,13 +749,17 @@ export type RhythmState = {
 }
 
 /**
- * Whether a rhythm can be switched on at all.
+ * Whether a rhythm has a switch on this page at all.
  *
- * Reads the **handler registry**, not `Rhythm.available`. The catalogue's flag
- * is its own claim about what the product does; this is the code's. Reading
- * the registry is what makes it impossible for the UI to offer a switch that
- * cannot honour a press — the two can never disagree because only one of them
- * is consulted.
+ * Narrower than `runsToday`, and the gap is the three event rhythms. They run,
+ * and there is nothing here to switch: no hour to choose and nothing for the
+ * dispatcher to fire, because the thing that starts them is a recording, a
+ * transcript or a merge. Their on and off is connecting the source on
+ * /sources, and a second control over one fact is how two surfaces come to
+ * disagree about it.
+ *
+ * Reads the handler registry, so the UI cannot offer a switch that has no way
+ * to honour a press.
  */
 export function isRunnable(rhythm: Rhythm): boolean {
   return rhythm.trigger.kind === "clock" && hasHandler(rhythm.id)

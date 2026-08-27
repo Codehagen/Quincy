@@ -56,6 +56,43 @@ const RENAMED_ROUTES: Array<[from: string, to: string]> = [
   ["/wiki", "/brain"],
 ]
 
+/**
+ * The catalogue rhythms `/rhythm` no longer renders. Each lands on `/rhythm`.
+ *
+ * `LIVE_RHYTHMS` is derived from `runsToday`, so a card with no code behind it
+ * is off the grid and `/rhythm/{id}` answers 404 for it. Every one of these ids
+ * was a real, linkable page before that, which makes this the same job the
+ * table above does — a path somebody has open keeps working.
+ *
+ * **Written out rather than imported, and the import is the reason.**
+ * `lib/rhythms.ts` reaches `lib/rhythm-handlers.ts`, which opens a database
+ * connection; pulling that into the config would make `next.config.ts` need
+ * `DATABASE_URL` to be read at all. The source of truth is still one place:
+ * this is `RHYTHMS` minus `LIVE_RHYTHMS` in `lib/rhythms.ts`, and a rhythm that
+ * gains a handler should lose its line here.
+ */
+const RETIRED_RHYTHMS: string[] = [
+  "atomize",
+  "auto-cta",
+  "comment-mining",
+  "evening-report",
+  "every-comment",
+  "five-hooks",
+  "morning-brief",
+  "native-recut",
+  "notes-ladder",
+  "opportunity-watch",
+  "outliers",
+  "people-radar",
+  "photo-carousels",
+  "post-momentum",
+  "receipt-watch",
+  "reply-ideas",
+  "repurpose-winners",
+  "second-wave",
+  "weekly-analytics",
+]
+
 const nextConfig: NextConfig = {
   // Read by components/lapse-panel.tsx and nothing else. Empty rather than
   // "0" so the branch folds on a falsy literal either way.
@@ -104,7 +141,12 @@ const nextConfig: NextConfig = {
     ],
   },
   async redirects() {
-    return RENAMED_ROUTES.map(([source, destination]) => ({
+    const retired: Array<[string, string]> = RETIRED_RHYTHMS.map((id) => [
+      `/rhythm/${id}`,
+      "/rhythm",
+    ])
+
+    return [...RENAMED_ROUTES, ...retired].map(([source, destination]) => ({
       source,
       destination,
       permanent: false,
@@ -115,10 +157,10 @@ const nextConfig: NextConfig = {
 /**
  * `withWorkflow` enables the `"use workflow"` and `"use step"` directives.
  *
- * Quincy's first background infrastructure. Four Vercel crons were the whole
- * of it until now, and a cron is the wrong shape for a voice note: it fires on
- * a clock rather than on a person pressing record, and it has no per-run state
- * to show while the work is in flight.
+ * Quincy's first background infrastructure. The Vercel crons in `vercel.json`
+ * were the whole of it until now, and a cron is the wrong shape for a voice
+ * note: it fires on a clock rather than on a person pressing record, and it
+ * has no per-run state to show while the work is in flight.
  *
  * `after()` was the cheaper alternative and does not survive the comparison.
  * It is not durable — a crashed function loses the work with nothing to

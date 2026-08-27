@@ -1,7 +1,13 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
-import { getCirclebackSetup, getGithubSetup } from "@/app/(app)/sources/actions"
+import {
+  getCalendarSetup,
+  getCirclebackSetup,
+  getGithubSetup,
+  getOpenMeetingQuestion,
+  getOpenMergeQuestion,
+} from "@/app/(app)/sources/actions"
 import { getConnection } from "@/lib/channels"
 import { corpusSummary } from "@/lib/corpus-x"
 import { getSession } from "@/lib/session"
@@ -12,6 +18,7 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header"
+import { CalendarSourceRow } from "@/components/sources/calendar-source-row"
 import { ChannelSourceRow } from "@/components/sources/channel-source-row"
 import { CirclebackSourceRow } from "@/components/sources/circleback-source-row"
 import { GithubSourceRow } from "@/components/sources/github-source-row"
@@ -69,9 +76,11 @@ export default async function SourcesPage({
    * How the GitHub install went. The callback is a redirect, so this is the
    * only channel it has back to the user — and a redirect that lands on an
    * unchanged page is indistinguishable from one that did nothing at all.
-   * Same shape as app/(app)/channels/[platform]/page.tsx.
+   * Same shape as app/(app)/channels/[platform]/page.tsx. `calendar` is the
+   * same mechanism for the OAuth callback in plans/027 4d — that flow has even
+   * less to go on, since it leaves no installation behind to look at.
    */
-  searchParams: Promise<{ github?: string }>
+  searchParams: Promise<{ github?: string; calendar?: string }>
 }) {
   const session = await getSession()
   if (!session) {
@@ -79,7 +88,7 @@ export default async function SourcesPage({
   }
 
   /**
-   * Four reads, one round trip of waiting instead of four.
+   * Six reads, one round trip of waiting instead of six.
    *
    * Each of these depends only on the session, and a Neon round trip is
    * ~120ms while the queries themselves are microseconds — sequential awaits
@@ -87,14 +96,33 @@ export default async function SourcesPage({
    * dependent read (it needs the X connection's state), so it starts after
    * that promise alone rather than after everything.
    */
-  const [connections, circlebackSetup, githubSetup, xConnection] =
-    await Promise.all([
+  const [
+    connections,
+    circlebackSetup,
+    githubSetup,
+    calendarSetup,
+    xConnection,
+    question,
+    meetingQuestion,
+  ] = await Promise.all([
       getSourceConnections(session.user),
       getCirclebackSetup(),
       getGithubSetup(),
+      getCalendarSetup(),
       getConnection(session.user.id, "x"),
+      /**
+       * The one question Quincy is waiting on, read here rather than by the
+       * row. See plans/027 phase 1c — it is one indexed select against a page
+       * that is already making four, and a client component cannot make it.
+       */
+      getOpenMergeQuestion(),
+      /** The same read for the calendar, and a separate ceiling — see
+       *  `openCalendarQuestion`. Two open questions is the most anybody can be
+       *  holding, one per source. */
+      getOpenMeetingQuestion(),
     ])
-  const { github: githubOutcome } = await searchParams
+  const { github: githubOutcome, calendar: calendarOutcome } =
+    await searchParams
 
   /**
    * The live sources are pulled out of both groups and rendered on their own.
@@ -115,7 +143,7 @@ export default async function SourcesPage({
    * shape it should have had: the third live source adds an entry here rather
    * than a third branch at every point below.
    */
-  const LIVE = ["circleback", "github"] as const
+  const LIVE = ["circleback", "github", "calendar"] as const
 
   /**
    * The row, not the fixture. See `GithubSetup.connected`.
@@ -128,14 +156,28 @@ export default async function SourcesPage({
    */
   const githubConnected = githubSetup?.connected === true
 
+  /**
+   * The row, not the catalogue entry.
+   *
+   * `SOURCES` still carries `calendar` and it is filtered out of both registers
+   * by `LIVE` above, so the dead "Google Calendar" line does not sit under
+   * "Not connectable yet" beside a live one. The storage id is
+   * `google-calendar` (see lib/calendar.ts) and the catalogue id is `calendar`;
+   * the two are never compared, because this row is gated on a real read
+   * rather than on the map.
+   */
+  const calendarConnected = calendarSetup?.connected === true
+
   const rest = SOURCES.filter(
     (s) => !(LIVE as readonly string[]).includes(s.id)
   )
   const connected = rest.filter((s) => connections[s.id])
   const available = rest.filter((s) => !connections[s.id])
 
-  const anyLiveConnected = Boolean(circlebackSetup) || githubConnected
-  const anyLiveAvailable = !circlebackSetup || !githubConnected
+  const anyLiveConnected =
+    Boolean(circlebackSetup) || githubConnected || calendarConnected
+  const anyLiveAvailable =
+    !circlebackSetup || !githubConnected || !calendarConnected
 
   // The channel read-back. Rendered only for a live X connection — a row
   // offering to read a channel that cannot be read would be the dead button
@@ -239,6 +281,14 @@ export default async function SourcesPage({
                 connection={connections.github ?? null}
                 setup={githubSetup}
                 outcome={githubOutcome}
+                question={question}
+              />
+            ) : null}
+            {calendarConnected && calendarSetup ? (
+              <CalendarSourceRow
+                setup={calendarSetup}
+                outcome={calendarOutcome}
+                question={meetingQuestion}
               />
             ) : null}
             {connected.map((source) => (
@@ -281,6 +331,14 @@ export default async function SourcesPage({
                 the merges that carry an idea.
               </p>
             ) : null}
+            {!calendarConnected ? (
+              <p className="text-caption text-pretty text-muted-foreground">
+                Your calendar tells Quincy what you were in the room for. It
+                reads the titles and times of meetings that have ended — never
+                who was there and never the notes — and when one touches a story
+                you keep, it asks you one question about it.
+              </p>
+            ) : null}
           </div>
 
           <ul
@@ -295,6 +353,12 @@ export default async function SourcesPage({
                 connection={null}
                 setup={githubSetup}
                 outcome={githubOutcome}
+              />
+            ) : null}
+            {!calendarConnected && calendarSetup ? (
+              <CalendarSourceRow
+                setup={calendarSetup}
+                outcome={calendarOutcome}
               />
             ) : null}
           </ul>

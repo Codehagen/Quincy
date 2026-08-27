@@ -5,7 +5,7 @@ import { Add01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { cn } from "@/lib/utils"
-import type { BrainPage, PolicyData } from "@/lib/brain"
+import type { EditablePage, PolicyData } from "@/lib/brain"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -27,6 +27,7 @@ import { savePage } from "@/app/(app)/brain/actions"
 const EMPTY: PolicyData = {
   platform: "x",
   goal: "",
+  goalDate: "",
   positioning: "",
   audience: { primary: "", secondary: "" },
   pillars: [],
@@ -50,26 +51,43 @@ export function PolicyEditor({
   page,
   slug,
   title,
+  save: saveOverride,
+  actions,
 }: {
-  page: BrainPage | null
+  /**
+   * `EditablePage`, not `BrainPage`: /brain holds its pages in a query cache
+   * that has been through JSON, where a Date is a string. Nothing here reads a
+   * timestamp, and the narrower type is what makes that true rather than
+   * merely likely.
+   */
+  page: EditablePage | null
   slug: string
   title: string
+  /**
+   * The write path, when the caller owns one. /channels saves through
+   * `savePage` — the default below — and /brain saves through the strategy
+   * action, which balances the pillar weights on the way in rather than
+   * refusing a split typed as 30/30/30.
+   */
+  save?: (data: PolicyData) => Promise<{ ok: boolean; error?: string }>
+  /** Passed through to `EditorShell`, left of Save. See its own note. */
+  actions?: React.ReactNode
 }) {
   const save = React.useCallback(
-    async (data: PolicyData) =>
-      savePage({
-        slug,
-        kind: "policy",
-        title,
-        data: {
-          ...data,
-          pillars: data.pillars.filter((p) => p.name.trim()),
-          windows: data.windows.map((w) => w.trim()).filter(Boolean),
-          leanInto: data.leanInto.map((s) => s.trim()).filter(Boolean),
-          avoid: data.avoid.map((s) => s.trim()).filter(Boolean),
-        },
-      }),
-    [slug, title]
+    async (data: PolicyData) => {
+      const cleaned = {
+        ...data,
+        pillars: data.pillars.filter((p) => p.name.trim()),
+        windows: data.windows.map((w) => w.trim()).filter(Boolean),
+        leanInto: data.leanInto.map((s) => s.trim()).filter(Boolean),
+        avoid: data.avoid.map((s) => s.trim()).filter(Boolean),
+      }
+
+      return saveOverride
+        ? saveOverride(cleaned)
+        : savePage({ slug, kind: "policy", title, data: cleaned })
+    },
+    [saveOverride, slug, title]
   )
 
   const initial = React.useMemo(
@@ -94,6 +112,7 @@ export function PolicyEditor({
       state={form.state}
       error={form.error}
       onSave={form.onSave}
+      actions={actions}
     >
       <FieldGroup>
         <Field>
@@ -103,6 +122,19 @@ export function PolicyEditor({
             value={p.goal ?? ""}
             placeholder="Grow to 15,000 followers"
             onChange={(e) => patch({ goal: e.target.value })}
+          />
+        </Field>
+
+        {/* The date the goal is measured on. A goal with no date is a wish,
+            and the weekly review has to know which week it is grading against. */}
+        <Field className="max-w-52">
+          <FieldLabel htmlFor="policy-goal-date">By</FieldLabel>
+          <Input
+            id="policy-goal-date"
+            type="date"
+            className="tabular"
+            value={p.goalDate ?? ""}
+            onChange={(e) => patch({ goalDate: e.target.value })}
           />
         </Field>
 

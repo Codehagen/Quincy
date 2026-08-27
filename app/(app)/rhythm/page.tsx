@@ -1,4 +1,3 @@
-import { Suspense } from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
@@ -10,7 +9,7 @@ import {
   getHeartbeatRuns,
   getRhythmStates,
   isRunnable,
-  RHYTHMS,
+  LIVE_RHYTHMS,
 } from "@/lib/rhythms"
 import type { RhythmCardState } from "@/components/rhythm/rhythm-grid"
 import {
@@ -30,19 +29,24 @@ import { constructMetadata } from "@/lib/metadata"
  * grouping is now by what a rhythm *does*, because "GitHub to X" and "Substack
  * to X" are one rhythm with a different source, and filing them by platform is
  * how a catalogue ends up with fourteen entries under one name and one under
- * another. Platform is a filter instead; the chips are above the list.
+ * another. Platform was a filter instead, and the chips went with the inert
+ * cards: of the seven rhythms that run, six of the seven chips answered with
+ * an empty state.
  *
- * **The switches are real now** for rhythms with a handler (plans/016).
- * Heartbeat is the exception and stays checked-and-disabled: it runs for
- * everyone on a system-wide cron, so it is maintenance rather than a choice,
- * and its history still comes from `brain_event` rather than `rhythm_run`.
- * That is two sources for one column, and it is the accepted cost of not
- * migrating the only rhythm that already worked.
+ * **Only what runs is on it.** `LIVE_RHYTHMS` is derived from the handler
+ * registry and the event registry beside it, so a card cannot exist without
+ * code behind it. The page used to render the whole catalogue with twenty
+ * inert cards saying "soon" under it, which is a page arguing that the product
+ * is mostly a plan. The twenty are still in lib/rhythms.ts and come back one at
+ * a time, each with the code that makes it true. See plans/027, 4a.
  *
- * Everything without a handler still renders inert with "soon" — the same call
- * /channels makes about platforms it cannot connect yet. A catalogue you can
- * read beats a page that pretends the product is smaller than the plan, and a
- * control that does nothing is worse than no control.
+ * **The switches are real** for rhythms with a handler (plans/016). Heartbeat
+ * is the exception and stays checked-and-disabled: it runs for everyone on a
+ * system-wide cron, so it is maintenance rather than a choice, and its history
+ * still comes from `brain_event` rather than `rhythm_run`. That is two sources
+ * for one column, and it is the accepted cost of not migrating the only rhythm
+ * that already worked. An event rhythm gets no switch at all — its on and off
+ * is connecting its source on /sources.
  *
  * The card carries the switch; the time lives on /rhythm/[id]. This page is
  * for glancing and toggling, and a time control on every card would put three
@@ -68,15 +72,16 @@ export default async function RhythmPage() {
   const now = new Date()
 
   /**
-   * Every card's state, formatted here rather than in the client component.
+   * Every card's state, formatted here rather than deeper down.
    *
-   * The grid is `"use client"`, and a date formatted there renders a different
-   * string than the server produced in the seconds either side of midnight —
-   * the same rule `Draft.from.at` and `Riff.capturedAt` follow.
+   * The switch inside the grid is `"use client"`, and a date formatted in the
+   * browser renders a different string than the server produced in the seconds
+   * either side of midnight — the same rule `Draft.from.at` and
+   * `Riff.capturedAt` follow.
    */
   const cards: Record<string, RhythmCardState> = {}
 
-  for (const rhythm of RHYTHMS) {
+  for (const rhythm of LIVE_RHYTHMS) {
     const state = states.get(rhythm.id)
 
     cards[rhythm.id] = {
@@ -107,13 +112,9 @@ export default async function RhythmPage() {
         </PageHeaderContent>
       </PageHeader>
 
-      {/* useQueryState reads the platform filter; Suspense is what keeps that
-          from opting the whole route out of static rendering. */}
-      <Suspense>
-        <RhythmGrid lastRun={lastRun} cards={cards} />
-      </Suspense>
+      <RhythmGrid lastRun={lastRun} cards={cards} />
 
-      {/* At the foot, not the head. Someone landing on six unfamiliar groupings
+      {/* At the foot, not the head. Someone landing on unfamiliar groupings
           asks this question after scrolling, not before — and a banner at the
           top would sell the thesis to people who came here to turn something
           on. */}

@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { countEntries, recentChangelog } from "@/lib/changelog"
+import { recentChangelog } from "@/lib/changelog"
 import { constructMetadata } from "@/lib/metadata"
 import { JoinForm } from "@/components/waitlist/join-form"
 
@@ -34,12 +34,26 @@ export const metadata = constructMetadata({ canonicalUrl: "/" })
  * `revalidate` here without moving that read.
  */
 
-/** Three days is a week's worth of the log without the page becoming the log. */
-const DAYS = 3
+/**
+ * Three days is a week's worth of the log without the page becoming the log.
+ *
+ * Annotated `number` rather than left as the literal `3`, so the singular
+ * branch in the copy below is a live branch instead of a comparison TypeScript
+ * narrows away. Moving this to 1 has to change the sentence, not break it.
+ */
+const DAYS: number = 3
 
 export default function MarketingPage() {
-  const days = recentChangelog(DAYS)
-  const total = countEntries(days)
+  /**
+   * Counted by date, not by file. `recentChangelog` used to take the newest
+   * three files whatever their dates, so this paragraph went on claiming
+   * "3 changes in the last 3 days" about work from a fortnight ago.
+   *
+   * `days` still carries the newest three days when the window is empty, so a
+   * quiet fortnight costs the page its count rather than its content — and
+   * `recent === 0` is what makes the sentence say so out loud.
+   */
+  const { days, recent, since } = recentChangelog(DAYS)
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-20 px-6 pt-16 pb-24">
@@ -53,8 +67,8 @@ export default function MarketingPage() {
             single most common reason a landing page is unreadable on a laptop. */}
         <p className="max-w-[55ch] text-body-lg text-pretty text-muted-foreground">
           Quincy drafts in your voice and sends nothing without you. It is not
-          finished, and rather than describe it, here is everything that landed
-          this week — the fixes included.
+          finished, and rather than describe it, here is what has actually
+          landed — the fixes included.
         </p>
 
         <div className="w-full pt-2">
@@ -70,9 +84,17 @@ export default function MarketingPage() {
           <div className="flex flex-col gap-1.5">
             <h2 className="text-section">What shipped</h2>
             <p className="max-w-[55ch] text-body text-pretty text-muted-foreground">
-              {total} {total === 1 ? "change" : "changes"} in the last{" "}
-              {days.length === 1 ? "day" : `${days.length} days`}. No roadmap on
-              this page — a roadmap is a promise, and this is a receipt.{" "}
+              {/* Two sentences for two states, and the quiet one is the point.
+                  "0 changes in the last 3 days" is a true sentence that reads
+                  as a dead product; "Last change 12 days ago" is the same fact
+                  said by somebody who knows how long it has been. `since` is
+                  only ever null when the log is empty, and this whole section
+                  is dropped in that case. */}
+              {recent > 0
+                ? `${recent} ${recent === 1 ? "change" : "changes"} in the last ${DAYS === 1 ? "day" : `${DAYS} days`}.`
+                : `Last change ${since === 1 ? "yesterday" : `${since} days ago`}.`}{" "}
+              No roadmap on this page — a roadmap is a promise, and this is a
+              receipt.{" "}
               {/* The log stops after three days, and before this it stopped
                   with nowhere to go. */}
               <Link

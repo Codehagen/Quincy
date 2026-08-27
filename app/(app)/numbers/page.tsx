@@ -155,7 +155,7 @@ export default async function NumbersPage() {
           display number look loose, and this one is not in a column. */}
       <section className="px-3">
         <p className="text-eyebrow text-muted-foreground uppercase">
-          Your median post
+          Your median post · all time
         </p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <p className="text-display">
@@ -189,6 +189,109 @@ export default async function NumbersPage() {
             number on this page.
           </p>
         ) : null}
+      </section>
+
+      {/* The same account, over the last thirty days, as actually measured.
+          Its own block rather than a correction to the number above it: the
+          median up there answers "what does a post of mine normally do" across
+          two years, and this answers "what am I doing now". Replacing one with
+          the other would restate the first question as the second. */}
+      <section className="mx-3 rounded-lg bg-muted/40 px-4 py-3 ring-1 ring-foreground/5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="text-eyebrow text-muted-foreground uppercase">
+            Last {numbers.live.days} days
+          </h2>
+          {/* Brass says one thing, and it says it as a dot beside a word.
+              The word is what carries the state; the dot only agrees with it,
+              so nothing here is legible by colour alone. */}
+          {numbers.live.empty ? (
+            <p className="text-caption text-muted-foreground">Frozen at import</p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-caption text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="size-1.5 rounded-full bg-signal"
+              />
+              Live
+            </p>
+          )}
+        </div>
+
+        {numbers.live.empty ? (
+          <p className="mt-1.5 max-w-[62ch] text-sm text-pretty text-muted-foreground">
+            {numbers.live.connected ? (
+              <>
+                No reading yet. Numbers refresh every morning, so the first one
+                lands after the next refresh. Until then every figure on this
+                page is the one X reported when the post was imported.
+              </>
+            ) : (
+              <>
+                No reading yet. Numbers refresh every morning after X is{" "}
+                <Link
+                  href="/channels"
+                  className="text-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
+                >
+                  connected
+                </Link>
+                . Until then every figure on this page is the one X reported
+                when the post was imported.
+              </>
+            )}
+          </p>
+        ) : (
+          <>
+            <dl className="mt-2 flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm text-muted-foreground">
+                  Median impressions
+                </dt>
+                <dd className="tabular text-sm text-right">
+                  {numbers.live.median.toLocaleString("en-US")}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm text-muted-foreground">
+                  Posts measured
+                </dt>
+                <dd className="tabular text-sm text-right">
+                  {numbers.live.count.toLocaleString("en-US")}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm text-muted-foreground">
+                  Newest reading
+                </dt>
+                <dd className="tabular text-sm text-right">
+                  {numbers.live.since}
+                </dd>
+              </div>
+            </dl>
+
+            {/* Which of the numbers above are which, counted rather than
+                implied. A page that has just started measuring is mostly
+                frozen, and saying so is cheaper than a reader discovering it. */}
+            <p className="mt-2 max-w-[62ch] text-caption text-pretty text-muted-foreground">
+              {numbers.live.matched >= numbers.scored ? (
+                <>Every post on this page reads live.</>
+              ) : numbers.live.matched > 0 ? (
+                <>
+                  {numbers.live.matched} of {numbers.scored} posts on this page
+                  read live; the {numbers.scored - numbers.live.matched}{" "}
+                  {numbers.scored - numbers.live.matched === 1
+                    ? "other is"
+                    : "others are"}{" "}
+                  frozen at import.
+                </>
+              ) : (
+                <>
+                  Measured after this page&rsquo;s corpus was imported, so none
+                  of the posts above carry a live number yet.
+                </>
+              )}
+            </p>
+          </>
+        )}
       </section>
 
       {/* The shape, before any explanation of it. */}

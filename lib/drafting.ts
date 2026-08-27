@@ -266,6 +266,7 @@ const DRAFTING_RULES = `Rules:
 - Do not repeat the recently written posts listed below, if any are: not their opening move, not their closing line, not their emoji. Those already went out under this name. Their sentence *rhythm* is fair game — that is the voice, and avoiding it is how a draft stops sounding like the same person.
 ${TELLS}
 - Adapt each version to its own channel. Two versions of the same idea must not be the same text with different line breaks — the platform, the fold and the reader are different each time.
+- The brain may carry a strategy for a channel ("Strategy — X"). Its pillars are what this account is for: write this post as the pillar it belongs to, in the register its lean-into notes describe. The avoid list is a rule and not a preference — an idea that only works by breaking it is one to write differently, not one to write anyway. The weights and the posting windows are for the schedule; they say nothing about this post.
 - Whatever the idea's shape (short post, thread, carousel, essay), write exactly one post per channel — never a numbered list of parts, thread markers like "1/", or a script for a multi-post sequence. If the idea needs more than one post's worth of space, write the strongest single post that carries it rather than splitting it.
 - Never invent a fact, number, date or outcome that is not in the material below or the brain's story pages.
 - Write in English unless the brain instructs otherwise.
@@ -337,6 +338,15 @@ export function describeRecent(recent: string[]): string {
  * clause per line, a blank line between, the number whole and alone — and this
  * is the only place in the prompt that says so.
  *
+ * **The language line was added because a draft went out mixed.** `did` and
+ * `happened` are quoted out of the description, the descriptions in this
+ * corpus are written in Norwegian for a repository, and the post is written in
+ * English — so the beats arrived here as a Norwegian clause the writer then
+ * printed verbatim into an English post. Quoting is the right rule one step
+ * earlier and the wrong rule here: a quote a reader cannot read is not a
+ * quote. So the beat is translated and the number is not, which is the only
+ * part of it that has to survive intact.
+ *
  * **No line-break caveat, because no channel needs one.** `describeConstraints`
  * was checked on 2026-08-25: `ChannelRules` carries `limit`, `fold` and
  * `urlCost`, and not one of the six channels forbids a newline. If one ever
@@ -363,6 +373,7 @@ export function describeBeats(beats?: {
     `3. What it meant: ${learned}`,
     ``,
     `Write these as three short blocks with a blank line between them, in that order. You are the subject of the first. Beat 2 keeps its number exactly as written. If a beat is empty, write the other two and stop — do not invent the missing one.`,
+    `A beat written in another language than the one you are posting in is translated, not quoted. Every number in it survives the translation exactly — the digits, the unit, and both ends of a before-and-after. Nothing goes out verbatim in a language the reader does not read.`,
   ].join("\n")
 }
 

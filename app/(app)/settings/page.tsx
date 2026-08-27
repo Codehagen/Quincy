@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { and, eq, gt } from "drizzle-orm"
+import { and, desc, eq, gt, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { formatConversationDate } from "@/lib/format-date"
@@ -7,7 +7,12 @@ import { MAIL_REPLY_TO } from "@/lib/mail"
 import { constructMetadata } from "@/lib/metadata"
 // Aliased: `session` is what the auth object is called everywhere else in this
 // app, and one of the two names has to give way.
-import { session as sessionTable, user } from "@/lib/schema"
+import {
+  oauthAccessToken,
+  oauthApplication,
+  session as sessionTable,
+  user,
+} from "@/lib/schema"
 import { getSession } from "@/lib/session"
 import { resolveTimeZone } from "@/lib/timezone"
 import { describeUserAgent } from "@/lib/user-agent"
@@ -65,7 +70,7 @@ export default async function SettingsPage() {
    * (`user.id`, and the token that marks the current browser below); it is no
    * longer the authority on what to display.
    */
-  const [[account], rows] = await Promise.all([
+  const [[account], rows, agents] = await Promise.all([
     db
       .select({
         name: user.name,
@@ -110,6 +115,45 @@ export default async function SettingsPage() {
           gt(sessionTable.expiresAt, now)
         )
       ),
+    /**
+     * The MCP clients this account has authorized, newest first.
+     *
+     * One row per registered client, not one per token: a client that has been
+     * connected for a month holds a chain of `oauth_access_token` rows — one per
+     * hour of use, plus one for every refresh — and listing those would be the
+     * same mistake the session list already learned, nine rows nobody can tell
+     * apart. `max(created_at)` over the join answers the only question the
+     * chain is good for: when did this thing last take a key.
+     *
+     * A left join, so a client registered and never authorized still appears.
+     * That row is exactly the one worth seeing — something asked for access and
+     * the person may not remember saying yes.
+     *
+     * `client_id`, not the row id, because that is what the tokens reference and
+     * what the removal names. It is not a credential: it travels in the query
+     * string of every authorization request.
+     */
+    db
+      .select({
+        clientId: oauthApplication.clientId,
+        name: oauthApplication.name,
+        createdAt: oauthApplication.createdAt,
+        lastToken: sql<
+          string | Date | null
+        >`max(${oauthAccessToken.createdAt})`,
+      })
+      .from(oauthApplication)
+      .leftJoin(
+        oauthAccessToken,
+        eq(oauthAccessToken.clientId, oauthApplication.clientId)
+      )
+      .where(eq(oauthApplication.userId, session.user.id))
+      .groupBy(
+        oauthApplication.clientId,
+        oauthApplication.name,
+        oauthApplication.createdAt
+      )
+      .orderBy(desc(oauthApplication.createdAt)),
   ])
 
   // The row is gone but the session is not: an account deleted underneath a
@@ -183,6 +227,29 @@ export default async function SettingsPage() {
       current: group.current,
     }))
 
+  /**
+   * Both dates in this person's own zone, for the same reason the session list
+   * is: "Yesterday" computed in UTC is wrong for half of every evening in Oslo.
+   *
+   * `lastToken` comes back from an aggregate rather than a mapped column, so it
+   * may arrive as a string depending on what the driver decided to parse.
+   * Normalised here rather than trusted — a `RangeError` on a settings page is
+   * a settings page nobody can open.
+   */
+  const connectedAgents = agents.map((agent) => {
+    const last = agent.lastToken ? new Date(agent.lastToken) : null
+
+    return {
+      clientId: agent.clientId,
+      name: agent.name?.trim() || "Unnamed agent",
+      connected: `Connected ${formatConversationDate(agent.createdAt, zone, now).toLowerCase()}`,
+      lastToken:
+        last && !Number.isNaN(last.getTime())
+          ? `last key ${formatConversationDate(last, zone, now).toLowerCase()}`
+          : "never used",
+    }
+  })
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-8 py-10">
       <PageHeader>
@@ -199,6 +266,7 @@ export default async function SettingsPage() {
         email={account.email}
         timezone={zone}
         sessionGroups={sessionGroups}
+        connectedAgents={connectedAgents}
         supportEmail={MAIL_REPLY_TO}
         nowIso={now.toISOString()}
       />

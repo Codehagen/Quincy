@@ -214,14 +214,20 @@ export default async function ChannelPage({
                 </EmptyMedia>
                 <EmptyTitle>No strategy for {title} yet</EmptyTitle>
                 <EmptyDescription>
-                  Connecting is permission; a strategy is what Quincy does with
-                  it. Quincy writes that with you in Studio — it is not a form
-                  you fill in here.
+                  Quincy proposes one from the posts it has read, and you edit
+                  it afterwards.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button nativeButton={false} render={<Link href="/studio" />}>
-                  Work it out in Studio
+                {/* The proposal itself lives on /brain, which is the one page
+                    that holds the corpus count, the cooldown and the editor.
+                    A second Propose button here would be a second call site
+                    for a model call that already has a home. */}
+                <Button
+                  nativeButton={false}
+                  render={<Link href={`/brain?page=${slug}`} />}
+                >
+                  Propose from my posts
                 </Button>
               </EmptyContent>
             </Empty>

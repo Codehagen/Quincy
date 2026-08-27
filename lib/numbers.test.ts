@@ -13,9 +13,13 @@ import {
   hook,
   impressionsOf,
   isClipped,
+  liveBaseline,
   median,
   metricOf,
+  metricsFor,
   rollupByAngle,
+  type NumbersView,
+  type Reading,
   type ScoredPost,
 } from "./numbers"
 
@@ -41,6 +45,21 @@ function post(over: Partial<ScoredPost> & { id: string }): ScoredPost {
     impressions: 0,
     replies: 0,
     multiple: 1,
+    live: false,
+    ...over,
+  }
+}
+
+/** A `post_metric` row as `readPostMetrics` hands it back. */
+function reading(over: Partial<Reading> = {}): Reading {
+  return {
+    impressions: 0,
+    likes: 0,
+    replies: 0,
+    reposts: 0,
+    bookmarks: 0,
+    quotes: 0,
+    capturedAt: new Date("2026-08-26T00:00:00Z"),
     ...over,
   }
 }
@@ -126,6 +145,144 @@ describe("metricOf", () => {
   it("is 0 when absent, because it is decoration and not the subject", () => {
     expect(metricOf({}, "reply_count")).toBe(0)
     expect(metricOf({ public_metrics: { reply_count: "61" } }, "reply_count")).toBe(0)
+  })
+})
+
+describe("metricsFor", () => {
+  // The blob as `source_item.meta` froze it at import, and the reading the
+  // daily refresh took of the same post three weeks later.
+  const frozen = {
+    public_metrics: { impression_count: 287, reply_count: 1 },
+  }
+
+  it("prefers the live reading over the frozen blob", () => {
+    // The whole point of plans/027 2c: a post read on the day it went out was
+    // being ranked against a post read three weeks later.
+    expect(metricsFor(frozen, reading({ impressions: 4247, replies: 12 }))).toEqual({
+      impressions: 4247,
+      replies: 12,
+      live: true,
+    })
+  })
+
+  it("falls back to the frozen blob when nothing has measured the post", () => {
+    // The corpus is two years old and the series covers thirty days, so this
+    // is the majority case and stays the majority case forever.
+    expect(metricsFor(frozen)).toEqual({
+      impressions: 287,
+      replies: 1,
+      live: false,
+    })
+    expect(metricsFor(frozen, null)).toEqual({
+      impressions: 287,
+      replies: 1,
+      live: false,
+    })
+  })
+
+  it("keeps the frozen number when the reading withheld the field", () => {
+    // `metricValuesFrom` reports an absent `impression_count` as 0. A post does
+    // not lose views, so a 0 sitting under 287 is X not answering — not a flop.
+    expect(metricsFor(frozen, reading({ impressions: 0 }))).toEqual({
+      impressions: 287,
+      replies: 1,
+      live: false,
+    })
+  })
+
+  it("keeps a genuine zero when there is nothing frozen behind it", () => {
+    // An archive row carries no metrics at all, so the reading is the only
+    // answer there is, and 0 is a real one.
+    expect(metricsFor({}, reading({ impressions: 0 }))).toEqual({
+      impressions: 0,
+      replies: 0,
+      live: true,
+    })
+  })
+
+  it("leaves an unscorable row unscorable", () => {
+    // Counted by `skipped` rather than dropped. Null here, never 0 — the page
+    // would otherwise report an archive import as a corpus of flops.
+    expect(metricsFor({}).impressions).toBeNull()
+    expect(metricsFor(null).impressions).toBeNull()
+  })
+})
+
+describe("liveBaseline", () => {
+  it("is empty on a fresh account rather than a row of zeroes", () => {
+    // Nothing measured is not the same fact as thirty days of posts that did
+    // nothing, and rendering the second when the first is true is the most
+    // convincing kind of lie this page can tell.
+    const base = liveBaseline([], "UTC", { connected: false, matched: 0 })
+    expect(base.empty).toBe(true)
+    expect(base.count).toBe(0)
+    expect(base.median).toBe(0)
+    expect(base.since).toBeNull()
+    expect(base.connected).toBe(false)
+    expect(base.days).toBe(30)
+  })
+
+  it("medians the window and names the newest reading in the reader's zone", () => {
+    const base = liveBaseline(
+      [
+        reading({
+          impressions: 287,
+          capturedAt: new Date("2026-08-24T00:00:00Z"),
+        }),
+        reading({
+          impressions: 938,
+          likes: 5,
+          replies: 1,
+          capturedAt: new Date("2026-08-26T00:00:00Z"),
+        }),
+        reading({
+          impressions: 4247,
+          capturedAt: new Date("2026-08-25T00:00:00Z"),
+        }),
+      ],
+      "UTC",
+      { connected: true, matched: 2 }
+    )
+    expect(base.empty).toBe(false)
+    expect(base.count).toBe(3)
+    expect(base.median).toBe(938)
+    expect(base.best).toBe(4247)
+    expect(base.medianEngagements).toBe(0)
+    // The newest, not the last in the array — the rows arrive ordered by post.
+    expect(base.since).toBe("Aug 26 2026")
+    expect(base.matched).toBe(2)
+  })
+
+  it("reports the newest reading in the reader's zone, not the server's", () => {
+    // 23:30 UTC is already tomorrow in Oslo. Same rule as every other date on
+    // this page.
+    const rows = [
+      reading({ impressions: 1, capturedAt: new Date("2026-08-26T23:30:00Z") }),
+    ]
+    expect(
+      liveBaseline(rows, "Europe/Oslo", { connected: true, matched: 1 }).since
+    ).toBe("Aug 27 2026")
+  })
+})
+
+describe("NumbersView", () => {
+  it("carries the live baseline beside the corpus median, not instead of it", () => {
+    // Typed on purpose: the corpus median answers "what does a post of mine
+    // normally do" over two years, and `live` answers "what am I doing now"
+    // over thirty days. One field overwriting the other would restate the
+    // first question as the second and nobody would see it happen.
+    const view: Pick<NumbersView, "median" | "mean" | "live"> = {
+      median: 938,
+      mean: 4946,
+      live: liveBaseline([reading({ impressions: 4247 })], "UTC", {
+        connected: true,
+        matched: 1,
+      }),
+    }
+
+    expect(view.median).toBe(938)
+    expect(view.live.median).toBe(4247)
+    expect(view.live.empty).toBe(false)
   })
 })
 

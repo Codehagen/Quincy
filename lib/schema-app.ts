@@ -620,6 +620,19 @@ export const channelConnection = pgTable(
      * locks, no interactive transactions).
      */
     lastImportAt: timestamp("last_import_at", { withTimezone: true }),
+    /**
+     * When the daily metrics refresh last bought a page for this connection.
+     *
+     * A second column rather than a reuse of `last_import_at`, because the two
+     * jobs bound different spends on different clocks — a corpus import is a
+     * person pressing a button every ten minutes, this is a cron reading the
+     * same hundred posts every twenty hours — and sharing one column would let
+     * either one silence the other. Claimed the same atomic way, by the
+     * conditional UPDATE in lib/post-metrics.ts: cron on Vercel can fire twice
+     * for one schedule, and a read-then-write here would let both runs
+     * through.
+     */
+    lastMetricsAt: timestamp("last_metrics_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -739,6 +752,28 @@ export const SOURCE_ITEM_SOURCES = [
    */
   "hacker-news",
   "github-repo",
+  /**
+   * A meeting that already happened, reduced to what a question needs. See
+   * plans/027 4d and lib/calendar.ts.
+   *
+   * The thinnest row in this table by a distance, and deliberately: the title,
+   * the start, the end, how many people were invited, and whether the owner
+   * called it. **No description, no attendee names, no addresses, no link** —
+   * the description is read once, in memory, to decide whether the meeting
+   * touches a story the owner keeps, and is dropped with the response.
+   *
+   * `body` is the title rather than any prose, which makes both rules on
+   * `circleback` above bind harder rather than softer. `compileVoice` must
+   * never read this: a room name is not writing and not speech. And `proof`
+   * may not be cited from it — a meeting in somebody's calendar is not
+   * something anybody else can open, and a receipt nobody can check is not a
+   * receipt.
+   *
+   * `google-calendar` rather than `calendar` for the reason the two GitHub
+   * values give: the platform is named, so a second calendar provider is a
+   * second value rather than an ambiguity inside one namespace.
+   */
+  "google-calendar",
 ] as const
 
 export type SourceItemSource = (typeof SOURCE_ITEM_SOURCES)[number]
@@ -790,6 +825,115 @@ export const sourceItem = pgTable(
 
 export const sourceItemRelations = relations(sourceItem, ({ one }) => ({
   user: one(user, { fields: [sourceItem.userId], references: [user.id] }),
+}))
+
+/* ── Post metrics ─────────────────────────────────────────────────────────
+   What a published post actually did, sampled once a day. See plans/027, 2c.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One day's reading of one post's numbers.
+ *
+ * A table of its own rather than more `source_item.meta`, because the meta
+ * blob is written once at import and never read again — so /numbers compares a
+ * post measured on the day it went out against a post measured three weeks
+ * later, and presents the mismatch as a ranking. The plan states it flatly:
+ * frozen analytics are worse than none. A row per post per day makes the
+ * number a series, which is the only shape that can answer the question the
+ * page is actually asked — did this keep climbing after day one.
+ *
+ * It also keeps `source_item.meta`'s rule intact rather than breaking it
+ * further. That column says: never parsed for logic, and if code needs a
+ * metric, that is a column. These are the columns.
+ *
+ * A fact, not a job: no state, nothing consumes a row. The refresh writes
+ * today's reading and never touches yesterday's.
+ */
+export const postMetric = pgTable(
+  "post_metric",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * The `source_item` row this measures — one of the owner's own posts.
+     *
+     * Soft, exactly the way `riff.source_item_id` is soft, and for a sharper
+     * reason than convention. The refresh reads the timeline, not the corpus,
+     * so a post published this morning has numbers before it has a
+     * `source_item` row. A real foreign key would turn the honest answer —
+     * "measured a post the import has not caught up with" — into an insert
+     * failure at 06:00 with nobody watching. Empty until the corpus catches
+     * up, and `external_id` beside it is what a backfill joins on.
+     */
+    sourceItemId: text("source_item_id").notNull().default(""),
+    channel: text("channel", { enum: CONNECTABLE_CHANNELS }).notNull(),
+    /** The platform's own id, so a reading is identifiable before the
+     *  corpus has the post it belongs to. */
+    externalId: text("external_id").notNull(),
+    /**
+     * The day this reading belongs to, normalised to UTC midnight.
+     *
+     * Normalised rather than stamped with the wall clock, because the unique
+     * index below is what holds "one row per post per day" and an index over
+     * `captured_at::date` cannot be an upsert target through drizzle's
+     * builder — which on the HTTP driver, with no transaction to fall back
+     * on, would mean a read-then-write and a duplicate every time the cron
+     * fired twice. Nothing is lost: the instant the row was actually written
+     * is in `created_at`, and this is a daily series, so the hour was never
+     * the subject.
+     */
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+
+    /**
+     * Six counts, all `not null default 0` rather than nullable.
+     *
+     * A metric the platform did not return is not a different kind of nothing
+     * from a metric that is zero — not for anything this feeds, which is a
+     * median and a multiple. A nullable integer reaching that median is the
+     * NaN lib/numbers.ts already had to defend `impressionsOf` against once,
+     * and defending it twice in two files is how the two answers drift.
+     */
+    impressions: integer("impressions").notNull().default(0),
+    likes: integer("likes").notNull().default(0),
+    replies: integer("replies").notNull().default(0),
+    reposts: integer("reposts").notNull().default(0),
+    bookmarks: integer("bookmarks").notNull().default(0),
+    quotes: integer("quotes").notNull().default(0),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    /**
+     * One reading per post per day — keyed on the platform's id, not on
+     * `source_item_id`.
+     *
+     * `source_item_id` is the obvious key and it is the wrong one: it defaults
+     * to the empty string, so every not-yet-imported post of a single day
+     * would collide into one row and all but the last would be silently lost.
+     * That is the same class of bug as a key without a tenant, which is why
+     * the user is in this one — see brain_page.
+     */
+    uniqueIndex("post_metric_user_post_day_key").on(
+      table.userId,
+      table.channel,
+      table.externalId,
+      table.capturedAt
+    ),
+    // The read path: one user's window, in time order.
+    index("post_metric_user_captured_idx").on(table.userId, table.capturedAt),
+    // The join /numbers makes once the corpus and the series meet: the newest
+    // reading for a given post.
+    index("post_metric_item_captured_idx").on(
+      table.sourceItemId,
+      table.capturedAt
+    ),
+  ]
+)
+
+export const postMetricRelations = relations(postMetric, ({ one }) => ({
+  user: one(user, { fields: [postMetric.userId], references: [user.id] }),
 }))
 
 /* ── Source connections ───────────────────────────────────────────────────
@@ -1222,6 +1366,30 @@ export const rhythmRun = pgTable(
     rhythmId: text("rhythm_id").notNull(),
     state: text("state", { enum: RHYTHM_RUN_STATES }).notNull(),
     summary: text("summary").notNull().default(""),
+    /**
+     * What the run left behind, in numbers and ids. See
+     * `RhythmHandlerResult.result` in lib/rhythm-handlers.ts.
+     *
+     * Ship Log writes the merge count and the `riffId` and `draftId` it made.
+     * Weekly Review writes the message and its two facts — what was posted and
+     * what worked. Week Plan writes what it proposed, what it critiqued, what
+     * it drafted and where each draft would be placed.
+     *
+     * **jsonb because three handlers answer in three shapes**, and columns for
+     * the union of them would be a table where most of every row is null and a
+     * fourth handler needs a migration to say anything at all. `summary` stays
+     * the one line a person reads; this is the record behind it, for a query
+     * nobody has written yet.
+     *
+     * **Nullable because most rows have none.** Every run recorded before this
+     * column existed, and every run that was skipped, missed, or failed, left
+     * nothing to write — and a default of `{}` would make "produced nothing"
+     * and "produced an empty result" the same fact.
+     *
+     * Bounded on the way in at `MAX_RESULT_BYTES` in lib/rhythm-run.ts. A
+     * receipt is not a place to keep a week of drafted posts.
+     */
+    result: jsonb("result"),
     /** True when a person pressed "Run now" rather than the clock firing. */
     manual: boolean("manual").notNull().default(false),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),

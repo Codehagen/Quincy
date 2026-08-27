@@ -5,6 +5,7 @@ import { start } from "workflow/api"
 import { db } from "@/lib/db"
 import { isEntitled, resolveEntitlement } from "@/lib/entitlement"
 import { isGithubAppConfigured, verifyGithubSignature } from "@/lib/github-app"
+import { materialFor, MAX_MATERIAL_REQUESTS } from "@/lib/github-material"
 import { repoContextFor } from "@/lib/github-repo"
 import { user } from "@/lib/schema"
 import { sourceItem } from "@/lib/schema-app"
@@ -19,8 +20,15 @@ import {
   resumeSource,
 } from "@/lib/source-connections"
 import {
+  recordGithubReads,
+  recordShippedMaterial,
+  recordShippedStop,
+  type ShippedStop,
+} from "@/lib/shipped-meta"
+import {
   descriptionBlocks,
   MAX_DESCRIPTION_CHARS,
+  NO_MATERIAL,
   parseShippedPayload,
   shippedFacts,
   shippedGate,
@@ -293,6 +301,10 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       trialEndsAt: user.trialEndsAt,
+      // The one question Quincy asks names the hour they merged, and an hour
+      // stated in the server's zone is an hour from somebody else's day. See
+      // `shippedQuestionText`.
+      timezone: user.timezone,
     })
     .from(user)
     .where(eq(user.id, connection.userId))
@@ -416,6 +428,22 @@ export async function POST(request: Request) {
   const entitlement = await resolveEntitlement(owner)
 
   if (!isEntitled(entitlement)) {
+    /**
+     * Stored and never read, said on the row rather than only in the response.
+     *
+     * **This is the gap plan 027 found in `recordShippedRefusal`.** That
+     * function has one call site, inside the workflow, so it can only record a
+     * verdict a model reached — and this branch never starts the workflow. Until
+     * now the row was left with no riff, no refusal and nothing anywhere saying
+     * which of the four silent exits it took, which is exactly the shape the
+     * live rows are in: `rhythm_run` for the same days is full of "subscription
+     * no longer active", and the merges that arrived alongside them are
+     * indistinguishable from merges nothing was found in.
+     */
+    await stop(sourceItemId, {
+      reason: "unentitled",
+      why: "Your subscription was not active when this merged, so it was stored and not read.",
+    })
     return Response.json({ state: "stored", reason: "unentitled" })
   }
 
@@ -429,10 +457,18 @@ export async function POST(request: Request) {
    * is not spent, and the material is there when the pause lifts.
    */
   if (paused) {
+    await stop(sourceItemId, {
+      reason: "paused",
+      why: "The GitHub App installation was suspended when this merged, so it was stored and not read.",
+    })
     return Response.json({ state: "stored", reason: "paused" })
   }
 
   if (recent >= MAX_MERGES_PER_DAY) {
+    await stop(sourceItemId, {
+      reason: "daily-ceiling",
+      why: `This was past the ${MAX_MERGES_PER_DAY} merges a day Quincy reads, so it was stored and not read.`,
+    })
     return Response.json({ state: "stored", reason: "daily-ceiling" })
   }
 
@@ -475,6 +511,45 @@ export async function POST(request: Request) {
   })
 
   /**
+   * What the merge is made of. See plans/027 phase 1a.
+   *
+   * **Here, beside the repository context, for the same placement argument.**
+   * This costs GitHub requests — at most `MAX_MATERIAL_REQUESTS` of them — and
+   * every branch above exists to keep a redelivery, a lapsed account, a paused
+   * connection and a merge over the ceiling free. Down here it is bounded by
+   * `MAX_MERGES_PER_DAY`, so one user's GitHub reads cannot exceed
+   * `MAX_MERGES_PER_DAY x MAX_MATERIAL_REQUESTS` in a day whatever a merge
+   * queue does.
+   *
+   * **It may never block the workflow.** `materialFor` does not throw; this is
+   * belt to those braces. A merge with no material is a merge that still
+   * becomes a riff, written from the description alone — which is what every
+   * riff before this was written from.
+   *
+   * Unlike the repository context, this *is* written to `source_item.meta`. It
+   * is a fact about this merge rather than about the repository around it, it
+   * will never change again, and the re-run after somebody answers a question
+   * needs it without a second visit to GitHub.
+   */
+  const material = await materialFor({
+    installationId: meta.installationId,
+    repository: payload.repository,
+    number: payload.number,
+    body: payload.body,
+  }).catch((cause) => {
+    console.error("[github] could not read the material:", cause)
+    return NO_MATERIAL
+  })
+
+  await recordShippedMaterial(sourceItemId, material).catch((cause) => {
+    // The workflow gets it from the payload either way. What is lost is the
+    // re-run's copy, which costs one more fetch and not a riff.
+    console.error("[github] could not store the material:", cause)
+  })
+
+  await recordGithubReads(owner.id, MAX_MATERIAL_REQUESTS)
+
+  /**
    * No riff yet, and no id to return.
    *
    * The workflow creates it, and only if the selection finds something. See
@@ -488,20 +563,48 @@ export async function POST(request: Request) {
         sourceItemId,
         facts: shippedFacts(payload, repo),
         blocks,
+        material,
+        timezone: owner.timezone ?? "",
       },
     ])
   } catch (cause) {
     /**
-     * The `source_item` stays. Nothing is on screen that claims to be working,
-     * because nothing was created — so unlike the voice and meeting routes
-     * there is no stuck card to explain, only a merge that was read and left
-     * no riff. That is indistinguishable from the common case, which is the
-     * cost of not creating the row up front and is why this is logged.
+     * The `source_item` stays, and now it says so.
+     *
+     * It used to stay silently: no riff, no refusal, nothing anywhere naming
+     * this as the reason — indistinguishable from the common case, which the
+     * old comment here admitted and accepted. It is the fourth of the four
+     * exits plan 027 traced, and `recordShippedStop` is what makes a stuck
+     * `pending` row explain itself.
      */
     console.error("[github] could not start workflow:", cause)
+    await stop(sourceItemId, {
+      reason: "not-started",
+      why: "Quincy read this merge but could not start the write. Nothing was lost — press 'read my last merged pull request' to try again.",
+    })
   }
 
   return Response.json({ state: "working", sourceItemId }, { status: 202 })
+}
+
+/**
+ * Say on the row why this merge was stored and not read.
+ *
+ * Never allowed to fail the delivery. GitHub paints a red cross for a non-2xx
+ * and an expected refusal is not a fault — the route's own header says so — so
+ * a meta write that fails leaves the row exactly as silent as it was before
+ * this existed, which is a regression to the previous behaviour rather than a
+ * new failure.
+ */
+async function stop(
+  sourceItemId: string,
+  input: { reason: ShippedStop; why: string }
+): Promise<void> {
+  try {
+    await recordShippedStop({ sourceItemId, ...input })
+  } catch (cause) {
+    console.error("[github] could not record the stop:", cause)
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 import { isChannelEnabled, PLATFORM_TIMEOUT_MS } from "./channels"
 import { db } from "./db"
 import { publish, type PublishResult } from "./publish"
+import { canPublish } from "./publisher"
 import {
   CONNECTABLE_CHANNELS,
   draft,
@@ -63,6 +64,9 @@ const CATCH_UP_MS = 2 * 60 * 60 * 1000
  * Expressed in terms of the timeout rather than as 30_000, so that lowering the
  * per-fetch bound in lib/channels.ts moves this with it instead of leaving a
  * number here that used to be right.
+ *
+ * The external publisher fits inside the same bound: two attempts at
+ * EXTERNAL_TIMEOUT_MS each and no token refresh (lib/publisher-external.ts).
  *
  * Exported for lib/publish-run.test.ts.
  */
@@ -171,8 +175,10 @@ export type PublishOutcome =
    */
   | "unconfigured"
   /**
-   * Scheduled to a channel Quincy cannot publish to. Only reachable through
-   * seed data or a channel losing support after something was queued for it.
+   * No publisher is registered for the channel — `publisherFor` in
+   * lib/publisher.ts has nothing for it and no external scheduler is
+   * configured. Reachable whenever a draft was written for a channel Quincy
+   * cannot send, which `draft_version.channel` allows.
    */
   | "unsupported"
   /**
@@ -329,10 +335,15 @@ async function attempt(
     return { ...base, outcome: "missed", detail: `${lateBy} minutes late` }
   }
 
-  if (!isConnectable(row.channel)) {
+  if (!canPublish(row.channel)) {
     // Marked rather than left queued: no deploy fixes this, so leaving it to
     // rot until the window closes would report it as "missed" and imply it
     // nearly made it.
+    //
+    // Asked of the registry rather than of CONNECTABLE_CHANNELS, so that a
+    // channel served by the external scheduler is attempted instead of being
+    // refused here. With no scheduler configured the two answers are the same
+    // set, which is why this changes nothing for a default deployment.
     if (!(await claim(row.postId))) {
       return { ...base, outcome: "claimed-elsewhere" }
     }
@@ -360,7 +371,7 @@ async function attempt(
    * So nothing is claimed and nothing is written. The row stays queued, and if
    * somebody fixes the deploy inside the two hours it still goes out.
    */
-  if (!isChannelEnabled(row.channel)) {
+  if (isConnectable(row.channel) && !isChannelEnabled(row.channel)) {
     return { ...base, outcome: "unconfigured" }
   }
 
@@ -372,6 +383,11 @@ async function attempt(
     userId: row.userId,
     channel: row.channel,
     text: row.body,
+    // The idempotency key, for a publisher that offers one. The row id is
+    // unique per approved version, so a retried request cannot become a
+    // second post.
+    postId: row.postId,
+    scheduledFor: row.scheduledFor,
   })
 
   const outcome = await record(row.postId, result)
@@ -669,7 +685,7 @@ export async function sendNow({
     }
   }
 
-  if (!isConnectable(row.channel)) {
+  if (!canPublish(row.channel)) {
     return {
       ok: false,
       message: `Quincy cannot publish to ${row.channel} yet.`,
@@ -681,7 +697,7 @@ export async function sendNow({
    * here: a missing client id would mark this row `failed` permanently, in
    * front of somebody who is watching, over an environment variable.
    */
-  if (!isChannelEnabled(row.channel)) {
+  if (isConnectable(row.channel) && !isChannelEnabled(row.channel)) {
     return {
       ok: false,
       message: `${row.channel} publishing is not configured in this environment.`,
@@ -761,6 +777,8 @@ export async function sendNow({
     userId,
     channel: row.channel,
     text: row.body,
+    postId,
+    scheduledFor: now,
   })
 
   const outcome = await record(postId, result)

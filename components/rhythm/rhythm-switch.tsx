@@ -16,23 +16,25 @@ import { Switch } from "@/components/ui/switch"
  * first and reverts on failure, which is the only case where the delay is
  * worth spending.
  *
- * `disabled` is still honoured for two kinds of rhythm and they mean different
- * things: `locked` is Heartbeat, which runs for everyone and is not a choice
- * (plans/016, decision 8), and everything else with no handler is simply not
- * built yet. The label says which, because a switch nobody can move has to
- * explain itself.
+ * `locked` is Heartbeat and is the only switch here that cannot move: it runs
+ * for everyone on a system cron and is maintenance rather than a choice
+ * (plans/016, decision 8). Its label says so, because a switch nobody can move
+ * has to explain itself.
+ *
+ * There is no third state. A rhythm with no switch to offer — an event rhythm,
+ * turned on by connecting its source — renders no switch at all rather than a
+ * disabled one, so this component is only ever asked about something a press
+ * can change. See components/rhythm/rhythm-grid.tsx.
  */
 export function RhythmSwitch({
   rhythmId,
   name,
   enabled,
-  runnable,
   locked = false,
 }: {
   rhythmId: string
   name: string
   enabled: boolean
-  runnable: boolean
   locked?: boolean
 }) {
   const router = useRouter()
@@ -56,14 +58,8 @@ export function RhythmSwitch({
     setOn(enabled)
   }
 
-  if (locked || !runnable) {
-    return (
-      <Switch
-        checked={locked}
-        disabled
-        aria-label={`${name} — ${locked ? "always on" : "not available yet"}`}
-      />
-    )
+  if (locked) {
+    return <Switch checked disabled aria-label={`${name} — always on`} />
   }
 
   return (

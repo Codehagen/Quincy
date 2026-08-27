@@ -2,18 +2,43 @@
 
 import { revalidatePath } from "next/cache"
 
+import {
+  answerCalendarQuestion,
+  CALENDAR_SOURCE,
+  isCalendarEnabled,
+  openCalendarQuestion,
+  readCalendarRefreshToken,
+  revokeCalendarToken,
+} from "@/lib/calendar"
 import { corpusSummary, importXCorpus } from "@/lib/corpus-x"
+import { formatConversationDate } from "@/lib/format-date"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { installUrl } from "@/lib/github-app"
-import {
-  findLastMergedPull,
-  storeBackfilledMerge,
-} from "@/lib/github-backfill"
+import { findLastMergedPull, storeBackfilledMerge } from "@/lib/github-backfill"
+import { materialFor, MAX_MATERIAL_REQUESTS } from "@/lib/github-material"
 import { repoContextFor } from "@/lib/github-repo"
 import { getSession } from "@/lib/session"
-import { readShippedOutcome } from "@/lib/riffs"
-import { sayOutcome, type ShippedOutcome } from "@/lib/shipped-outcome"
-import { shippedFacts } from "@/lib/shipped-work"
+import { createRiffFromSaid, readShippedOutcome } from "@/lib/riffs"
+import {
+  MAX_ANSWER_CHARS,
+  sayOutcome,
+  type ShippedOutcome,
+} from "@/lib/shipped-outcome"
+import {
+  answerShippedQuestion,
+  openShippedQuestion,
+  recordGithubReads,
+  recordShippedMaterial,
+  recordShippedStop,
+} from "@/lib/shipped-meta"
+import {
+  flattenBlocks,
+  NO_MATERIAL,
+  readShippedBrief,
+  readShippedFacts,
+  readShippedMaterial,
+  shippedFacts,
+} from "@/lib/shipped-work"
 import {
   connectSource,
   disconnectSource,
@@ -23,6 +48,7 @@ import {
   setGithubLogin,
   setSigningSecret,
 } from "@/lib/source-connections"
+import { hhmmIn, resolveTimeZone } from "@/lib/timezone"
 import { compileVoice } from "@/lib/voice"
 import { spendCooldown } from "@/lib/usage"
 import { start } from "workflow/api"
@@ -31,6 +57,29 @@ import { runShippedRiffWorkflow } from "@/workflows/run-shipped-riff"
 /** One press per ten minutes. Matches `IMPORT_COOLDOWN_MS`: same shape of
  *  action — a human-triggered read that ends in a model call. */
 const BACKFILL_COOLDOWN_MS = 10 * 60 * 1000
+
+/**
+ * The `usage_event.conversation_id` both halves of that cooldown turn on.
+ *
+ * Named once, here, because `spendCooldown` reads a tag and the workflow writes
+ * it — two files, one string, and a typo between them is a cooldown that
+ * silently never fires. Same shape as `ADAPT_SPEND` in lib/adapt.ts.
+ */
+const BACKFILL_SPEND = "github:backfill"
+
+/**
+ * One answer per two minutes. See `answerMergeQuestion`.
+ *
+ * Shorter than the backfill's ten, because this is somebody replying to a
+ * question Quincy asked rather than asking for work — and the ceiling that
+ * matters more is upstream: only one question is ever open, and answering it
+ * closes it, so the second press inside the window has nothing to answer.
+ */
+const ANSWER_COOLDOWN_MS = 2 * 60 * 1000
+
+/** The tag the answer spends against. Not the backfill's — a rate limit on one
+ *  button must not be trippable by a different button. See `spendCooldown`. */
+const ANSWER_SPEND = "github:question"
 
 /**
  * The one mutation /sources has: read the user's own X posts and teach the
@@ -427,7 +476,7 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
 
   const cooldown = await spendCooldown(
     session.user.id,
-    "github:backfill",
+    BACKFILL_SPEND,
     BACKFILL_COOLDOWN_MS
   )
   if (!cooldown.ready) {
@@ -542,6 +591,32 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
     return null
   })
 
+  /**
+   * What the merge is made of, on the same terms the webhook fetches it. See
+   * plans/027 phase 1a.
+   *
+   * Bounded by `MAX_MATERIAL_REQUESTS` per press and by
+   * `BACKFILL_COOLDOWN_MS` per person, which is the pairing AGENTS.md asks for:
+   * a ceiling on what one run buys and a cooldown on how often somebody can
+   * trigger it. Never throws, and a merge with no material still becomes a
+   * riff.
+   */
+  const material = await materialFor({
+    installationId: meta.installationId,
+    repository: found.payload.repository,
+    number: found.payload.number,
+    body: found.payload.body,
+  }).catch((cause) => {
+    console.error("[sources] could not read the material:", cause)
+    return NO_MATERIAL
+  })
+
+  await recordShippedMaterial(stored.sourceItemId, material).catch((cause) => {
+    console.error("[sources] could not store the material:", cause)
+  })
+
+  await recordGithubReads(session.user.id, MAX_MATERIAL_REQUESTS)
+
   try {
     await start(runShippedRiffWorkflow, [
       {
@@ -549,15 +624,35 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
         sourceItemId: stored.sourceItemId,
         facts: shippedFacts(found.payload, repo),
         blocks: stored.blocks,
+        material,
+        timezone: session.user.timezone ?? "",
+        /**
+         * The tag `BACKFILL_COOLDOWN_MS` is checked against.
+         *
+         * `spendCooldown` reads the most recent `usage_event` carrying it, and
+         * nothing on this path had ever written one — so the ten-minute
+         * cooldown above was a check against a row that did not exist and the
+         * button was pressable all afternoon, which is precisely the failure
+         * AGENTS.md names ("a claim is not a cooldown"). The workflow writes
+         * the tag when it meters the selection.
+         */
+        spendTag: BACKFILL_SPEND,
       },
     ])
   } catch (cause) {
     /**
      * The `source_item` stays, exactly as the webhook leaves it on the same
-     * failure. The merge was read and the row is true; nothing on screen claims
-     * to be working, because no riff was created.
+     * failure — and, as there, it now says why rather than looking identical to
+     * a merge nothing was found in.
      */
     console.error("[sources] could not start the backfill workflow:", cause)
+    await recordShippedStop({
+      sourceItemId: stored.sourceItemId,
+      reason: "not-started",
+      why: "Quincy read this merge but could not start the write.",
+    }).catch((why) => {
+      console.error("[sources] could not record the stop:", why)
+    })
     return {
       ok: false,
       message: "I read it but could not start the write. Try again shortly.",
@@ -589,4 +684,457 @@ export async function readMergeOutcome(
   if (!session) return null
 
   return readShippedOutcome({ userId: session.user.id, sourceItemId })
+}
+
+/* ── The one question ─────────────────────────────────────────────────────
+   See plans/027 phase 1c. A refusal is honest and inert; this is the half that
+   can turn one into a post without lowering the bar.
+
+   The whole exchange is two server actions and one row. Quincy writes
+   `source_item.meta.question` when it cannot find the event in a merge; the row
+   on /sources renders it; the answer goes back into the same key and re-runs
+   the workflow with the answer as a quotable block. Nothing else in the
+   pipeline changes shape.
+   ──────────────────────────────────────────────────────────────────────── */
+
+export type MergeQuestion = {
+  sourceItemId: string
+  text: string
+  /** `owner/repo#282`, so the row can say what it is asking about. */
+  about: string
+  /** The merge on GitHub, so the answer can be checked against the work. */
+  url: string
+}
+
+/**
+ * The question waiting on this person, or null.
+ *
+ * Read on the page rather than by the row, because the row is a client
+ * component and this is one indexed select the server is already making a round
+ * trip for. Costs nothing and gates nothing: a question is not a spend.
+ */
+export async function getOpenMergeQuestion(): Promise<MergeQuestion | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const open = await openShippedQuestion(session.user.id)
+  if (!open) return null
+
+  return {
+    sourceItemId: open.sourceItemId,
+    text: open.question.text,
+    about: open.about,
+    url: open.url,
+  }
+}
+
+/**
+ * Answer it, and let the answer become the missing beat.
+ *
+ * The ceilings, in the order they protect:
+ *
+ * - **The write is conditional.** `answerShippedQuestion` matches on the
+ *   question still being open, in SQL, so a double submit writes one answer and
+ *   returns null for the second — which is what stops two workflows starting.
+ * - **A two-minute cooldown**, because a person can press this and a claim is
+ *   not a cooldown. Keyed on its own tag, never the backfill's.
+ * - **The entitlement gate**, because the workflow behind it spends.
+ * - **The brief is not bought twice.** It is on `meta` already and rides the
+ *   payload, so the re-run pays for the selection and the angles and nothing
+ *   else.
+ */
+export async function answerMergeQuestion(
+  sourceItemId: string,
+  answer: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  const said = answer.trim()
+
+  if (!said) {
+    return { ok: false, message: "Tell me in a line — anything is enough." }
+  }
+
+  if (said.length > MAX_ANSWER_CHARS) {
+    return {
+      ok: false,
+      message: `That is longer than I can use — keep it under ${MAX_ANSWER_CHARS} characters.`,
+    }
+  }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return {
+      ok: false,
+      message:
+        entitlement.state === "lapsed"
+          ? "Your subscription is no longer active."
+          : "Your free day is over.",
+    }
+  }
+
+  const cooldown = await spendCooldown(
+    session.user.id,
+    ANSWER_SPEND,
+    ANSWER_COOLDOWN_MS
+  )
+  if (!cooldown.ready) {
+    return {
+      ok: false,
+      message: `Still writing the last one — ${cooldown.secondsLeft}s.`,
+    }
+  }
+
+  const answered = await answerShippedQuestion({
+    userId: session.user.id,
+    sourceItemId,
+    answer: said,
+  })
+
+  if (!answered) {
+    // Somebody — another tab, a second tap — got there first, or the id is not
+    // theirs. Both are "there is nothing to answer", and neither is an error
+    // worth a red line on the row.
+    revalidatePath("/sources")
+    return { ok: true }
+  }
+
+  /**
+   * The blocks, recovered from `source_item.body`.
+   *
+   * The workflow's own comment says the boundaries should not be recovered by
+   * splitting a stored string — and it is right about the *ingest* path, where
+   * the array is in hand and a round trip would be gratuitous. Here there is no
+   * array: the merge was read days ago and the row is all that is left. It is
+   * safe because the two halves compose: the body was written as
+   * `blocks.join("\n\n")` where each block had already been through
+   * `flattenMarkdown`, and `flattenBlocks` is idempotent over exactly that —
+   * asserted sixteen ways in lib/shipped-work.test.ts. So this returns the same
+   * array the ingest had, and the indices mean what they meant.
+   */
+  const blocks = flattenBlocks(answered.body)
+
+  const meta = answered.meta
+
+  try {
+    await start(runShippedRiffWorkflow, [
+      {
+        userId: session.user.id,
+        sourceItemId: answered.sourceItemId,
+        facts: readShippedFacts({
+          repository: meta.repository,
+          number: meta.number,
+          private: meta.private,
+          additions: meta.additions,
+          deletions: meta.deletions,
+          changedFiles: meta.changedFiles,
+          commits: meta.commits,
+          labels: meta.labels,
+          mergedAt: answered.postedAt ? answered.postedAt.toISOString() : "",
+          // Deliberately not refetched. The repository context is cached on the
+          // connection for a week and this path is not worth a cold read of it;
+          // `describeRepo(null)` is "" and the prompt is shorter.
+          repo: null,
+        }),
+        blocks,
+        material: readShippedMaterial(meta.material),
+        // Already paid for at ingest. The merge has not changed, so neither has
+        // the brief — and re-buying it would be a second spend on a path a
+        // person can trigger.
+        brief: readShippedBrief(meta.brief),
+        answer: answered.answer,
+        timezone: session.user.timezone ?? "",
+        spendTag: ANSWER_SPEND,
+      },
+    ])
+  } catch (cause) {
+    /**
+     * The answer is stored either way, and that is the right order: what they
+     * typed is the durable fact and the riff is derived from it. The message
+     * says so rather than implying the answer was lost.
+     */
+    console.error("[sources] could not re-run after an answer:", cause)
+    return {
+      ok: false,
+      message:
+        "I saved your answer but could not start the write. It will be used the next time this merge is read.",
+    }
+  }
+
+  revalidatePath("/riffs")
+  revalidatePath("/sources")
+
+  return { ok: true }
+}
+
+/* ── Google Calendar ──────────────────────────────────────────────────────
+   The third source connection, and the first that is purely read-only. See
+   plans/027 4d and lib/calendar.ts.
+
+   Four actions, and none of them reads a meeting: the cron does that, hourly,
+   under its own ceiling and its own cooldown. What lives here is the setup, the
+   removal, and the two halves of the one question.
+
+   No entitlement gate on connect or disconnect, matching Circleback and GitHub:
+   connecting spends nothing. The gate is on the answer, because a riff is a
+   model call.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** The tag the meeting answer spends against. Not the merge question's — a
+ *  rate limit on one button must not be trippable by a different button. */
+const MEETING_ANSWER_SPEND = "calendar:question"
+
+export type CalendarSetup = {
+  /**
+   * Whether the deployment has a Google client at all. False hides the Connect
+   * button rather than offering one that fails on click — the same rule
+   * `isChannelEnabled` follows, and for the same reason: a broken button reads
+   * as a broken product rather than an unfinished one.
+   */
+  enabled: boolean
+  connected: boolean
+  /** `broken` is the one that interrupts: the grant is gone, reconnect. */
+  state: "waiting" | "arriving" | "paused" | "broken"
+  /** "Today at 14:05", or empty before the first run. Pre-rendered on the
+   *  server, because a client formatting from a timestamp would render a
+   *  different string than the server did. */
+  lastReadAt: string
+  /** Why it broke, if it did. Already truncated at 500 by `markBroken`. */
+  lastError: string
+}
+
+export async function getCalendarSetup(): Promise<CalendarSetup | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const enabled = isCalendarEnabled()
+  const connection = await getSourceConnection(session.user.id, CALENDAR_SOURCE)
+
+  if (!connection) {
+    return {
+      enabled,
+      connected: false,
+      state: "waiting",
+      lastReadAt: "",
+      lastError: "",
+    }
+  }
+
+  /**
+   * `meta.lastReadAt` rather than `last_item_at`, because they answer different
+   * questions and the row asks the first one.
+   *
+   * `last_item_at` is when a meeting last arrived; this is when Quincy last
+   * looked. On a calendar those are weeks apart in the ordinary case — most
+   * hours have no meeting in them — and a row that said "last read three weeks
+   * ago" about a job running every hour would look broken while working
+   * perfectly. lib/sources.ts makes the same distinction in the other
+   * direction for `waiting`.
+   */
+  const raw = connection.meta?.lastReadAt
+  const lastRead = typeof raw === "string" ? new Date(raw) : null
+
+  return {
+    enabled,
+    connected: true,
+    state: connection.state,
+    lastReadAt:
+      lastRead && !Number.isNaN(lastRead.getTime())
+        ? sayLastRead(lastRead, session.user.timezone)
+        : "",
+    lastError: connection.lastError ?? "",
+  }
+}
+
+/**
+ * "Today at 14:05", "Yesterday", "3 days ago".
+ *
+ * The clock is only attached to today, because that is the only day where the
+ * hour is the information — "Yesterday at 14:05" is precision nobody asked for
+ * about a job that runs every hour. `formatConversationDate` owns the rest, so
+ * this page and the conversation list agree about what "3 days ago" means.
+ */
+function sayLastRead(at: Date, timezone: string | null | undefined): string {
+  const zone = resolveTimeZone(timezone)
+  const day = formatConversationDate(at, zone)
+
+  return day === "Today" ? `Today at ${hhmmIn(at, zone)}` : day
+}
+
+/**
+ * Disconnect: revoke at Google, then delete the row.
+ *
+ * The order is deliberate and the revoke failure is swallowed on purpose, the
+ * same call `lib/channels.ts` makes: if the revoke fails we still delete,
+ * because the alternative is a person who pressed Disconnect and still has a
+ * live grant. A token we failed to revoke expires on its own; a row we refused
+ * to delete does not.
+ *
+ * **The stored meetings stay.** They are titles and times of things that
+ * happened, they are the user's own record, and deleting them would also delete
+ * the question they answered and the riff's provenance. Disconnecting stops the
+ * reading; it is not an erasure, and the row says so.
+ *
+ * Behind `<HoldToConfirm>` at the call site, per AGENTS.md.
+ */
+export async function disconnectCalendar(): Promise<
+  { ok: true } | { ok: false; message: string }
+> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  try {
+    const refreshToken = await readCalendarRefreshToken(session.user.id)
+    if (refreshToken) await revokeCalendarToken(refreshToken)
+  } catch (cause) {
+    console.error("[sources] calendar revoke failed, deleting anyway", cause)
+  }
+
+  await disconnectSource(session.user.id, CALENDAR_SOURCE)
+  revalidatePath("/sources")
+
+  return { ok: true }
+}
+
+export type MeetingQuestion = {
+  sourceItemId: string
+  text: string
+  /** The meeting's title, so the row can say what it is asking about. */
+  about: string
+}
+
+/**
+ * The meeting question waiting on this person, or null.
+ *
+ * Read on the page rather than by the row, for the reason
+ * `getOpenMergeQuestion` gives: the row is a client component and this is one
+ * indexed select the server is already making a round trip for. Costs nothing
+ * and gates nothing — a question is not a spend.
+ */
+export async function getOpenMeetingQuestion(): Promise<MeetingQuestion | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const open = await openCalendarQuestion(session.user.id)
+  if (!open) return null
+
+  return {
+    sourceItemId: open.sourceItemId,
+    text: open.question.text,
+    about: open.about,
+  }
+}
+
+/**
+ * Answer it, and let the answer become a riff.
+ *
+ * **The riff is the deliverable and nothing drafts.** The answer goes through
+ * `createRiffFromSaid` — the path `capture_riff` uses for the user's own words,
+ * and deliberately not the one built for a stranger's post, whose prompt opens
+ * "below is a post somebody else wrote" and forbids reusing the source's
+ * numbers. What somebody says about their own meeting is theirs to keep.
+ *
+ * The scrap is the answer, verbatim. The meeting travels beside it as the
+ * riff's source label, so the card says which hour this came out of without the
+ * title being folded into words the user did not say — a scrap is what a draft
+ * is written from, and putting Quincy's sentence inside it is how a post ends
+ * up quoting a room name.
+ *
+ * The ceilings, in the order they protect:
+ *
+ * - **The write is conditional.** `answerCalendarQuestion` matches on the
+ *   question still being open, in SQL, so a double submit writes one answer and
+ *   returns null for the second — which is what stops two riffs.
+ * - **A two-minute cooldown**, because a person can press this and a claim is
+ *   not a cooldown. Keyed on its own tag.
+ * - **The entitlement gate**, because the riff behind it spends.
+ */
+export async function answerMeetingQuestion(
+  sourceItemId: string,
+  answer: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+
+  const said = answer.trim()
+
+  if (!said) {
+    return { ok: false, message: "Tell me in a line — anything is enough." }
+  }
+
+  if (said.length > MAX_ANSWER_CHARS) {
+    return {
+      ok: false,
+      message: `That is longer than I can use — keep it under ${MAX_ANSWER_CHARS} characters.`,
+    }
+  }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return {
+      ok: false,
+      message:
+        entitlement.state === "lapsed"
+          ? "Your subscription is no longer active."
+          : "Your free day is over.",
+    }
+  }
+
+  const cooldown = await spendCooldown(
+    session.user.id,
+    MEETING_ANSWER_SPEND,
+    ANSWER_COOLDOWN_MS
+  )
+  if (!cooldown.ready) {
+    return {
+      ok: false,
+      message: `Still writing the last one — ${cooldown.secondsLeft}s.`,
+    }
+  }
+
+  const answered = await answerCalendarQuestion({
+    userId: session.user.id,
+    sourceItemId,
+    answer: said,
+  })
+
+  if (!answered) {
+    // Another tab, a second tap, or an id that is not theirs. All three are
+    // "there is nothing to answer", and none is worth a red line on the row.
+    revalidatePath("/sources")
+    return { ok: true }
+  }
+
+  const riff = await createRiffFromSaid({
+    userId: session.user.id,
+    text: answered.answer,
+    /**
+     * `calendar` rather than `google-calendar`, and that is the one place the
+     * two ids differ on purpose: this is the *display* id, the one
+     * `SourceMark` resolves to a mark, and it has meant the calendar in
+     * lib/sources.ts since before anything could produce a row. The storage id
+     * names the platform because `source_item` needs to; a tile does not.
+     */
+    sourceId: "calendar",
+    sourceLabel: answered.title,
+  })
+
+  revalidatePath("/sources")
+
+  if (!riff.ok) {
+    /**
+     * The answer is stored either way, and that is the right order: what they
+     * typed is the durable fact and the riff is derived from it. The message
+     * says so rather than implying the answer was lost.
+     */
+    return {
+      ok: false,
+      message: `I saved your answer but could not find an angle in it. ${riff.message}`,
+    }
+  }
+
+  revalidatePath("/riffs")
+
+  return { ok: true }
 }

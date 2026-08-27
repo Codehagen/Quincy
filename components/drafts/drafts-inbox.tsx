@@ -19,6 +19,7 @@ import {
   isDone,
   type Draft,
 } from "@/lib/drafts"
+import type { RuleOffer } from "@/lib/edit-classes"
 import type { SendNowResult } from "@/lib/publish-run"
 import type { ApprovalPlacement } from "@/lib/scheduling"
 import { cn } from "@/lib/utils"
@@ -134,6 +135,19 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
 
   /** The version whose "Give it a time" is in flight. */
   const [placing, setPlacing] = React.useState<string | null>(null)
+
+  /**
+   * A rule the approval you just made is worth proposing, per version.
+   *
+   * Session memory, like `placements` and `posts`, and for a sharper reason
+   * than either: the offer is computed from what changed between the drafted
+   * body and the approved one, and after the write those two are the same
+   * text. Nothing on the server can recompute it on the next load, so a
+   * refresh correctly loses the question rather than showing a stale one.
+   */
+  const [offers, setOffers] = React.useState<
+    Record<string, RuleOffer | undefined>
+  >({})
 
   /**
    * What sending it on the spot did, once the server has said. Keyed by version,
@@ -300,8 +314,16 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
          * "queued in Lineup" when nothing was queued.
          */
         persist(state, async () => {
-          const placement = await approveVersion(versionId, text)
+          const { ruleOffer, ...placement } = await approveVersion(
+            versionId,
+            text
+          )
           setPlacements((current) => ({ ...current, [versionId]: placement }))
+          // Absent on almost every approval — three of the same edit in thirty
+          // days is a rare event by design.
+          if (ruleOffer) {
+            setOffers((current) => ({ ...current, [versionId]: ruleOffer }))
+          }
         })
       }
 
@@ -400,6 +422,9 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
         // moment it is a decision again. Left behind, a refused post would
         // re-approve into a row still showing the platform's old refusal.
         setPosts((current) => ({ ...current, [versionId]: undefined }))
+        // The offer was about an approval that no longer stands. Left behind,
+        // it would ask about an edit the user has just taken back.
+        setOffers((current) => ({ ...current, [versionId]: undefined }))
       }
 
       withViewTransition(() =>
@@ -652,6 +677,7 @@ export function DraftsInbox({ initial }: { initial: Draft[] }) {
               completedBy={completedBy[selected.id]}
               placements={placements}
               placing={placing}
+              offers={offers}
               posts={posts}
               posting={posting}
               takeFocus={focused?.draftId === selected.id}

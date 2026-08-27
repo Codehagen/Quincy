@@ -7,6 +7,13 @@ import { parseAsString, useQueryState } from "nuqs"
 
 import { brainKeys } from "@/lib/brain-keys"
 import { IDENTITY_CAP, type BrainPage } from "@/lib/brain"
+import type { StoryGap } from "@/lib/story-gaps"
+import {
+  channelOfSlug,
+  channelTitle,
+  isStrategySlug,
+  strategySlug,
+} from "@/lib/strategy-format"
 import {
   Empty,
   EmptyDescription,
@@ -21,6 +28,8 @@ import {
 } from "@/components/brain/brain-tree"
 import { ProseEditor } from "@/components/brain/prose-editor"
 import { RulesEditor } from "@/components/brain/rules-editor"
+import { StoryIndex } from "@/components/brain/needs-material"
+import { StrategyPage } from "@/components/brain/strategy-page"
 
 /**
  * The brain, client-side, so switching pages costs nothing.
@@ -113,7 +122,24 @@ function label(page: BrainPageJSON) {
   return page.title || page.slug.split("/").at(-1) || page.slug
 }
 
-export function BrainWorkspace({ userId }: { userId: string }) {
+/** The virtual page that lists the stories and what they are missing. */
+export const STORY_INDEX = "stories"
+
+export function BrainWorkspace({
+  userId,
+  gaps,
+  strategyChannels,
+  corpusPosts,
+  proposeNotice,
+}: {
+  userId: string
+  /** Themes the corpus returns to with no story page. See lib/story-gaps.ts. */
+  gaps: StoryGap[]
+  /** X first, then anything else connected. Resolved on the server. */
+  strategyChannels: string[]
+  corpusPosts: number
+  proposeNotice: string | null
+}) {
   const [active, setActive] = useQueryState(
     "page",
     // clearOnDefault keeps /brain clean rather than /brain?page=human, and
@@ -160,13 +186,42 @@ export function BrainWorkspace({ userId }: { userId: string }) {
   // have edited is the state that matters, because that is the one Heartbeat
   // stops writing to.
   const groups: TreeGroup[] = [
+    /**
+     * Strategy is here as well as at /channels, not instead of it.
+     *
+     * The page is the same row and the editor is the same component; what
+     * differs is the question being asked. /channels asks "may Quincy speak
+     * for me here", which is about a connection. /brain asks "what does Quincy
+     * know", and the plan for a channel is knowledge the writer reads on every
+     * draft — `renderBrain` has always put it in the prompt under
+     * "## Strategy". The item exists whether or not the page does, because an
+     * absent page is exactly the state the propose button is for.
+     */
+    {
+      label: "Strategy",
+      items: strategyChannels.map((channel) => {
+        const page = find(strategySlug(channel))
+        return {
+          slug: strategySlug(channel),
+          label: channelTitle(channel),
+          corrected: page?.provenance === "user",
+        }
+      }),
+      empty: "One plan per channel. Connect a channel and Quincy proposes one.",
+    },
     {
       label: "Stories",
-      items: byKind("story").map((p) => ({
-        slug: p.slug,
-        label: label(p),
-        corrected: p.provenance === "user",
-      })),
+      // The index is first and always present: it is the only page that can
+      // say what the bank is missing, and an empty bank is when that matters
+      // most.
+      items: [
+        { slug: STORY_INDEX, label: "All stories" },
+        ...byKind("story").map((p) => ({
+          slug: p.slug,
+          label: label(p),
+          corrected: p.provenance === "user",
+        })),
+      ],
       empty: "Distilled from what you publish. Nothing published yet.",
     },
     {
@@ -193,7 +248,17 @@ export function BrainWorkspace({ userId }: { userId: string }) {
         onSelect={setActive}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {renderEditor({ active, find, memories, isPending })}
+        {renderEditor({
+          active,
+          find,
+          memories,
+          isPending,
+          gaps,
+          corpusPosts,
+          proposeNotice,
+          stories: byKind("story"),
+          onSelect: setActive,
+        })}
       </div>
     </div>
   )
@@ -204,14 +269,54 @@ function renderEditor({
   find,
   memories,
   isPending,
+  gaps,
+  corpusPosts,
+  proposeNotice,
+  stories,
+  onSelect,
 }: {
   active: string
   find: (slug: string) => BrainPageJSON | null
   memories: BrainPageJSON[]
   isPending: boolean
+  gaps: StoryGap[]
+  corpusPosts: number
+  proposeNotice: string | null
+  stories: BrainPageJSON[]
+  onSelect: (slug: string) => void
 }) {
   const singleton = SINGLETONS.find((s) => s.slug === active)
   const page = find(active)
+
+  if (active === STORY_INDEX) {
+    return (
+      <StoryIndex
+        stories={stories.map((story) => ({
+          slug: story.slug,
+          title: story.title || story.slug,
+          point: String(
+            (story.data as { point?: unknown } | null)?.point ?? ""
+          ),
+        }))}
+        gaps={gaps}
+        onSelect={onSelect}
+      />
+    )
+  }
+
+  // Before the page lookup, because a channel with no strategy yet has no page
+  // to look up and that is the state the propose button exists for.
+  if (isStrategySlug(active)) {
+    return (
+      <StrategyPage
+        key={active}
+        page={page}
+        channel={channelOfSlug(active)}
+        corpusPosts={corpusPosts}
+        cooldown={proposeNotice}
+      />
+    )
+  }
 
   if (singleton?.kind === "identity") {
     return (

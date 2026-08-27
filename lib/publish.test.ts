@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-// idFromBody is not exported. Export it for the test — add `export` to its
-// declaration in lib/publish.ts and note in its doc comment that the export
-// exists for the test, matching how the repo treats other internals.
-import { idFromBody } from "./publish"
+// `idFromBody` moved to lib/publisher.ts with the two first-party publishers
+// that parse a response with it (plan 027 item 4f). Only the import path
+// changed; every assertion below is the one that pinned the bug when the parse
+// lived in lib/publish.ts.
+import { idFromBody } from "./publisher"
 
 describe("idFromBody", () => {
   it("reads X's nested id", () => {

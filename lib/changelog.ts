@@ -135,11 +135,104 @@ export function readChangelog(): ChangelogDay[] {
     .filter((day) => day.entries.length > 0)
 }
 
-/** The newest `days` days. What the landing page shows. */
-export function recentChangelog(days: number) {
-  return readChangelog().slice(0, days)
-}
-
 export function countEntries(days: ChangelogDay[]) {
   return days.reduce((total, day) => total + day.entries.length, 0)
+}
+
+/**
+ * When the log was read, which is build time.
+ *
+ * Module scope, and it has to be: under `cacheComponents` a `new Date()`
+ * during a prerender is a build error, and both pages that read this log
+ * prerender. Module evaluation runs before the render, so the clock is read
+ * once per build instead of once per page.
+ *
+ * Build time rather than request time is the right reading anyway. An entry
+ * only reaches this log through a deploy, so the newest entry can never be
+ * newer than this constant, and "the last three days" is measured from the
+ * moment the page was made — which is the moment its claim was true.
+ */
+const BUILT_AT = new Date()
+
+const DAY_MS = 86_400_000
+
+/**
+ * Whole days from a `YYYY-MM-DD` entry date to `now`. Same day is 0.
+ *
+ * **Counted in UTC, not in the reader's zone, because there is no reader.**
+ * The count is computed once at build with nobody's timezone available, and
+ * the dates it compares are bare calendar dates off a filename with no zone
+ * attached to them. A local boundary would also make one commit produce
+ * different copy depending on whether the build ran on a laptop in Oslo or on
+ * a builder in UTC — a page disagreeing with itself for a reason no reader
+ * could see.
+ *
+ * A filename that is not a date returns Infinity rather than throwing, so it
+ * is simply never inside a window. `readChangelog` still renders it; being
+ * undateable is not the same as being unpublishable.
+ */
+export function daysSince(date: string, now: Date = BUILT_AT): number {
+  const [year, month, day] = date.split("-").map(Number)
+
+  if (!year || !month || !day || month < 1 || month > 12) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const then = Date.UTC(year, month - 1, day)
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  )
+
+  return Math.round((today - then) / DAY_MS)
+}
+
+export type ChangelogWindow = {
+  /**
+   * The days to render: the ones inside the window, or the newest `within`
+   * days of the log when the window is empty. A quiet fortnight makes the
+   * count honest, not the page blank.
+   */
+  days: ChangelogDay[]
+  /** Entries dated inside the window. Zero is a real answer — read `since`. */
+  recent: number
+  /** Whole days since the newest entry. Null only when the log is empty. */
+  since: number | null
+}
+
+/**
+ * The last `within` days of the log, counted by date.
+ *
+ * This used to be `slice(0, within)`, which takes the newest three *files*
+ * whatever their dates — so a page saying "N changes in the last 3 days" went
+ * on saying it about work from a fortnight ago, and the number was true of a
+ * window that was not.
+ *
+ * A future-dated file is excluded (`age >= 0`). It has not shipped yet, so it
+ * cannot be part of what shipped in the last three days.
+ *
+ * Separated from the filesystem read so it can be tested against dates rather
+ * than against whatever is in `content/` this week.
+ */
+export function selectWindow(
+  all: ChangelogDay[],
+  within: number,
+  now: Date = BUILT_AT
+): ChangelogWindow {
+  const inside = all.filter((day) => {
+    const age = daysSince(day.date, now)
+    return age >= 0 && age < within
+  })
+
+  return {
+    days: inside.length > 0 ? inside : all.slice(0, within),
+    recent: countEntries(inside),
+    since: all[0] ? daysSince(all[0].date, now) : null,
+  }
+}
+
+/** The last `within` days of the log. What the landing page shows. */
+export function recentChangelog(within: number, now: Date = BUILT_AT) {
+  return selectWindow(readChangelog(), within, now)
 }

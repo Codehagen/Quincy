@@ -11,13 +11,28 @@ import {
   type ShippedRefusal,
 } from "@/lib/riffs"
 import {
+  recordAnsweredBeats,
+  recordShippedBrief,
+  recordShippedQuestion,
+} from "@/lib/shipped-meta"
+import { MAX_ANSWER_CHARS } from "@/lib/shipped-outcome"
+import {
+  beatsIncomplete,
+  fillBeats,
   NO_BEATS,
   readShippedBeats,
+  readShippedBrief,
   readShippedFacts,
+  readShippedMaterial,
+  selectionBlocks,
   selectShippedPassage,
+  SHIPPED_BRIEF_MODEL,
   SHIPPED_MODEL,
+  shippedQuestionText,
+  writeShippedBrief,
   type ShippedBeats,
   type ShippedFacts,
+  type ShippedMaterial,
   type ShippedSelection,
 } from "@/lib/shipped-work"
 import { recordUsage } from "@/lib/usage"
@@ -69,6 +84,44 @@ export async function runShippedRiffWorkflow(payload: {
    * through a column whose comment says it is never parsed for logic.
    */
   blocks: string[]
+  /**
+   * What the merge is made of, fetched at the edge. See plans/027 phase 1a.
+   *
+   * Built where the installation token is, for the same reason `facts` is: a
+   * step that talks to GitHub is a step that can fail on a blip after the
+   * payload has already been accepted. Absent on any run started before this
+   * shipped, which `readShippedMaterial` turns into `NO_MATERIAL`.
+   */
+  material?: ShippedMaterial
+  /**
+   * The brief, when one has already been paid for.
+   *
+   * Empty on the ingest path, where `briefStep` writes it. Carried on the
+   * re-run after somebody answers the question, because the brief is about the
+   * merge and the merge has not changed — paying for it a second time would be
+   * the ceiling this feature is supposed to have.
+   */
+  brief?: string
+  /**
+   * The owner's answer to the one question Quincy asked. See phase 1c.
+   *
+   * Its presence is what makes this a re-run: the answer becomes a quotable
+   * block, it fills the missing beat, and nothing asks a second question.
+   */
+  answer?: string
+  /** `user.timezone`, so the question can name the hour they merged. */
+  timezone?: string
+  /**
+   * What this run is billed against, for `spendCooldown`.
+   *
+   * `usage_event.conversation_id` doubles as the cooldown key — see
+   * `spendCooldown`, which reads the most recent row carrying the tag. Until
+   * this existed the tag was never written on this path, so
+   * `BACKFILL_COOLDOWN_MS` was checked against a row nothing wrote and the
+   * ten-minute cooldown on "read my last merged pull request" could not fire.
+   * A cooldown nobody writes is a cooldown that does not exist.
+   */
+  spendTag?: string
 }) {
   "use workflow"
 
@@ -81,30 +134,98 @@ export async function runShippedRiffWorkflow(payload: {
    * an `undefined`. See `readShippedFacts` for what it degrades to.
    */
   const facts = readShippedFacts(payload.facts)
+  const material = readShippedMaterial(payload.material)
+  const answer =
+    typeof payload.answer === "string"
+      ? payload.answer.replace(/\s+/g, " ").trim().slice(0, MAX_ANSWER_CHARS)
+      : ""
+
+  /**
+   * The brief, before the beats. See plans/027 phase 1b.
+   *
+   * First because everything after it reads it: the selection quotes it by
+   * index, and the beats it quotes are what the writer composes. It is one
+   * cheap call and it is allowed to come back empty — a brief that failed to
+   * generate leaves the selection reading exactly what it read before this
+   * existed.
+   */
+  const brief = payload.brief
+    ? readShippedBrief(payload.brief)
+    : await briefStep({
+        userId: payload.userId,
+        sourceItemId: payload.sourceItemId,
+        facts,
+        material,
+        blocks: payload.blocks,
+        spendTag: payload.spendTag,
+      })
+
+  /**
+   * One numbered list: what they wrote, then what Quincy wrote about it, then
+   * what they answered. See `selectionBlocks` for why the brief gets more
+   * blocks rather than its own channel.
+   */
+  const reading = selectionBlocks(payload.blocks, brief, answer)
 
   const selection = await selectStep({
     userId: payload.userId,
     facts,
-    blocks: payload.blocks,
+    blocks: reading.blocks,
+    briefFrom: reading.briefFrom,
+    answerAt: reading.answerAt,
+    spendTag: payload.spendTag,
   })
 
   /**
-   * Nothing worth publishing, and no card. Not a failure and not recorded as
-   * one — the run simply ends. The `source_item` written by the route is what
-   * remembers that this merge was read and found to carry nothing, which is
-   * also what stops a redelivery paying to reach the same conclusion.
+   * What gets written, from whichever of the three sources had it.
    *
-   * The verdict goes onto that row rather than only into the log. Nobody is
-   * watching a merge that arrived by webhook, but somebody pressing "read my
-   * last merged pull request" on /sources is watching, and until this step
-   * existed the only place the answer was written was a line in Vercel.
+   * The middle branch is plan 027's one lever on the refusal rate, and it is
+   * not a lower bar. A refused merge that the owner then answered is a merge
+   * the owner has said out loud there is a post in — their sentence is the
+   * material, verbatim, and the selection was asked again with it in front of
+   * it. Nothing else changed: no rule was relaxed and no threshold moved.
    */
-  if (!selection.ok) {
+  let passage: string
+  let forUser: string
+  let beats: ShippedBeats
+
+  if (selection.ok) {
+    passage = selection.passage
+    forUser = selection.forUser
+    beats = fillBeats(selection.beats, answer)
+  } else if (answer) {
+    passage = answer
+    forUser = ""
+    beats = fillBeats(NO_BEATS, answer)
+  } else {
+    /**
+     * Nothing worth publishing, and no card. Not a failure and not recorded as
+     * one — the run simply ends. The `source_item` written by the route is what
+     * remembers that this merge was read and found to carry nothing, which is
+     * also what stops a redelivery paying to reach the same conclusion.
+     *
+     * The verdict goes onto that row rather than only into the log. Nobody is
+     * watching a merge that arrived by webhook, but somebody pressing "read my
+     * last merged pull request" on /sources is watching, and until this step
+     * existed the only place the answer was written was a line in Vercel.
+     *
+     * And one question goes with it. A refusal is honest and inert; the
+     * question is the only thing on this path that can turn a merge nobody
+     * could read into a post — see `questionStep`.
+     */
     await refusalStep({
       sourceItemId: payload.sourceItemId,
       reason: selection.reason,
       why: selection.why,
     })
+
+    await questionStep({
+      userId: payload.userId,
+      sourceItemId: payload.sourceItemId,
+      facts,
+      timezone: payload.timezone ?? "",
+    })
+
     return { ok: false as const, reason: selection.reason }
   }
 
@@ -121,16 +242,51 @@ export async function runShippedRiffWorkflow(payload: {
      * the only place the *order* of the story survives. An angle is one hook;
      * the three blocks under it come from here.
      */
-    context: { forUser: selection.forUser, beats: selection.beats, facts },
+    context: { forUser, beats, facts },
   })
+
+  /**
+   * The answer, put where the writer will read it.
+   *
+   * `startShippedRiff` inserts with `onConflictDoNothing`, so a re-run over a
+   * riff that already exists cannot update it — and the angles are deliberately
+   * not rewritten either, because `completeSpokenRiff` refuses to buy a second
+   * set. Without this the whole exchange would end in a spend and no visible
+   * change. See `recordAnsweredBeats`.
+   */
+  if (answer) {
+    await answeredBeatsStep({
+      userId: payload.userId,
+      riffId,
+      beats,
+    })
+  }
+
+  /**
+   * A riff with a hole in the story still gets the one question.
+   *
+   * `beatsIncomplete` is `did` or `happened` missing — the two beats that are
+   * quoted rather than written, and therefore the two a description can
+   * genuinely fail to contain. Not asked on a re-run: the owner has already
+   * answered once, and asking again about the same merge is the ledger that
+   * records the same thing four times in forty minutes.
+   */
+  if (!answer && beatsIncomplete(beats)) {
+    await questionStep({
+      userId: payload.userId,
+      sourceItemId: payload.sourceItemId,
+      facts,
+      timezone: payload.timezone ?? "",
+    })
+  }
 
   const result = await anglesStep({
     riffId,
     userId: payload.userId,
-    passage: selection.passage,
+    passage,
     facts,
-    forUser: selection.forUser,
-    beats: selection.beats,
+    forUser,
+    beats,
   })
 
   if (!result.ok) {
@@ -185,6 +341,9 @@ async function selectStep(payload: {
   userId: string
   facts: ShippedFacts
   blocks: string[]
+  briefFrom: number
+  answerAt: number
+  spendTag?: string
 }): Promise<SelectionOutcome> {
   "use step"
 
@@ -202,6 +361,8 @@ async function selectStep(payload: {
     selection = await selectShippedPassage({
       blocks: payload.blocks,
       facts: payload.facts,
+      briefFrom: payload.briefFrom,
+      answerAt: payload.answerAt,
       // Stories in full: this is a single tool-less `generateObject`, and the
       // default index form tells the model to call a story tool that does not
       // exist. See `renderBrain`.
@@ -223,6 +384,15 @@ async function selectStep(payload: {
     try {
       await recordUsage({
         userId: payload.userId,
+        /**
+         * The tag is the cooldown key, not a label. `spendCooldown` reads the
+         * most recent `usage_event` carrying it — so a press guarded by
+         * `BACKFILL_COOLDOWN_MS` is only actually guarded once a row on this
+         * path writes the tag back. Nothing did until now, which made the
+         * ten-minute cooldown on /sources a check against a row that was never
+         * written.
+         */
+        conversationId: payload.spendTag ?? null,
         model: SHIPPED_MODEL,
         inputTokens: selection.usage.inputTokens,
         cachedInputTokens: selection.usage.cachedInputTokens,
@@ -272,6 +442,154 @@ async function selectStep(payload: {
       happened: selection.happened,
       learned: selection.learned,
     }),
+  }
+}
+
+/**
+ * One cheap call: what changed, in the posting language. See plans/027 1b.
+ *
+ * A step of its own rather than a few lines inside `selectStep`, and the reason
+ * is the retry boundary this file's header names. A brief that fails on a blip
+ * should be retried without re-running a selection that has not happened — and,
+ * the half that matters more, a *selection* retried on a blip must not buy a
+ * second brief. Two calls in one step would be billed twice for one failure.
+ *
+ * **Never a verdict.** Everything in here that goes wrong returns "", and the
+ * selection then reads exactly what it read before this existed: the
+ * description, in whatever language it was written in. The brief is what makes
+ * the beats readable; it is not what makes them exist.
+ *
+ * Written to `source_item.meta.brief` before it is returned, so a re-run after
+ * the owner answers the question carries it rather than paying again.
+ */
+async function briefStep(payload: {
+  userId: string
+  sourceItemId: string
+  facts: ShippedFacts
+  material: ShippedMaterial
+  blocks: string[]
+  spendTag?: string
+}): Promise<string> {
+  "use step"
+
+  if (payload.blocks.length === 0) return ""
+
+  try {
+    const written = await writeShippedBrief({
+      blocks: payload.blocks,
+      facts: payload.facts,
+      material: payload.material,
+      /**
+       * Index mode, not `{ stories: "full" }`.
+       *
+       * The selection needs the stories themselves because it is deciding
+       * whether this merge is *material*, and a story is the evidence. A brief
+       * is deciding nothing — it needs the identity and the voice pages, which
+       * is where a "write in Norwegian" instruction would live, and story
+       * bodies would be input tokens bought for a question nobody asked.
+       * `MAX_BRIEF_BRAIN_CHARS` caps whatever comes back.
+       */
+      brain: await renderBrainForUser(payload.userId),
+    })
+
+    if (written.usage) {
+      try {
+        await recordUsage({
+          userId: payload.userId,
+          conversationId: payload.spendTag ?? null,
+          model: SHIPPED_BRIEF_MODEL,
+          inputTokens: written.usage.inputTokens,
+          cachedInputTokens: written.usage.cachedInputTokens,
+          outputTokens: written.usage.outputTokens,
+        })
+      } catch (cause) {
+        console.error("[shipped-riff] could not record brief usage:", cause)
+      }
+    }
+
+    if (written.brief) {
+      try {
+        await recordShippedBrief(payload.sourceItemId, written.brief)
+      } catch (cause) {
+        console.error("[shipped-riff] could not store the brief:", cause)
+      }
+    }
+
+    return written.brief
+  } catch (cause) {
+    /**
+     * Swallowed rather than rethrown, which is the opposite of `selectStep`.
+     *
+     * There, an exception is a gateway problem and the selection is the whole
+     * feature, so retrying is right. Here the feature works without this call:
+     * rethrowing would make a merge fail to become a riff because a *nicety*
+     * could not be generated, and every retry would buy the selection again.
+     */
+    console.error("[shipped-riff] brief failed:", cause)
+    return ""
+  }
+}
+
+/**
+ * The completed beats onto the riff, after an answer.
+ *
+ * Its own step because it touches the database, and it swallows its own error
+ * for `refusalStep`'s reason: everything expensive has already happened, and
+ * throwing here would buy a second selection to update a jsonb column.
+ */
+async function answeredBeatsStep(input: {
+  userId: string
+  riffId: string
+  beats: ShippedBeats
+}): Promise<void> {
+  "use step"
+
+  try {
+    await recordAnsweredBeats(input)
+  } catch (cause) {
+    console.error("[shipped-riff] could not store the answered beats:", cause)
+  }
+}
+
+/**
+ * Ask the owner one thing about this merge. See plans/027 phase 1c.
+ *
+ * Its own step because it touches the database, and it swallows its own error
+ * for `refusalStep`'s reason: the interesting work is finished, and retrying a
+ * paid-for selection so that a question could be written would cost real money
+ * to improve a status line.
+ *
+ * **The ceiling is inside `recordShippedQuestion`**, which refuses to write a
+ * second question while the first is unanswered. It is stated there rather than
+ * here because there is where the read happens, and a caller-side check would
+ * be a second opinion about a fact one query already settles.
+ */
+async function questionStep(input: {
+  userId: string
+  sourceItemId: string
+  facts: ShippedFacts
+  timezone: string
+}): Promise<void> {
+  "use step"
+
+  try {
+    const asked = await recordShippedQuestion({
+      userId: input.userId,
+      sourceItemId: input.sourceItemId,
+      text: shippedQuestionText({
+        number: input.facts.number,
+        mergedAt: input.facts.mergedAt,
+        timezone: input.timezone,
+      }),
+    })
+
+    if (!asked) {
+      console.log(
+        `[shipped-riff] already asking about something else; no question for ${input.sourceItemId}`
+      )
+    }
+  } catch (cause) {
+    console.error("[shipped-riff] could not record the question:", cause)
   }
 }
 

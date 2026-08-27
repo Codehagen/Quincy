@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   adaptTargets,
+  ADAPT_SPEND,
   ANGLE_SHAPES,
   buildAdaptPrompt,
   buildSaidPrompt,
@@ -434,4 +435,61 @@ describe("structured-output schemas", () => {
       expect(declarations).toEqual([])
     }
   )
+})
+
+/**
+ * The cooldown tag, and the four buttons that share it.
+ *
+ * AGENTS.md, "Money": a ceiling **and** a cooldown, not either. `draftAngle`
+ * had the ceiling — twenty drafts a day — and no cooldown at all, which left
+ * the most expensive call in the product pressable as fast as a script could
+ * press it. It reads this tag now, and it writes it too: a cooldown that reads
+ * a tag nothing writes only ever sees the *other* buttons' rows, so two presses
+ * of the same button would both pass.
+ *
+ * Asserted against the source rather than by calling the action, which needs a
+ * session and a database. The same shape lib/adapt.test.ts already uses to ban
+ * `minItems` from the schemas — what is being pinned is a fact about the file.
+ */
+describe("the adapt family's cooldown", () => {
+  it("is a tag of its own, never the model id", () => {
+    // ADAPT_MODEL and CHAT_MODEL resolve to the same string, so keying the
+    // cooldown on a model made a chat turn refuse the next adapt. The comment
+    // in lib/adapt.ts has the incident; this is the assertion.
+    expect(ADAPT_SPEND).toBe("riff:adapt")
+    expect(ADAPT_SPEND).not.toContain("/")
+  })
+
+  it("is held and spent by draftAngle, not only by its neighbours", async () => {
+    const source = await readFile(
+      new URL("../app/(app)/riffs/actions.ts", import.meta.url),
+      "utf8"
+    )
+
+    const draftAngle = source.slice(
+      source.indexOf("export async function draftAngle("),
+      source.indexOf("export type AskChannelAngleResult")
+    )
+
+    expect(draftAngle).not.toBe("")
+    // Read: the same 15s window the three adapt buttons take.
+    expect(draftAngle).toContain(
+      "spendCooldown(session.user.id, ADAPT_SPEND, 15_000)"
+    )
+    // Written: so the next press actually sees this one.
+    expect(draftAngle).toContain("spendTag: ADAPT_SPEND")
+  })
+
+  it("keeps all five call sites on one window", async () => {
+    const source = await readFile(
+      new URL("../app/(app)/riffs/actions.ts", import.meta.url),
+      "utf8"
+    )
+
+    const held = source.match(
+      /spendCooldown\(session\.user\.id, ADAPT_SPEND, 15_000\)/g
+    )
+
+    expect(held).toHaveLength(5)
+  })
 })

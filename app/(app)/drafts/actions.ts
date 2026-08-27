@@ -5,7 +5,10 @@ import { and, eq, inArray } from "drizzle-orm"
 
 import { parseSourceInput } from "@/lib/adapt"
 import { createAdaptedDraft } from "@/lib/adapt-draft"
+import { BrainInvariantError } from "@/lib/brain"
 import { db } from "@/lib/db"
+import type { EditClass, RuleOffer } from "@/lib/edit-classes"
+import { answerRuleOffer, noteApprovalEdit } from "@/lib/voice"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { sendNow, type SendNowResult } from "@/lib/publish-run"
 import { nextFreeSlot, type ApprovalPlacement } from "@/lib/scheduling"
@@ -33,6 +36,11 @@ async function ownedVersion(versionId: string) {
       draftId: draftVersion.draftId,
       channel: draftVersion.channel,
       state: draftVersion.state,
+      // What Quincy wrote, read before anything overwrites it. `approveVersion`
+      // takes the body as edited, so this row is the only copy of the draft as
+      // drafted — and the difference between the two is the whole of plans/027
+      // item 3e.
+      body: draftVersion.body,
     })
     .from(draftVersion)
     .innerJoin(draft, eq(draftVersion.draftId, draft.id))
@@ -61,12 +69,22 @@ async function ownedVersion(versionId: string) {
  * invents a time — see the `no-slot` case, which writes nothing.
  *
  * Approving is still reversible. `reopenVersion` deletes the row this creates.
+ *
+ * **It also notices what you changed.** The body arriving here is the text as
+ * edited and `version.body` is the text as drafted, so this is the one place
+ * in the product that can see the difference between what Quincy wrote and
+ * what the user was willing to publish. Three of the same edit in thirty days
+ * comes back as a `ruleOffer` — a proposal, never a write. See
+ * lib/edit-classes.ts and `noteApprovalEdit`.
  */
+export type ApprovalResult = ApprovalPlacement & { ruleOffer?: RuleOffer }
+
 export async function approveVersion(
   versionId: string,
   body: string
-): Promise<ApprovalPlacement> {
+): Promise<ApprovalResult> {
   const version = await ownedVersion(versionId)
+  const drafted = version.body
 
   await db
     .update(draftVersion)
@@ -77,6 +95,26 @@ export async function approveVersion(
       updatedAt: new Date(),
     })
     .where(eq(draftVersion.id, versionId))
+
+  /**
+   * Bookkeeping, and it may not undo the approval.
+   *
+   * The same posture `compileVoice` takes around `recordUsage`: the thing the
+   * user pressed has already happened, so a failure counting it is logged and
+   * dropped rather than thrown at somebody who did nothing wrong. The cost of
+   * losing this is one uncounted edit.
+   */
+  let ruleOffer: RuleOffer | null = null
+  try {
+    ruleOffer = await noteApprovalEdit({
+      userId: version.user.id,
+      channel: version.channel,
+      before: drafted,
+      after: body,
+    })
+  } catch (cause) {
+    console.error("[drafts] could not classify the edit:", cause)
+  }
 
   const placement = await nextFreeSlot({
     userId: version.user.id,
@@ -109,13 +147,62 @@ export async function approveVersion(
 
   // Read by components/drafts/drafts-inbox.tsx so the done pane can say what
   // actually happened instead of always claiming a place in the Lineup.
-  return placement.ok
-    ? {
-        scheduled: true,
-        at: placement.at,
-        beyondThisWeek: placement.beyondThisWeek,
-      }
-    : { scheduled: false, reason: placement.reason }
+  return {
+    ...(placement.ok
+      ? {
+          scheduled: true as const,
+          at: placement.at,
+          beyondThisWeek: placement.beyondThisWeek,
+        }
+      : { scheduled: false as const, reason: placement.reason }),
+    // Absent rather than null when there is nothing to offer, which is the
+    // usual case — an optional key the pane can simply not render.
+    ...(ruleOffer ? { ruleOffer } : {}),
+  }
+}
+
+/**
+ * Answer a rule offer. Yes writes one rule; no writes none.
+ *
+ * **Nothing adds a rule without this call**, and this call only happens on a
+ * click. The offer that produced it is a proposal computed from counters —
+ * see `ruleOfferFor` — and the gap between "Quincy noticed" and "the voice
+ * changed" is the whole of docs/vision.md's argument about who is in charge of
+ * the writing.
+ *
+ * Both answers zero the counter, so "Not now" is not a question that comes
+ * back on the next approval. See `answerRuleOffer`.
+ */
+export async function answerVoiceRule(input: {
+  channel: string
+  cls: EditClass
+  accept: boolean
+  text?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSession()
+  if (!session) throw new Error("Not signed in")
+
+  try {
+    await answerRuleOffer({
+      userId: session.user.id,
+      channel: input.channel,
+      cls: input.cls,
+      accept: input.accept,
+      text: input.text,
+    })
+  } catch (cause) {
+    // The invariants write their message for a person — "16 rules, over the 15
+    // cap — drop one to add one" — and this is a place where that sentence is
+    // exactly the right thing to show.
+    if (cause instanceof BrainInvariantError) {
+      return { ok: false, error: cause.message }
+    }
+    console.error("[drafts] could not answer the rule offer:", cause)
+    return { ok: false, error: "Could not save that to your voice." }
+  }
+
+  revalidatePath("/brain")
+  return { ok: true }
 }
 
 /**

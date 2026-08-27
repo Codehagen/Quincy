@@ -14,7 +14,25 @@
  */
 
 /**
- * Five answers, and `pending` is the only one that is not final.
+ * The most an answer to Quincy's one question may be. See plans/027 phase 1c.
+ *
+ * Here rather than in lib/shipped-work.ts for this module's founding reason: it
+ * is needed on both sides. The server action refuses anything longer and the
+ * form sets `maxLength` from it, and those two numbers agreeing is not
+ * something to leave to whoever edits one of them. lib/shipped-work.ts imports
+ * it from here, which also keeps `ai` and the whole generation stack out of a
+ * `"use client"` bundle that only wanted an integer.
+ *
+ * A thousand characters, which is a paragraph. It becomes a beat, and a beat is
+ * one clause — `readShippedBeats` cuts it to `MAX_BEAT_CHARS` on the way in —
+ * but it arrives from a person typing rather than from a model quoting, and
+ * refusing somebody's second sentence at the input would be the wrong place to
+ * hold that line.
+ */
+export const MAX_ANSWER_CHARS = 1_000
+
+/**
+ * Seven answers, and `pending` is the only one that is not final.
  *
  * `writing` is final on purpose. Once the riff row exists, "there is a post in
  * it, it is on /riffs" is already true, and the angles finishing later does not
@@ -26,6 +44,24 @@ export type ShippedOutcome =
   | { state: "ready"; riffId: string }
   | { state: "failed"; message: string }
   | { state: "refused"; why: string }
+  /**
+   * Stored, and never read.
+   *
+   * The sixth answer, added by plan 027 because the first five could not tell
+   * two very different things apart. `refused` is a judgement about the merge —
+   * a model read it and found no post. This is the account: unentitled, paused,
+   * over the daily ceiling, or a workflow that never started. Nothing looked at
+   * the merge at all, and saying "there was no post in it" about a merge nobody
+   * read would be the confident sentence this whole module exists to stop.
+   */
+  | { state: "stopped"; why: string }
+  /**
+   * Read, and one question is waiting on the owner.
+   *
+   * Also final: the workflow has finished and the next move is a person's. It
+   * carries the question so the caller does not have to go and find it.
+   */
+  | { state: "asked"; question: string }
 
 /**
  * Whether there is anything left to wait for. The poll's whole condition.
@@ -69,6 +105,18 @@ export function sayOutcome(outcome: ShippedOutcome | null): string {
       return outcome.why
         ? `There was no post in it: ${outcome.why}`
         : "There was no post in it."
+    case "asked":
+      /**
+       * The refusal and the question in one sentence, because they are one
+       * event: Quincy could not find the story and has asked for the one line
+       * that would carry it. Splitting them would put a verdict on screen and
+       * leave the way out of it somewhere else.
+       */
+      return `I could not find the story in it, so I have asked you one thing: ${outcome.question}`
+    case "stopped":
+      return outcome.why
+        ? `I stored it and did not read it: ${outcome.why}`
+        : "I stored it and did not read it."
     default:
       return "Nothing has come back from it yet."
   }
