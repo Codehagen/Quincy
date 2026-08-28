@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "post_metric" (
   -- the timeline, not the corpus, so a post published this morning has numbers
   -- before it has a source_item row. A real foreign key would turn that honest
   -- answer into an insert failure at 06:00 with nobody watching. Empty until
-  -- the import catches up; external_id below is what a backfill joins on.
+  -- the import catches up — external_id below is what a backfill joins on.
   "source_item_id" text NOT NULL DEFAULT '',
 
   -- x | linkedin. Not a CHECK constraint: the enum lives in

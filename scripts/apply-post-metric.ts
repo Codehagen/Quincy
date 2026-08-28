@@ -47,9 +47,15 @@ async function main() {
     process.argv[2] ?? "scripts/post-metric.sql",
     "utf8"
   )
+    // Comment lines go first, before the split on ";". A semicolon inside a
+    // comment is otherwise a statement boundary, and the first live run of
+    // this file cut CREATE TABLE in half on exactly that.
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n")
     .split(";")
     .map((s) => s.trim())
-    .filter((s) => s && !s.split("\n").every((line) => line.startsWith("--")))
+    .filter(Boolean)
 
   for (const statement of statements) {
     const head = statement
