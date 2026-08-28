@@ -29,7 +29,7 @@ owner has no Google OAuth client for it yet.
 | 1c one question on refusal | built | `meta.question`, `AnswerQuestion` on /sources; the answer fills the missing beat and re-runs the riff |
 | 1d chat reaches a PR | built | `read_source`, `read_story`, `read_numbers`; `read_riffs` un-truncated with `riff.context` |
 | 1e language | built | translation line in `describeBeats` (`lib/drafting.ts`) |
-| 1f model A/B | not run | spends real money; owner decides |
+| 1f model A/B | run 2026-08-28 | `scripts/ab-shipped-models.ts`; ten merges, both models end to end; the cheap model scored higher on the three-beat checks (9/10 drafts make the owner the subject of the first line, the expensive one 1/8), never mixed languages, and cost 1/26 as much — **keep the cheap model**. Refusal is not stable run to run: two runs of the same model disagreed on two merges |
 | 2a messaging channel | held | by the owner's decision |
 | 2b one real post | owed | needs the owner and a browser |
 | 2c `post_metric` | built, migration unapplied | `scripts/apply-post-metric.ts`; daily refresh in `/api/cron/channels`; /numbers shows a live 30-day block |
@@ -52,6 +52,12 @@ Two facts the plan had wrong: the catalogue was 29 cards with 10 live, not
 webhook route (unentitled, paused, daily ceiling, start failed) never start
 the workflow — those are now `meta.stopped`, a fact about the account, not a
 verdict about the merge.
+
+The A/B also found that a Drizzle column without its Neon column breaks
+every `select()` on that table: `listConnections` threw 42703 on
+`channel_connection.last_metrics_at`, and `rhythm_run.result` has the same
+shape. So the first two migrations below are not optional before `main` is
+deployed; they are what keeps /channels, /numbers and the rhythm sweep up.
 
 Migrations written and **not applied**, in the order to run them:
 `scripts/apply-post-metric.ts`, `scripts/apply-rhythm-run-result.ts`,
