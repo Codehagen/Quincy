@@ -168,7 +168,7 @@ export const config = {
      * no cookie and no browser — matched, its POST comes back 307 to /login,
      * which the client's HTTP layer follows into an HTML page, and the failure
      * it reports is "the server did not speak MCP". The route authenticates
-     * itself with `withMcpAuth` and answers 401 with the WWW-Authenticate
+     * itself with `requireMcpAuth` and answers 401 with the WWW-Authenticate
      * header that tells a client where to authorize.
      *
      * The two `.well-known/oauth-*` documents are the same argument one step
@@ -190,8 +190,24 @@ export const config = {
      * Each API prefix is anchored with `(?:/|$)` so it matches the segment and
      * not merely the start of one. Unanchored, `api/mcp` also excluded
      * `/api/mcpanything` — a path this app does not serve today, and a
-     * gate-shaped hole waiting for the day somebody adds one. The three
-     * `.well-known` entries are whole names already.
+     * gate-shaped hole waiting for the day somebody adds one.
+     *
+     * The `.well-known` entries are deliberately *not* anchored, and that is
+     * the one place a prefix match is wanted. Both documents live at the
+     * well-known prefix **plus a path**, and in both cases the suffixed URL is
+     * the one that matters:
+     *
+     * - RFC 9728 appends the resource's own path, so an MCP client fetches
+     *   `/.well-known/oauth-protected-resource/api/mcp` — the same URL the
+     *   401's `WWW-Authenticate` header points at.
+     * - RFC 8414 §3.1 appends the issuer's path component, which here is
+     *   `/api/auth`, so the authorization-server document is at
+     *   `/.well-known/oauth-authorization-server/api/auth`. That is the pair
+     *   the provider's `onRequest` hook serves; the bare path is served by the
+     *   app's own catch-all route for clients that ask there first.
+     *
+     * An anchored entry would exclude the bare path and redirect the suffixed
+     * one — the one that matters — to /login.
      */
     "/((?!api/auth(?:/|$)|api/cron(?:/|$)|api/mcp(?:/|$)|api/webhooks(?:/|$)|\\.well-known/oauth-authorization-server|\\.well-known/oauth-protected-resource|\\.well-known/workflow|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
   ],

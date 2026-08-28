@@ -14,11 +14,48 @@
  * test rather than against a live OAuth round trip.
  */
 
-/** The plugin's own path for the authorization request. */
-export const MCP_AUTHORIZE_PATH = "/mcp/authorize"
+/**
+ * The canonical protected resource, per RFC 8707 and RFC 9728.
+ *
+ * `@better-auth/mcp` binds every issued access token to this exact string as
+ * its `aud` claim, publishes it as `resource` in the protected-resource
+ * document, and `requireMcpAuth` refuses a token whose audience is anything
+ * else. So it is one value in one place: a mismatch between the plugin and the
+ * route is a 401 on every tool call with nothing in a log to say why.
+ *
+ * Read from `BETTER_AUTH_URL` with the same fallback lib/metadata.ts uses, and
+ * inlined rather than imported so this file keeps its "no imports" property.
+ * The plugin validates it at boot: HTTPS, no query, no fragment, no
+ * credentials — with `http://` allowed on loopback, which is what makes
+ * `pnpm dev` work.
+ */
+/**
+ * The origin every value below is derived from.
+ *
+ * **Asserted in production rather than defaulted.** The fallback exists so
+ * `pnpm test` and a first `pnpm dev` work with no env file, and that is all it
+ * is for. On a self-hosted deployment the fallback would be actively harmful:
+ * `MCP_RESOURCE` is the `aud` on every access token this server signs and the
+ * `resource` in the RFC 9728 document, so an unset `BETTER_AUTH_URL` would
+ * publish somebody else's domain as this server's identity — and `requireMcpAuth`
+ * would refuse every token against it, with a 401 that names nothing.
+ *
+ * Thrown at import, which is at boot: a deployment that is going to be wrong
+ * about its own name should fail where a log is read, not on the first
+ * stranger's authorization. docs/self-hosting.md lists it as required.
+ */
+const CONFIGURED_BASE_URL = process.env.BETTER_AUTH_URL
 
-/** The plugin's own path for RFC 7591 dynamic client registration. */
-export const MCP_REGISTER_PATH = "/mcp/register"
+if (process.env.NODE_ENV === "production" && !CONFIGURED_BASE_URL) {
+  throw new Error(
+    "BETTER_AUTH_URL is not set. It is the issuer, the OAuth resource identifier " +
+      "and the audience on every MCP access token — see docs/self-hosting.md."
+  )
+}
+
+export const MCP_RESOURCE = `${(
+  CONFIGURED_BASE_URL ?? "https://hirequincy.com"
+).replace(/\/+$/, "")}/api/mcp`
 
 /**
  * The page a person consents on. Set as `consentPage` on the plugin, and a
@@ -30,24 +67,28 @@ export const MCP_CONSENT_PAGE = "/consent"
 /**
  * Where that page posts the answer.
  *
- * The `mcp` plugin re-exports the OIDC provider's consent endpoint unchanged
- * (`oAuthConsent: provider.endpoints.oAuthConsent`), so the path is the
- * provider's `/oauth2/consent` rather than anything under `/mcp/`. Body is
- * `{ accept: boolean, consent_code?: string }`; the code may also travel in
- * the signed `oidc_consent_prompt` cookie the plugin set on the way here. It
- * answers `{ redirectURI }` either way — allowed or denied.
+ * `@better-auth/mcp` is `@better-auth/oauth-provider` configured for MCP, so
+ * every protocol path is the provider's `/oauth2/*` — there is no `/mcp/*`
+ * namespace any more. The body is
+ * `{ accept: boolean, oauth_query: string }`, where `oauth_query` is the
+ * **whole signed query string** the authorize endpoint put on the consent
+ * page's URL. The provider verifies that signature before it reads a single
+ * field, which is why the page can hand the query back untouched instead of
+ * being trusted to restate it.
+ *
+ * It answers `{ redirect: true, url }` either way — allowed or denied.
  */
 export const MCP_CONSENT_ENDPOINT = "/api/auth/oauth2/consent"
 
 /**
  * What `/.well-known/oauth-authorization-server` advertises, per RFC 8414.
  *
- * **This has to be passed at the top level of `mcp({...})`, not inside
- * `oidcConfig`.** The plugin builds the authorization-server document from
- * `options.metadata` and the protected-resource document from
- * `options.oidcConfig.metadata` — two different objects, and only the second
- * one was set. A client that reads the first to decide what to ask for saw
- * four OpenID scopes and no sign that `read` or `write` existed.
+ * Passed to the plugin as `scopes`, which is the single list the provider
+ * builds every document from: the authorization-server metadata gets all six,
+ * and the protected-resource document gets the two that are about *this*
+ * resource — the plugin drops `openid`, `profile`, `email` and
+ * `offline_access` from that one itself, because they are facts about the
+ * authorization server rather than about the MCP endpoint.
  */
 export const MCP_SCOPES_SUPPORTED = [
   "openid",
@@ -57,10 +98,6 @@ export const MCP_SCOPES_SUPPORTED = [
   "read",
   "write",
 ] as const
-
-export const MCP_METADATA = {
-  scopes_supported: [...MCP_SCOPES_SUPPORTED],
-}
 
 /**
  * What each scope buys, said the way a person would say it.
@@ -114,74 +151,20 @@ export function describeScopes(scopes: Iterable<string>): string[] {
 }
 
 /**
- * What the before-hook in lib/auth.ts must do with a request, from its path.
- *
- * - `pass` — not ours; the hook falls through after one comparison.
- * - `force-consent` — overwrite `prompt` so the consent screen cannot be
- *   skipped by a client that simply does not ask for it.
- * - `require-session` — refuse unless a person is signed in.
- */
-export type McpGateStep = "pass" | "force-consent" | "require-session"
-
-export function mcpGateStep(path: string): McpGateStep {
-  if (path === MCP_AUTHORIZE_PATH) {
-    return "force-consent"
-  }
-
-  if (path === MCP_REGISTER_PATH) {
-    return "require-session"
-  }
-
-  return "pass"
-}
-
-/**
- * The authorization query, with consent made mandatory.
- *
- * **Why the server decides this and not the client.** The plugin issues the
- * code immediately when `prompt` is anything other than `consent`
- * (`plugins/mcp/authorize.mjs`), so a client that omits `prompt` — which is
- * most of them, since it is optional in OAuth — gets a token the moment the
- * owner is signed in, with no screen and nothing to say no to. Forcing the
- * value here means the only path to a token runs through a page that names
- * the client and the scopes.
- *
- * `prompt` may legitimately carry more than one value (`login consent`), and
- * the plugin's after-hook strips `login` after the login round trip and keeps
- * the rest. Any other value is replaced rather than appended, because the
- * plugin compares the whole string to `"consent"` — `"none consent"` would
- * read as "not consent" and skip the screen.
- *
- * Mutates in place and returns the same object. That is load-bearing: a
- * before-hook is handed a shallow copy of the context
- * (`api/dispatch.mjs`, `runBeforeHooks`), so reassigning `ctx.query` writes to
- * the copy and is thrown away, while writing `ctx.query.prompt` reaches the
- * object the endpoint reads.
- */
-export function forceConsentPrompt<
-  T extends Record<string, unknown> | undefined | null,
->(query: T): T {
-  if (query) {
-    ;(query as Record<string, unknown>).prompt = "consent"
-  }
-
-  return query
-}
-
-/**
  * Whether the account behind a live access token may still be served.
  *
  * Pure so the two refusals can be asserted without standing a route up. Both
  * of them are about a fact that changed *after* the token was minted, which is
- * exactly the class `withMcpAuth` cannot see: it checks the token against
- * `oauth_access_token` and stops there.
+ * exactly the class `requireMcpAuth` cannot see: it verifies the token's
+ * signature, issuer, audience and expiry against the JWKS and stops there. A
+ * 1.7 access token is a self-contained JWT — there is no row to revoke and no
+ * row to read — so a fact that changed since issuance can only be caught here.
  *
  * - **No row.** The account was deleted under a token that is still inside its
  *   hour.
  * - **Banned.** The admin plugin ends the browser sessions and knows nothing
- *   about `oauth_access_token`, so an agent connected before the ban keeps
- *   working for an hour — and its refresh token keeps minting new ones for a
- *   week after that.
+ *   about an issued JWT, so an agent connected before the ban keeps working
+ *   until that token expires.
  *
  * 401 for both, so a client treats it as an authorization problem and stops,
  * rather than retrying a tool it thinks is broken. The messages differ because
@@ -189,8 +172,7 @@ export function forceConsentPrompt<
  * already knows.
  */
 export type McpAccountVerdict =
-  | { ok: true }
-  | { ok: false; status: 401; error: string }
+  { ok: true } | { ok: false; status: 401; error: string }
 
 export function accountVerdict(
   row: { banned?: boolean | null } | null | undefined
@@ -207,14 +189,212 @@ export function accountVerdict(
 }
 
 /**
- * What a stranger POSTing to `/mcp/register` is told.
+ * The longest name an agent may register under.
  *
- * RFC 7591 allows anonymous registration and the plugin implements it that
- * way. We trade it for a smaller attack surface: an unauthenticated POST
- * writes a row to `oauth_application` for anyone who can reach the origin, and
- * a client nobody owns cannot be listed on /settings or removed there either.
- * An MCP client is registered by the person who is going to use it, so the
- * registration is done from a browser that is already signed in.
+ * The name is shown on the consent screen and on /settings, and it is the only
+ * handle a person has on a client. Eighty characters is a label; past that it
+ * is a paragraph aimed at whoever reads the Allow button.
  */
-export const MCP_REGISTER_REFUSAL =
-  "Register an MCP client while signed in to Quincy. See docs/mcp.md."
+export const MCP_CLIENT_NAME_MAX = 80
+
+/**
+ * What "Register an agent" on /settings will accept.
+ *
+ * **Why this is stricter than the plugin.** `@better-auth/oauth-provider`
+ * accepts three families of redirect URI: HTTPS on a public host (`web`),
+ * `http://` on the exact loopback names (`native`), and reverse-domain
+ * private-use schemes such as `com.example.app:/callback` (`native` again).
+ * The third is a real part of the spec and is not offered here, because this
+ * form is typed by a person from something an agent printed, and a private-use
+ * scheme is the one shape where a typo hands the authorization code to a
+ * different program on the same machine with no error anywhere. A client that
+ * needs one publishes a Client ID Metadata Document instead — that is what
+ * CIMD is for, and it proves domain ownership rather than asking a person to
+ * read a URI carefully.
+ *
+ * The `applicationType` this returns is not decoration: the provider validates
+ * redirect URIs *against* it, and `web` refuses loopback while `native`
+ * refuses HTTPS loopback. Deciding it here from the URI itself is what stops a
+ * correct URI being refused by the endpoint for a reason the form never
+ * mentioned.
+ */
+export type AgentRegistration =
+  | {
+      ok: true
+      name: string
+      redirectUri: string
+      applicationType: "web" | "native"
+    }
+  | { ok: false; message: string }
+
+const LOOPBACK_NAMES = new Set(["localhost", "[::1]"])
+
+/** Dotted-quad shape. Octet bounds are checked separately, as the provider does. */
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+
+/**
+ * Whether a redirect URI's host is loopback, per RFC 8252 §7.3.
+ *
+ * **The whole `127.0.0.0/8` block, not just `127.0.0.1`.** §7.3 says a native
+ * client may listen on any loopback address, `classifyIPv4` in
+ * `@better-auth/core/utils/host` accepts the `/8` behind the provider's
+ * `isLoopbackIP`, and the endpoint validates the URI with that. So a form that
+ * took only the one literal refused URIs the endpoint would have accepted —
+ * and refused them with a sentence naming three spellings, none of which was
+ * the one the agent printed. `127.0.0.53` is what a stub resolver answers on,
+ * and agents do print it.
+ *
+ * **Matched as an address, never as a prefix.** `127.example.com` starts with
+ * `127.` and is a public DNS name; `isLoopbackIP` says so and would refuse the
+ * URI at the endpoint. Accepting it here as `native` is the exact failure this
+ * whole function exists to prevent — a correct-looking form followed by a
+ * refusal from somewhere the person cannot see.
+ *
+ * `localhost` and `[::1]` stay exactly as they were. Note the provider is
+ * stricter than this on the first: RFC 8252 §8.3 recommends against resolving
+ * a name at all. It is kept because it is what agents print and because the
+ * provider's own `native` validation accepts it.
+ */
+function isLoopbackHostname(host: string): boolean {
+  const name = host.startsWith("[")
+    ? host.slice(0, host.indexOf("]") + 1)
+    : host.split(":")[0]
+
+  if (LOOPBACK_NAMES.has(name)) {
+    return true
+  }
+
+  const octets = IPV4.exec(name)
+
+  if (!octets) {
+    return false
+  }
+
+  return (
+    octets[1] === "127" &&
+    octets.slice(1).every((octet) => Number(octet) <= 255)
+  )
+}
+
+export function readAgentRegistration(input: {
+  name: string
+  redirectUri: string
+}): AgentRegistration {
+  const name = input.name.trim()
+
+  if (!name) {
+    return { ok: false, message: "Give the agent a name you will recognise." }
+  }
+
+  if (name.length > MCP_CLIENT_NAME_MAX) {
+    return {
+      ok: false,
+      message: `That name is longer than ${MCP_CLIENT_NAME_MAX} characters.`,
+    }
+  }
+
+  const redirectUri = input.redirectUri.trim()
+
+  if (!redirectUri) {
+    return {
+      ok: false,
+      message: "Paste the redirect URI the agent printed.",
+    }
+  }
+
+  let url: URL
+
+  try {
+    url = new URL(redirectUri)
+  } catch {
+    return {
+      ok: false,
+      message: "That redirect URI is not a full URL.",
+    }
+  }
+
+  // A fragment is dropped by every browser before the request is sent, so a
+  // registered URI carrying one can never match the one that comes back.
+  if (redirectUri.includes("#")) {
+    return {
+      ok: false,
+      message: "A redirect URI cannot carry a fragment.",
+    }
+  }
+
+  if (url.username || url.password) {
+    return {
+      ok: false,
+      message: "A redirect URI cannot carry credentials.",
+    }
+  }
+
+  const loopback = isLoopbackHostname(url.host)
+
+  if (url.protocol === "https:") {
+    if (loopback) {
+      return {
+        ok: false,
+        message:
+          "Use http:// for a loopback address. https:// is for an agent on its own domain.",
+      }
+    }
+
+    return { ok: true, name, redirectUri, applicationType: "web" }
+  }
+
+  if (url.protocol === "http:" && loopback) {
+    return { ok: true, name, redirectUri, applicationType: "native" }
+  }
+
+  return {
+    ok: false,
+    message:
+      "A redirect URI must be https://, or http:// on localhost, a 127.x.x.x address or [::1].",
+  }
+}
+
+/**
+ * How many clients one account may register.
+ *
+ * A ceiling on a row a signed-in stranger can create for free. `oauth_client`
+ * is written by `/oauth2/create-client`, which is a session and a form — so
+ * without a bound, one account can fill the table as fast as a script can post,
+ * and every row of it appears on somebody's /settings and in the consent
+ * screen's client lookup.
+ *
+ * Twenty is a tripwire rather than a product limit, the same shape as
+ * `MCP_DRAFTS_PER_DAY`: nobody runs twenty agents, and an account that has
+ * twenty is a script. A person who genuinely fills it removes one first, which
+ * the page already offers.
+ */
+export const MCP_CLIENTS_PER_USER = 20
+
+/** Whether this account has already registered as many clients as it may. */
+export function atAgentLimit(registered: number): boolean {
+  return registered >= MCP_CLIENTS_PER_USER
+}
+
+/**
+ * The provider's admin OAuth endpoints, which this server does not serve.
+ *
+ * `@better-auth/oauth-provider` registers seven of them under `/admin/oauth2`:
+ * `/admin/oauth2/create-client`, `/admin/oauth2/update-client`,
+ * `/admin/oauth2/resources`, `/admin/oauth2/resources/:identifier` and
+ * `/admin/oauth2/resources/:identifier/clients/:client_id`. All are gated on
+ * `clientPrivileges` / `resourcePrivileges`, and an undefined callback degrades
+ * to "any authenticated session" — so on a product where anyone can sign up,
+ * the gate is no gate. `lib/auth.ts` answers this predicate with 404.
+ *
+ * A prefix test rather than a list, because two of the paths are parameterised
+ * and `disabledPaths` in better-auth is an exact-match `includes`.
+ *
+ * The exact string is matched as well as the prefix, so a request to
+ * `/admin/oauth2` itself is refused rather than falling through on a missing
+ * trailing slash. `/oauth2/create-client` — the user-scoped registration
+ * /settings uses — does not match either form, and must not: it is the one
+ * sanctioned way a person registers an agent.
+ */
+export function isAdminOAuthPath(path: string): boolean {
+  return path === "/admin/oauth2" || path.startsWith("/admin/oauth2/")
+}

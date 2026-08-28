@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { and, desc, eq, gt, sql } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { formatConversationDate } from "@/lib/format-date"
@@ -9,7 +9,9 @@ import { constructMetadata } from "@/lib/metadata"
 // app, and one of the two names has to give way.
 import {
   oauthAccessToken,
-  oauthApplication,
+  oauthClient,
+  oauthConsent,
+  oauthRefreshToken,
   session as sessionTable,
   user,
 } from "@/lib/schema"
@@ -118,42 +120,59 @@ export default async function SettingsPage() {
     /**
      * The MCP clients this account has authorized, newest first.
      *
-     * One row per registered client, not one per token: a client that has been
-     * connected for a month holds a chain of `oauth_access_token` rows — one per
-     * hour of use, plus one for every refresh — and listing those would be the
-     * same mistake the session list already learned, nine rows nobody can tell
-     * apart. `max(created_at)` over the join answers the only question the
-     * chain is good for: when did this thing last take a key.
+     * **Driven off `oauth_consent`, not off `oauth_client`.** The old version
+     * listed the clients this user had registered, which was the same set only
+     * because registration was the only way in. It is not any more: a client
+     * that identifies itself with a Client ID Metadata Document is written by
+     * CIMD and owned by nobody, so a list keyed on `oauth_client.user_id` would
+     * be missing exactly the agents a stranger's software brought. A consent
+     * row is the honest key — it says *this person said yes to this client*,
+     * which is the only question this list is asking.
      *
-     * A left join, so a client registered and never authorized still appears.
-     * That row is exactly the one worth seeing — something asked for access and
-     * the person may not remember saying yes.
+     * One row per client, not one per token. `max()` over the two token tables
+     * answers the only question the chain is good for: when did this thing last
+     * take a key. `greatest` rather than a coalesce ladder because Postgres
+     * `greatest` already ignores nulls, and both sides are usually null on one
+     * of them — a resource-bound access token is a signed JWT with no row at
+     * all, so in practice the refresh table is the one that answers.
      *
-     * `client_id`, not the row id, because that is what the tokens reference and
-     * what the removal names. It is not a credential: it travels in the query
-     * string of every authorization request.
+     * Revoked refresh rows are joined out. A revoked key is not a key.
+     *
+     * `owned` decides how far removal can go: a client this account registered
+     * can be deleted outright, and one that arrived by CIMD can only have its
+     * consent and its keys taken away. Both end the connection.
      */
     db
       .select({
-        clientId: oauthApplication.clientId,
-        name: oauthApplication.name,
-        createdAt: oauthApplication.createdAt,
-        lastToken: sql<
-          string | Date | null
-        >`max(${oauthAccessToken.createdAt})`,
+        clientId: oauthConsent.clientId,
+        name: oauthClient.name,
+        createdAt: oauthConsent.createdAt,
+        lastToken: sql<string | Date | null>`greatest(
+          max(${oauthAccessToken.createdAt}),
+          max(${oauthRefreshToken.createdAt})
+        )`,
       })
-      .from(oauthApplication)
+      .from(oauthConsent)
+      .leftJoin(oauthClient, eq(oauthClient.clientId, oauthConsent.clientId))
       .leftJoin(
         oauthAccessToken,
-        eq(oauthAccessToken.clientId, oauthApplication.clientId)
+        and(
+          eq(oauthAccessToken.clientId, oauthConsent.clientId),
+          eq(oauthAccessToken.userId, session.user.id),
+          isNull(oauthAccessToken.revoked)
+        )
       )
-      .where(eq(oauthApplication.userId, session.user.id))
-      .groupBy(
-        oauthApplication.clientId,
-        oauthApplication.name,
-        oauthApplication.createdAt
+      .leftJoin(
+        oauthRefreshToken,
+        and(
+          eq(oauthRefreshToken.clientId, oauthConsent.clientId),
+          eq(oauthRefreshToken.userId, session.user.id),
+          isNull(oauthRefreshToken.revoked)
+        )
       )
-      .orderBy(desc(oauthApplication.createdAt)),
+      .where(eq(oauthConsent.userId, session.user.id))
+      .groupBy(oauthConsent.clientId, oauthClient.name, oauthConsent.createdAt)
+      .orderBy(desc(oauthConsent.createdAt)),
   ])
 
   // The row is gone but the session is not: an account deleted underneath a
@@ -242,7 +261,9 @@ export default async function SettingsPage() {
     return {
       clientId: agent.clientId,
       name: agent.name?.trim() || "Unnamed agent",
-      connected: `Connected ${formatConversationDate(agent.createdAt, zone, now).toLowerCase()}`,
+      connected: agent.createdAt
+        ? `Connected ${formatConversationDate(agent.createdAt, zone, now).toLowerCase()}`
+        : "Connected",
       lastToken:
         last && !Number.isNaN(last.getTime())
           ? `last key ${formatConversationDate(last, zone, now).toLowerCase()}`

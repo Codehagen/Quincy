@@ -24,8 +24,8 @@ const getLineup = vi.hoisted(() => vi.fn())
 const listConnections = vi.hoisted(() => vi.fn())
 const getSourceConnections = vi.hoisted(() => vi.fn())
 const corpusSummary = vi.hoisted(() => vi.fn())
-const draftAngle = vi.hoisted(() => vi.fn())
-const captureToRiff = vi.hoisted(() => vi.fn())
+const draftAngleFor = vi.hoisted(() => vi.fn())
+const captureToRiffFor = vi.hoisted(() => vi.fn())
 const readSourceByRef = vi.hoisted(() => vi.fn())
 const getStory = vi.hoisted(() => vi.fn())
 const getNumbers = vi.hoisted(() => vi.fn())
@@ -59,7 +59,10 @@ vi.mock("./numbers", async () => {
   const actual = await vi.importActual<typeof import("./numbers")>("./numbers")
   return { ...actual, getNumbers }
 })
-vi.mock("@/app/(app)/riffs/actions", () => ({ draftAngle, captureToRiff }))
+// The shared write path, not the server actions. `chatTools` calls
+// `lib/riff-writes.ts` directly and passes `user.id` — there is no session to
+// resolve on either route that uses this factory.
+vi.mock("./riff-writes", () => ({ draftAngleFor, captureToRiffFor }))
 
 const { chatTools } = await import("./chat-tools")
 
@@ -244,7 +247,7 @@ describe("read_channels", () => {
 
 describe("capture_riff", () => {
   it("points at the next step rather than stopping at 'done'", async () => {
-    captureToRiff.mockResolvedValue({
+    captureToRiffFor.mockResolvedValue({
       ok: true,
       riffId: "rif_1",
       angles: 3,
@@ -266,7 +269,7 @@ describe("capture_riff", () => {
     // The ceiling is MAX_TRANSCRIPT_CHARS in lib/riffs.ts. A model that
     // reports "could not capture" leaves the user with no idea that trimming
     // the text is the fix.
-    captureToRiff.mockResolvedValue({
+    captureToRiffFor.mockResolvedValue({
       ok: false,
       message:
         "That is 9214 characters. Send at most 5760 — the transferable idea is never in the last thousand.",
@@ -278,7 +281,7 @@ describe("capture_riff", () => {
   })
 
   it("sends the words on unchanged", async () => {
-    captureToRiff.mockResolvedValue({
+    captureToRiffFor.mockResolvedValue({
       ok: true,
       riffId: "rif_1",
       angles: 1,
@@ -292,9 +295,10 @@ describe("capture_riff", () => {
 
     // Their material, not a summary of it. A model that paraphrases here would
     // put its own writing into the riff and ground every later draft on it.
-    expect(captureToRiff).toHaveBeenCalledWith({
-      text: "  their exact words  ",
-    })
+    expect(captureToRiffFor).toHaveBeenCalledWith(
+      USER.id,
+      "  their exact words  "
+    )
   })
 })
 
@@ -341,7 +345,7 @@ describe("read_channels and read_sources", () => {
 
 describe("draft_angle", () => {
   it("never claims a draft went out", async () => {
-    draftAngle.mockResolvedValue({
+    draftAngleFor.mockResolvedValue({
       ok: true,
       draftId: "drf_1",
       channels: ["X", "LinkedIn"],
@@ -361,7 +365,7 @@ describe("draft_angle", () => {
   })
 
   it("names the channels that fell back to the hook", async () => {
-    draftAngle.mockResolvedValue({
+    draftAngleFor.mockResolvedValue({
       ok: true,
       draftId: "drf_1",
       channels: ["X", "Substack"],
@@ -380,7 +384,7 @@ describe("draft_angle", () => {
   })
 
   it("says nothing was charged when the draft already existed", async () => {
-    draftAngle.mockResolvedValue({
+    draftAngleFor.mockResolvedValue({
       ok: true,
       draftId: "drf_1",
       channels: [],
@@ -396,7 +400,7 @@ describe("draft_angle", () => {
   })
 
   it("passes the action's own refusal through rather than paraphrasing it", async () => {
-    draftAngle.mockResolvedValue({
+    draftAngleFor.mockResolvedValue({
       ok: false,
       reason: "entitlement",
       message: "Your trial has ended.",

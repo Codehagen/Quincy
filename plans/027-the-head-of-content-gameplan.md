@@ -43,7 +43,7 @@ owner has no Google OAuth client for it yet.
 | 4b weekly review | built | `lib/weekly-review.ts`, Sun 19:00, no model call |
 | 4c week plan | built | `lib/week-plan.ts`, Mon 07:00, critique step, never approves |
 | 4d calendar source | held | built on branch `feat/calendar-source`; needs a Google OAuth client before it can return |
-| 4e MCP server | built, migration unapplied | `docs/mcp.md`; consent screen and revocation added after review |
+| 4e MCP server | built; moved to `@better-auth/mcp` 1.7 on 2026-08-28 | `docs/mcp.md`; the core plugin was deprecated with a refresh-token advisory; consent, rotation, revocation and CIMD now come from the provider; admin OAuth routes disabled |
 | 4f publisher boundary | built | `lib/publisher.ts`; external adapter env-gated |
 | 4g changelog claim | built | counts by date; entries for 23–26 Aug |
 
@@ -59,12 +59,13 @@ every `select()` on that table: `listConnections` threw 42703 on
 shape. So the first two migrations below are not optional before `main` is
 deployed; they are what keeps /channels, /numbers and the rhythm sweep up.
 
-Migrations: `scripts/apply-post-metric.ts` and
-`scripts/apply-rhythm-run-result.ts` were **applied on 2026-08-28** and
-`main` deployed (`d350af1`). `scripts/apply-mcp-oauth.ts` is still
-**not applied**; run it after `pnpm auth:generate` confirms the hand-written
-block in `lib/schema.ts`. Until then `/api/mcp` answers 401 to everyone,
-which is the safe state.
+Migrations: `scripts/apply-post-metric.ts`, `scripts/apply-rhythm-run-result.ts`,
+`scripts/apply-mcp-oauth.ts` and `scripts/apply-account-issuer.ts` were all
+**applied on 2026-08-28**. The last one is the Better Auth 1.7 `account.issuer`
+backfill, which the first migration agent missed because
+`npx @better-auth/cli@latest` resolves to a 1.4 CLI; the 1.7 CLI is the npm
+package `auth`, and `pnpm auth:generate` now pins it. `scripts/verify-auth-recovery.ts`
+passes 7/7 on 1.7.2.
 
 ## What the database says on 2026-08-26
 

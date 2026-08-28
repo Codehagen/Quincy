@@ -14,8 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { timeIn, zoneLabel, zoneOptions } from "@/lib/zones"
+import { MCP_CLIENT_NAME_MAX } from "@/lib/mcp-gate"
 import {
   changePassword,
+  registerAgent,
   removeConnectedAgent,
   revokeOtherSessions,
   revokeSessions,
@@ -214,6 +216,17 @@ export function SettingsBriefing({
 
   const [nameDraft, setNameDraft] = useDraft(name)
   const [zoneDraft, setZoneDraft] = useDraft(timezone)
+
+  // The registration form, and the one client id it produces. Held here rather
+  // than re-read from the server because the id is shown once: the row keeps it,
+  // but nothing on this page ever prints it again, so losing it to a re-render
+  // would mean going to the database to recover a value the person was looking
+  // at a second ago.
+  const [agentName, setAgentName] = React.useState("")
+  const [agentRedirect, setAgentRedirect] = React.useState("")
+  const [issuedClientId, setIssuedClientId] = React.useState<string | null>(
+    null
+  )
 
   const others = sessionGroups.filter((group) => !group.current)
 
@@ -500,8 +513,19 @@ export function SettingsBriefing({
         <p className="max-w-prose text-body text-pretty">
           {connectedAgents.length === 0 ? (
             <>
-              No agents connected. Connect one with the MCP URL in{" "}
-              <span className="font-mono text-[0.9em]">docs/mcp.md</span>.
+              No agents connected.{" "}
+              <Inline
+                label="Register an agent"
+                open={open === "register-agent"}
+                onToggle={() => {
+                  setProblem(null)
+                  toggle("register-agent")
+                }}
+              >
+                Register one
+              </Inline>{" "}
+              if it cannot introduce itself, then point it at{" "}
+              <span className="font-mono text-[0.9em]">/api/mcp</span>.
             </>
           ) : (
             <>
@@ -518,10 +542,98 @@ export function SettingsBriefing({
                   : `${connectedAgents.length} agents`}
               </Inline>{" "}
               can reach Quincy over MCP — reading what you have and drafting.
-              None of them can approve, schedule or publish.
+              None of them can approve, schedule or publish.{" "}
+              <Inline
+                label="Register an agent"
+                open={open === "register-agent"}
+                onToggle={() => {
+                  setProblem(null)
+                  toggle("register-agent")
+                }}
+              >
+                Register another
+              </Inline>
+              .
             </>
           )}
         </p>
+
+        {open === "register-agent" ? (
+          <Drawer>
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault()
+                setProblem(null)
+                setIssuedClientId(null)
+                startTransition(async () => {
+                  const result = await registerAgent({
+                    name: agentName,
+                    redirectUri: agentRedirect,
+                  })
+                  if (!result.ok) {
+                    setProblem(result.message)
+                    return
+                  }
+                  setIssuedClientId(result.clientId)
+                  setAgentName("")
+                  setAgentRedirect("")
+                })
+              }}
+            >
+              <Field>
+                <FieldLabel htmlFor="settings-agent-name">Name</FieldLabel>
+                <Input
+                  id="settings-agent-name"
+                  name="agent-name"
+                  autoComplete="off"
+                  maxLength={MCP_CLIENT_NAME_MAX}
+                  placeholder="My terminal agent"
+                  value={agentName}
+                  onChange={(event) => setAgentName(event.target.value)}
+                />
+                <FieldDescription>
+                  What you will see on this list, and on the screen that asks
+                  you to allow it.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="settings-agent-redirect">
+                  Redirect URI
+                </FieldLabel>
+                <Input
+                  id="settings-agent-redirect"
+                  name="agent-redirect"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="http://127.0.0.1:33418/callback"
+                  value={agentRedirect}
+                  onChange={(event) => setAgentRedirect(event.target.value)}
+                />
+                <FieldDescription>
+                  Whatever the agent printed. https://, or http:// on localhost,
+                  any 127.x.x.x address or [::1].
+                </FieldDescription>
+              </Field>
+              <Problem message={problem} />
+              {issuedClientId ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-caption text-muted-foreground">
+                    Client id — paste it into the agent. It is shown once.
+                  </p>
+                  <p className="font-mono text-[0.9em] break-all select-all">
+                    {issuedClientId}
+                  </p>
+                </div>
+              ) : null}
+              <div>
+                <Button type="submit" disabled={pending}>
+                  {pending ? "Registering…" : "Register"}
+                </Button>
+              </div>
+            </form>
+          </Drawer>
+        ) : null}
 
         {open === "agents" && connectedAgents.length > 0 ? (
           <Drawer>
@@ -563,9 +675,10 @@ export function SettingsBriefing({
               </ul>
               <Problem message={problem} />
               <p className="text-caption text-pretty text-muted-foreground">
-                Removing one takes its keys with it, including the refresh key
-                that would otherwise mint a new one every week. There is no
-                other way to end a connection.
+                Removing one takes back your consent and revokes the refresh key
+                that would otherwise mint a new one for a month. A key it is
+                already holding keeps working for up to an hour — it is signed
+                rather than stored, so there is nothing to withdraw.
               </p>
             </div>
           </Drawer>

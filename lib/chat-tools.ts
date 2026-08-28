@@ -1,13 +1,13 @@
 import { tool, type Tool } from "ai"
 import { z } from "zod"
 
-import { captureToRiff, draftAngle } from "@/app/(app)/riffs/actions"
 import { getStory, renderStory } from "./brain"
 import { listConnections } from "./channels"
 import { corpusSummary } from "./corpus-x"
 import { countWaiting, getDrafts } from "./drafts"
 import { countQueued, getLineup } from "./lineup"
 import { endsOf, formatMultiple, getNumbers, OUTLIER_GATE } from "./numbers"
+import { captureToRiffFor, draftAngleFor } from "./riff-writes"
 import { getRiffs, readSourceByRef, type SourceRef } from "./riffs"
 import {
   describeFacts,
@@ -55,15 +55,23 @@ import { resolveTimeZone } from "./timezone"
  * is never scheduled, and is never metered against the piece it belongs to.
  * Material has to enter the product through the same door on every surface.
  *
- * ## Why both writes are calls into server actions
+ * ## Why both writes are calls into one shared write path
  *
- * `captureToRiff` and `draftAngle` already own the hard parts: it proves the angle belongs to this
- * user rather than trusting an id, refuses a second charge for a draft that
- * already exists, checks entitlement, holds a spend cooldown, and meters what
- * the model cost. Reimplementing any of that here would be a second copy of the
- * money path, and the second copy is the one that goes wrong. It reads the
- * session from the request itself, so calling it inside a tool is the same user
- * it was already the same user for.
+ * `captureToRiffFor` and `draftAngleFor` in lib/riff-writes.ts already own the
+ * hard parts: they prove the angle belongs to this user rather than trusting an
+ * id, refuse a second charge for a draft that already exists, check
+ * entitlement, hold a spend cooldown, and meter what the model cost.
+ * Reimplementing any of that here would be a second copy of the money path, and
+ * the second copy is the one that goes wrong.
+ *
+ * They take the user id rather than reading a session, and `user.id` below is
+ * the only thing passed in. That is what lets one factory serve two routes:
+ * `/api/chat` resolves a cookie session, `/api/mcp` verifies a bearer token
+ * against the JWKS, and both arrive here holding a `ChatUser`. The two writes
+ * used to be the `/riffs` server actions, which read the cookie themselves —
+ * so the MCP route had to fake one through an `AsyncLocalStorage` and a
+ * `/get-session` hook. That bridge is deleted; nothing on the MCP path resolves
+ * a session at all now.
  *
  * ## The tools return prose, not rows
  *
@@ -870,7 +878,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
           ),
       }),
       execute: async ({ text }) => {
-        const result = await captureToRiff({ text })
+        const result = await captureToRiffFor(user.id, text)
 
         if (!result.ok) {
           // The action's own sentence. It knows whether this was a lapsed
@@ -898,7 +906,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
           ),
       }),
       execute: async ({ angleId }) => {
-        const result = await draftAngle({ angleId })
+        const result = await draftAngleFor(user.id, angleId)
 
         if (!result.ok) {
           // The action's own sentence, not a paraphrase. It knows whether this

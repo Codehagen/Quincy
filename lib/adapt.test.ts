@@ -460,36 +460,44 @@ describe("the adapt family's cooldown", () => {
     expect(ADAPT_SPEND).not.toContain("/")
   })
 
-  it("is held and spent by draftAngle, not only by its neighbours", async () => {
+  it("is held and spent by the shared draft write, not only by its neighbours", async () => {
+    // lib/riff-writes.ts rather than the action: the action is the session read
+    // and nothing else now, because the chat and /api/mcp reach this same write
+    // with a user they resolved themselves.
     const source = await readFile(
-      new URL("../app/(app)/riffs/actions.ts", import.meta.url),
+      new URL("./riff-writes.ts", import.meta.url),
       "utf8"
     )
 
-    const draftAngle = source.slice(
-      source.indexOf("export async function draftAngle("),
-      source.indexOf("export type AskChannelAngleResult")
+    const draftAngleFor = source.slice(
+      source.indexOf("export async function draftAngleFor("),
+      source.indexOf("export type CaptureResult")
     )
 
-    expect(draftAngle).not.toBe("")
+    expect(draftAngleFor).not.toBe("")
     // Read: the same 15s window the three adapt buttons take.
-    expect(draftAngle).toContain(
-      "spendCooldown(session.user.id, ADAPT_SPEND, 15_000)"
+    expect(draftAngleFor).toContain(
+      "spendCooldown(userId, ADAPT_SPEND, 15_000)"
     )
     // Written: so the next press actually sees this one.
-    expect(draftAngle).toContain("spendTag: ADAPT_SPEND")
+    expect(draftAngleFor).toContain("spendTag: ADAPT_SPEND")
   })
 
   it("keeps all five call sites on one window", async () => {
-    const source = await readFile(
-      new URL("../app/(app)/riffs/actions.ts", import.meta.url),
-      "utf8"
-    )
+    // Three on the page's own actions, two on the shared write path. The split
+    // is where the session is read, not where the money is spent — so the count
+    // is across both files.
+    const [actions, writes] = await Promise.all([
+      readFile(new URL("../app/(app)/riffs/actions.ts", import.meta.url), "utf8"),
+      readFile(new URL("./riff-writes.ts", import.meta.url), "utf8"),
+    ])
 
-    const held = source.match(
+    const onSession = actions.match(
       /spendCooldown\(session\.user\.id, ADAPT_SPEND, 15_000\)/g
     )
+    const onUserId = writes.match(/spendCooldown\(userId, ADAPT_SPEND, 15_000\)/g)
 
-    expect(held).toHaveLength(5)
+    expect(onSession).toHaveLength(3)
+    expect(onUserId).toHaveLength(2)
   })
 })

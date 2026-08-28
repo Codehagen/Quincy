@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks"
-
 import { betterAuth } from "better-auth"
 import {
   APIError,
@@ -8,22 +6,24 @@ import {
 } from "better-auth/api"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { admin } from "better-auth/plugins/admin"
-// No dedicated subpath for these two in 1.6.25 — they are only on the barrel,
-// so the tree-shaking convention the other plugins follow does not apply here.
-import { lastLoginMethod, mcp } from "better-auth/plugins"
+// No dedicated subpath for these three — they are only on the barrel, so the
+// tree-shaking convention the other plugins follow does not apply here.
+import { jwt, lastLoginMethod } from "better-auth/plugins"
 import { nextCookies } from "better-auth/next-js"
 import { stripe } from "@better-auth/stripe"
+import { mcp } from "@better-auth/mcp"
+import { cimd } from "@better-auth/cimd"
+import { fetchClientMetadataResource } from "@better-auth/cimd/node"
 
 import { db } from "./db"
 import * as schema from "./schema"
 // From lib/mcp-gate.ts, not lib/mcp.ts. Same values, no import graph: lib/mcp.ts
 // reaches the drafting model and the metering tables, and this file must not.
 import {
-  forceConsentPrompt,
-  mcpGateStep,
+  isAdminOAuthPath,
   MCP_CONSENT_PAGE,
-  MCP_METADATA,
-  MCP_REGISTER_REFUSAL,
+  MCP_RESOURCE,
+  MCP_SCOPES_SUPPORTED,
 } from "./mcp-gate"
 import {
   sendPasswordResetEmail,
@@ -70,96 +70,6 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
 
 export const isGoogleEnabled = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
-
-/**
- * Who an MCP tool call is acting for, for the length of that call and no
- * longer.
- *
- * **Why this exists.** The two writes the MCP server exposes are the same
- * server actions the web app calls — `captureToRiff` and `draftAngle` — and
- * those resolve the session from the request themselves (`lib/session.ts`),
- * which is exactly what makes them safe to call from a tool: the id in the
- * argument proves nothing, the cookie does. An MCP client holds an OAuth access
- * token and no cookie, so that resolution comes back null and both writes
- * answer "Not signed in."
- *
- * The alternative was a second copy of the write path with its own entitlement
- * check, its own cooldown and its own metering. AGENTS.md is explicit about
- * what that costs: the second copy of the money path is the one that goes
- * wrong. So the session is bridged instead, and the bridge is bound as tightly
- * as it can be:
- *
- * - It is an `AsyncLocalStorage`, so it exists only inside the callback that
- *   set it. Nothing outside `runAsMcpUser` can put a value in it, and no
- *   request can carry one in.
- * - `lib/mcp.ts` runs only the two write tools inside it. The six reads take
- *   their user as an argument and never needed it.
- * - The hook below reads it on `/get-session` alone. It is not a way to
- *   authenticate a request; the request was already authenticated by
- *   `withMcpAuth` against a live, unexpired access token before anything here
- *   runs.
- *
- * What it deliberately does **not** do is make a bearer token behave like a
- * session anywhere else in the app. An MCP token cannot reach `/api/chat`, a
- * page, or `approveVersion`, because none of those runs inside this store.
- */
-export type McpActor = { userId: string }
-
-const mcpActor = new AsyncLocalStorage<McpActor>()
-
-/** Run `fn` with the MCP token's user standing in for the session cookie. */
-export function runAsMcpUser<T>(
-  actor: McpActor,
-  fn: () => Promise<T>
-): Promise<T> {
-  return mcpActor.run(actor, fn)
-}
-
-/**
- * The MCP plugin's options, hoisted out of the `plugins` array on purpose.
- *
- * `metadata` belongs at the **top level**, beside `loginPage`, because that is
- * the object the plugin spreads into
- * `/.well-known/oauth-authorization-server` (`plugins/mcp/index.mjs`, in
- * `getMCPProviderMetadata`). The copy inside `oidcConfig` feeds a different
- * document — `/.well-known/oauth-protected-resource` — so setting only that one
- * advertised `read` and `write` to a client reading RFC 9728 and hid them from
- * a client reading RFC 8414. Both are set now, from the same constant.
- *
- * `MCPOptions` does not declare `metadata`, even though the runtime reads it.
- * A literal passed straight to `mcp({...})` would be refused by the
- * excess-property check; a literal assigned to a variable first is not fresh
- * any more, so the same object goes through untouched. That is the whole reason
- * this is a `const` rather than an argument — not style, and not an
- * `as never` that would throw the rest of the type checking away with it.
- */
-const mcpOptions = {
-  loginPage: "/login",
-  metadata: MCP_METADATA,
-  oidcConfig: {
-    // Stated twice, and not by choice: `oidcConfig` is the OIDC provider's
-    // own options object, which requires it. The plugin overwrites this
-    // with the value above, so the two can only ever be the same — kept
-    // identical so a reader is not left deciding which one wins.
-    loginPage: "/login",
-    /**
-     * The screen a person actually sees before a token exists.
-     *
-     * Without it the plugin issues the code even when `prompt=consent` is
-     * asked for — `authorize.mjs` falls through to the redirect when no
-     * consent page is configured. With it, the browser is sent to
-     * `/consent?consent_code=…&client_id=…&scope=…` and nothing is minted
-     * until that page posts `{ accept: true }`.
-     */
-    consentPage: MCP_CONSENT_PAGE,
-    requirePKCE: true,
-    scopes: ["read", "write"],
-    // What a client sees at /.well-known/oauth-protected-resource. The
-    // OpenID four are what the plugin always issues; the two after them
-    // are the ones that decide anything here.
-    metadata: MCP_METADATA,
-  },
-}
 
 export const auth = betterAuth({
   appName: "Quincy",
@@ -466,124 +376,44 @@ export const auth = betterAuth({
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       /**
-       * The two rules this app adds to the MCP plugin's OAuth server.
+       * The provider's admin OAuth surface, closed.
        *
-       * Both are here rather than in the plugin's own options because the
-       * plugin has no option for either: `prompt` is whatever the client sent,
-       * and `/mcp/register` is unauthenticated by design (RFC 7591). The
-       * decision itself is `mcpGateStep` in lib/mcp-gate.ts, which is pure and
-       * has a test; this block is the two lines of plumbing around it.
-       */
-      const gate = mcpGateStep(ctx.path)
-
-      if (gate === "force-consent") {
-        /**
-         * Consent, always, whatever the client asked for.
-         *
-         * Without this the plugin issues the code the moment the owner has a
-         * session — `authorize.mjs` short-circuits on `prompt !== "consent"` —
-         * so a client that never sends `prompt` gets a token with no screen in
-         * front of it. Mutated in place rather than reassigned: a before-hook
-         * is handed a shallow copy of the context, so `ctx.query = {...}` is
-         * discarded and `ctx.query.prompt = ...` is not.
-         *
-         * It survives the login round trip on its own. When nobody is signed
-         * in the plugin stores this query in the `oidc_login_prompt` cookie and
-         * its after-hook replays it after sign-in, dropping only `login`.
-         */
-        forceConsentPrompt(ctx.query)
-        return
-      }
-
-      if (gate === "require-session") {
-        /**
-         * A stranger may not register a client.
-         *
-         * RFC 7591 anonymous registration is what the plugin implements and
-         * what this trades away, deliberately: an unauthenticated POST writes a
-         * row to `oauth_application` for anyone who can reach the origin, and a
-         * client with no `userId` cannot be listed on /settings or removed
-         * there. MCP clients are registered by the person who is going to use
-         * them, so a signed-in browser is the honest requirement. The cost is
-         * that a client cannot discover-and-register on its own; docs/mcp.md
-         * says how to do it by hand.
-         */
-        const session = await getSessionFromCtx(ctx)
-
-        if (!session?.user?.id) {
-          throw new APIError("UNAUTHORIZED", {
-            error: "invalid_client",
-            error_description: MCP_REGISTER_REFUSAL,
-            message: MCP_REGISTER_REFUSAL,
-          })
-        }
-
-        return
-      }
-
-      /**
-       * The MCP half of the session read. See `runAsMcpUser` above for why it
-       * is here rather than in a second copy of the write path.
+       * `@better-auth/oauth-provider` registers seven endpoints under
+       * `/admin/oauth2/**` — create and update a client, create, read, update
+       * and delete a resource, link and unlink a client to one. They are gated
+       * by `clientPrivileges` and `resourcePrivileges`, and the plugin says in
+       * its own comment (authorize-*.mjs, `assertResourcePrivileges`) that an
+       * undefined callback "degrades to any authenticated session can manage
+       * resources". `metadata: { SERVER_ONLY: true }` marks them as not
+       * client-callable; it does not take them off the router, and an ordinary
+       * `fetch` reaches them.
        *
-       * Returning a value from a before-hook short-circuits the endpoint, so
-       * this *is* the answer `auth.api.getSession` gives — which is what makes
-       * `captureToRiff` and `draftAngle` work unchanged over a bearer token.
-       * The store is empty on every request that is not an MCP tool call, so
-       * this branch costs one comparison and falls through.
+       * What they are worth to a stranger with a free account: admin create
+       * takes `skip_consent`, which is the one screen standing between a
+       * program and somebody's material, plus `require_pkce` and
+       * `enable_end_session`; resource update takes `accessTokenTtl` and
+       * `disabled`, which are the lifetime and the on-switch of every token
+       * this server issues.
+       *
+       * Nothing in this app calls one. /settings registers through
+       * `/oauth2/create-client` and removes through `/oauth2/delete-client`,
+       * both of which are user-scoped and neither of which is under this
+       * prefix. So the whole prefix is a 404.
+       *
+       * A prefix rather than `disabledPaths`: that option is an exact-match
+       * `includes` against the normalized path (better-auth/dist/api/index.mjs
+       * ~166), and `/admin/oauth2/resources/:identifier` and
+       * `/admin/oauth2/resources/:identifier/clients/:client_id` are
+       * parameterised — there is no finite list of strings to put in it.
+       *
+       * NOT_FOUND rather than UNAUTHORIZED, because "this server has no such
+       * endpoint" is true and is the smaller thing to say. The predicate is
+       * `isAdminOAuthPath` in lib/mcp-gate.ts so it has a test; it anchors on
+       * `/admin/oauth2/` and on the exact string, so `/oauth2/create-client`
+       * is untouched.
        */
-      if (ctx.path === "/get-session") {
-        const actor = mcpActor.getStore()
-
-        if (!actor) {
-          return
-        }
-
-        // The real row, not a synthesised one. `trialEndsAt` and `timezone`
-        // ride along on it, and the entitlement gate inside the write actions
-        // reads exactly those — a stub would hand every MCP caller a free day.
-        const user = await ctx.context.internalAdapter.findUserById(
-          actor.userId
-        )
-
-        if (!user) {
-          return
-        }
-
-        /**
-         * A banned account has no session, over a token or over a cookie.
-         *
-         * The admin plugin ends the browser sessions when somebody is banned;
-         * it knows nothing about `oauth_access_token`, so an MCP client keeps
-         * working until its token expires and its refresh token keeps minting
-         * new ones for a week after that. Falling through here rather than
-         * answering — the endpoint then resolves no session, and both writes
-         * say "Not signed in." The route refuses earlier and more plainly with
-         * a 401; this is the second gate, on the path a tool actually takes.
-         */
-        // Cast because `banned` is the admin plugin's column: it is on the row
-        // and off the internal adapter's `User` type, which knows only the core
-        // fields. Read as an unknown property rather than widened to `any`.
-        if ((user as { banned?: boolean | null }).banned) {
-          return
-        }
-
-        return ctx.json({
-          session: {
-            // Prefixed so a session that came from a token is distinguishable
-            // from one that came from a cookie at a glance in a log.
-            id: `mcp_${actor.userId}`,
-            token: "",
-            userId: actor.userId,
-            // The access token's own expiry is what bounds this; the value here
-            // is never persisted and never re-read.
-            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            ipAddress: null,
-            userAgent: null,
-          },
-          user,
-        })
+      if (isAdminOAuthPath(ctx.path)) {
+        throw new APIError("NOT_FOUND", { message: "Not found." })
       }
 
       if (ctx.path !== "/subscription/upgrade") {
@@ -698,40 +528,130 @@ export const auth = betterAuth({
       },
     }),
     /**
+     * The signing keyring, and it is a dependency rather than a feature.
+     *
+     * `@better-auth/mcp` issues an access token as a JWT whenever the request
+     * names a resource, which is every request here — the token is
+     * audience-bound to `MCP_RESOURCE`. `requireMcpAuth` then verifies it
+     * against `/api/auth/jwks`, which is this plugin. Without it the provider
+     * refuses to boot, and it is what adds the `jwks` table to the schema.
+     */
+    jwt(),
+    /**
      * Quincy as an OAuth 2.1 authorization server, so an outside agent can
      * reach the tools the Studio chat has. See lib/mcp.ts and docs/mcp.md.
      *
+     * `@better-auth/mcp` is `@better-auth/oauth-provider` configured for MCP.
+     * The core `mcp()` plugin this replaced was deprecated in 1.7 and is gone
+     * in the next release; every protocol path moved from `/mcp/*` to
+     * `/oauth2/*` with it, which a client discovers from the metadata rather
+     * than being told.
+     *
      * `loginPage` is `/login`, which is the route this app actually has —
-     * proxy.ts lists it under AUTH_PAGES and the plugin sends an unauthenticated
-     * authorization request there, so a wrong value here is a 404 in the middle
-     * of somebody's consent flow.
+     * proxy.ts lists it under AUTH_PAGES and the provider sends an
+     * unauthenticated authorization request there, so a wrong value here is a
+     * 404 in the middle of somebody's consent flow.
      *
-     * **Dynamic client registration is on, and gated.** The plugin's
-     * `/mcp/register` takes an unauthenticated POST, which is what RFC 7591
-     * asks for; the before-hook above requires a session on it anyway. A
-     * registration buys a client id and nothing else, but an anonymous one
-     * leaves a row in `oauth_application` that nobody owns — invisible on
-     * /settings and impossible to remove there. The trade is written out at
-     * `MCP_REGISTER_REFUSAL` in lib/mcp-gate.ts.
+     * **Consent is not optional, and no hook is needed to make it so.** The
+     * provider issues a code without a screen only when a stored `oauthConsent`
+     * row already covers every requested scope, claim and resource. The version
+     * this replaced short-circuited on `prompt !== "consent"` instead, which is
+     * why lib/auth.ts used to force the value; that hook is deleted, and the
+     * behaviour it was defending is now the plugin's own.
      *
-     * **Consent is not optional.** `consentPage` gives the flow a real screen
-     * and the before-hook forces `prompt=consent`, so neither half can be
-     * skipped by a client that simply does not ask for it.
+     * **Dynamic client registration is off**, which is the 1.7 default and is
+     * left alone. `allowDynamicClientRegistration` and
+     * `allowUnauthenticatedClientRegistration` are both unset, so
+     * `/oauth2/register` answers 403 to everyone. A client identifies itself
+     * one of two ways instead: a Client ID Metadata Document, which `cimd()`
+     * below verifies over HTTPS, or a registration the owner makes on
+     * /settings through `/oauth2/create-client`. Both are better than the RFC
+     * 7591 anonymous POST the old plugin exposed — one proves domain
+     * ownership, the other has a person behind it.
      *
-     * `requirePKCE` is asked for explicitly rather than inherited. A public
-     * client (`token_endpoint_auth_method: "none"`, which is what every MCP
-     * client registers as) is already refused without a verifier; this extends
-     * the same rule to a confidential client, so no registration shape can opt
-     * out of it. `allowPlainCodeChallengeMethod` stays at its default of false,
-     * so S256 is the only method — the metadata says so too.
+     * PKCE is not an option here any more, it is the rule:
+     * `code_challenge_methods_supported` is `["S256"]` and nothing else, for
+     * every client shape.
      *
-     * The two scopes are `read` and `write`, and lib/mcp.ts is where they are
-     * spent: `write` is required for the two tools that cost money, and there
-     * is deliberately no scope that can approve, schedule or publish. They are
-     * written out here rather than imported so this file keeps its own import
-     * graph — lib/mcp.ts reaches the drafting model and the metering tables.
+     * The six scopes are the four OpenID ones plus `read` and `write`, and
+     * lib/mcp.ts is where the last two are spent: `write` is required for the
+     * two tools that cost money, and there is deliberately no scope that can
+     * approve, schedule or publish. The provider serves them at
+     * `/.well-known/oauth-authorization-server` and serves `read` and `write`
+     * alone at `/.well-known/oauth-protected-resource` — it drops the identity
+     * scopes from the second document itself, because they are facts about
+     * this server rather than about the MCP endpoint.
      */
-    mcp(mcpOptions),
+    mcp({
+      loginPage: "/login",
+      consentPage: MCP_CONSENT_PAGE,
+      resource: MCP_RESOURCE,
+      scopes: [...MCP_SCOPES_SUPPORTED],
+      /**
+       * RBAC on clients, and the second half of closing the admin surface.
+       *
+       * `assertClientPrivileges` runs on every client mutation, admin and
+       * user-scoped alike, and it is handed the *action* rather than the path.
+       * Two of those actions are the product: `create` is /settings registering
+       * an agent through `/oauth2/create-client`, and `delete` is Remove on the
+       * same page. Everything else — read, list, update, rotate, and
+       * configuring client-credentials scopes for a grant this server does not
+       * issue — has no caller in this repo, so it is refused.
+       *
+       * This is deliberately not "return false". The plugin enforces the same
+       * hook at the shared creation chokepoint, so a blanket refusal would take
+       * the /settings registration form down with the admin endpoints.
+       *
+       * Note what defining this callback *does not* loosen:
+       * `configure-client-credentials-scopes` throws UNAUTHORIZED outright when
+       * the option is undefined, so returning false for it keeps that exact
+       * behaviour rather than opening it.
+       *
+       * The seed path does not come through here. `seedResources` writes
+       * `oauth_resource` with `ctx.adapter` at init, never through an endpoint.
+       */
+      clientPrivileges: ({ action }) =>
+        action === "create" || action === "delete",
+      /**
+       * RBAC on resources. Every caller of this is an admin endpoint under
+       * `/admin/oauth2/resources`, which the hook above already answers 404 to,
+       * so `false` here costs nothing and is what the plugin's own comment asks
+       * for: with the callback undefined the gate "degrades to any
+       * authenticated session can manage resources".
+       *
+       * The one resource this server has is seeded from the `resource` option
+       * at boot. Nothing should ever create, retitle, re-TTL or disable it over
+       * HTTP.
+       */
+      resourcePrivileges: () => false,
+    }),
+    /**
+     * Client ID Metadata Documents, the MCP 2026-07-28 way for a client to say
+     * who it is without anybody registering it.
+     *
+     * The client presents an HTTPS URL as its `client_id`; the plugin fetches
+     * the document at that URL and creates the client from it. That is the
+     * replacement for anonymous dynamic registration and it is a strictly
+     * better trade: a stranger can still bring a client, but the client's
+     * identity is pinned to a domain it controls rather than to a name it
+     * typed.
+     *
+     * `fetchClientMetadataResource` comes from `@better-auth/cimd/node` and is
+     * not interchangeable with `fetch`. It resolves the hostname once, refuses
+     * RFC 6890 special-use addresses, pins the approved address for the
+     * connection and follows no redirects — the guarantees that stop a
+     * `client_id` URL being used to make this server fetch its own metadata
+     * service. Wrapping the standard Fetch API cannot provide them.
+     *
+     * `metadataProfile` pins CIMD draft-00 as MCP 2026-07-28 requires, which
+     * is what makes `client_name` and `redirect_uris` mandatory in the
+     * document. Without it the generic draft-02 rules apply and a document
+     * with no name would produce a consent screen with nothing to name.
+     */
+    cimd({
+      fetchClientMetadataResource,
+      metadataProfile: "mcp-2026-07-28",
+    }),
     // nextCookies must stay last. It works by wrapping the response to flush
     // Set-Cookie through Next's cookies() API, so any plugin registered after
     // it would have its cookies written after the flush and silently dropped.

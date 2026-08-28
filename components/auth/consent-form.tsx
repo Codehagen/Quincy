@@ -16,27 +16,32 @@ import { Button } from "@/components/ui/button"
  * label, and this is the one screen in the product where the label is the whole
  * decision. Denying is also free and reversible: the client asks again.
  *
- * The post goes to the OIDC provider's own consent endpoint, which the `mcp`
- * plugin re-exports unchanged — `/api/auth/oauth2/consent`, body
- * `{ accept, consent_code }`. It answers `{ redirectURI }` either way, and
- * that URI is what carries the code (or `error=access_denied`) back to the
- * client. `credentials: "include"` because the endpoint sits behind the session
- * middleware and also reads the signed `oidc_consent_prompt` cookie when the
- * code is not in the body.
+ * The post goes to the OAuth provider's consent endpoint —
+ * `/api/auth/oauth2/consent`, body `{ accept, oauth_query }` — where
+ * `oauth_query` is the whole signed authorization query this page was opened
+ * with. The provider verifies that signature before it reads anything, so the
+ * query is handed back exactly as it arrived rather than restated.
+ *
+ * It answers `{ redirect: true, url }` either way, and that URL is what carries
+ * the authorization code (or `error=access_denied`) back to the client.
+ * `Accept: application/json` is set explicitly: the endpoint answers a browser
+ * navigation with a 302 and a `fetch` with JSON, and the header is what makes
+ * that choice unambiguous. `credentials: "include"` because the endpoint sits
+ * behind the session middleware.
  *
  * `window.location.assign` rather than the router: the destination is usually
  * not this app at all — `http://127.0.0.1:…` for a terminal client, or a
  * custom scheme for an editor — and Next's router cannot navigate to either.
  */
 export function ConsentForm({
-  consentCode,
+  oauthQuery,
   clientName,
   destination,
   disabled,
   email,
   permissions,
 }: {
-  consentCode: string | null
+  oauthQuery: string | null
   clientName: string | null
   destination: string | null
   disabled: boolean
@@ -60,18 +65,19 @@ export function ConsentForm({
     try {
       const response = await fetch(MCP_CONSENT_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         credentials: "include",
-        body: JSON.stringify(
-          consentCode ? { accept, consent_code: consentCode } : { accept }
-        ),
+        body: JSON.stringify({ accept, oauth_query: oauthQuery }),
       })
 
       const body = (await response.json().catch(() => null)) as {
-        redirectURI?: string
+        url?: string
       } | null
 
-      if (!response.ok || !body?.redirectURI) {
+      if (!response.ok || !body?.url) {
         setPending(null)
         setError(
           "That request has expired. Ask the agent to connect again and this page will come back."
@@ -79,14 +85,14 @@ export function ConsentForm({
         return
       }
 
-      window.location.assign(body.redirectURI)
+      window.location.assign(body.url)
     } catch {
       setPending(null)
       setError("Could not reach the server. Check your connection.")
     }
   }
 
-  if (!consentCode || disabled) {
+  if (!oauthQuery || disabled) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-section">Nothing to connect</h1>

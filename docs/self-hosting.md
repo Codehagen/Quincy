@@ -36,6 +36,15 @@ Fill in `.env.local`. Every variable is documented in
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
 | `BETTER_AUTH_URL` | `http://localhost:3000` |
 
+`BETTER_AUTH_URL` is the only one of the three with a fallback, and the fallback
+is for `pnpm test` and a first `pnpm dev` — **the app refuses to boot without it
+when `NODE_ENV` is `production`.** It is not just a redirect base: it is the
+OAuth issuer, the MCP protected-resource identifier, and the `aud` claim on
+every access token the MCP server signs (`lib/mcp-gate.ts`). Left unset in
+production it would publish `hirequincy.com` as your server's identity and then
+refuse every token issued against it, with a 401 that names nothing. So it
+throws at import instead, where a deploy log is read.
+
 Everything else — Resend, Stripe, the X and LinkedIn apps, the GitHub App,
 S3, the AI gateway — is optional and degrades gracefully. An empty Resend key
 means mail is skipped and logged, not a crash.
@@ -119,10 +128,12 @@ npx tsx --env-file=.env.local scripts/apply-mcp-oauth.ts
 npx tsx --env-file=.env.local scripts/apply-post-metric.ts
 ```
 
-- **`apply-mcp-oauth.ts`** — `oauth_application`, `oauth_access_token` and
-  `oauth_consent`, the three tables Better Auth's MCP plugin needs. Without
-  them the server runs and the first client to connect fails inside somebody
-  else's tool.
+- **`apply-mcp-oauth.ts`** — `jwks` and the seven `oauth_*` tables
+  `@better-auth/mcp` needs. **Run this before deploying, not after.** The OAuth
+  provider seeds `oauth_resource` when the auth instance boots, and on the Neon
+  driver a missing table escapes the provider's own tolerance for it — so
+  `auth.api.getSession` throws and nobody can sign in until this has run. See
+  [`docs/mcp.md`](mcp.md), "Apply it before deploying".
 - **`apply-post-metric.ts`** — the `post_metric` table and
   `channel_connection.last_metrics_at`. Without them `/numbers` has no series
   and the daily metrics refresh has nowhere to write.
@@ -131,7 +142,8 @@ npx tsx --env-file=.env.local scripts/apply-post-metric.ts
 
 The reference deployment is [Vercel](https://vercel.com): import the repo,
 set the environment variables from your `.env.local` (with
-`BETTER_AUTH_URL` pointing at your production domain), and deploy. Cron
+`BETTER_AUTH_URL` pointing at your production domain — the build refuses
+without it), and deploy. Cron
 routes are defined in [`vercel.json`](../vercel.json).
 
 Anywhere else, `pnpm build && pnpm start` serves the app; you are

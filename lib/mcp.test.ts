@@ -1,17 +1,23 @@
+import { readFile } from "node:fs/promises"
+
 import { tool, type Tool } from "ai"
 import { z } from "zod"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   accountVerdict,
+  atAgentLimit,
   describeScopes,
-  forceConsentPrompt,
-  MCP_METADATA,
+  isAdminOAuthPath,
+  MCP_CLIENT_NAME_MAX,
+  MCP_CLIENTS_PER_USER,
   MCP_REQUESTS_PER_MINUTE,
+  MCP_RESOURCE,
+  MCP_SCOPES_SUPPORTED,
   MCP_TOOLS,
-  mcpGateStep,
   parseScopes,
   rateLimitEntries,
+  readAgentRegistration,
   resetRateLimit,
   scopeFor,
   takeRequest,
@@ -45,9 +51,7 @@ import {
  * database.
  */
 
-function fakeTools(
-  overrides: Record<string, Tool> = {}
-): Record<string, Tool> {
+function fakeTools(overrides: Record<string, Tool> = {}): Record<string, Tool> {
   const trivial = (name: string) =>
     tool({
       description: `${name} description`,
@@ -127,7 +131,10 @@ describe("the allow-list", () => {
   it("omits a tool that has no execute, because it could only fail", () => {
     const mapped = toMcpTools(
       {
-        read_riffs: { description: "no body", inputSchema: z.object({}) } as Tool,
+        read_riffs: {
+          description: "no body",
+          inputSchema: z.object({}),
+        } as Tool,
       },
       ["read_riffs"],
       { scopes: BOTH }
@@ -385,85 +392,21 @@ describe("the rate-limit map", () => {
  * re-exported here; lib/auth.ts imports them from there so the file that builds
  * `betterAuth()` does not inherit this file's import graph.
  *
- * Every one of these is a claim that used to be made by a comment and by
- * docs/mcp.md and by nothing that runs.
+ * Three of the old suites are gone with the code they covered:
+ * `mcpGateStep` and `forceConsentPrompt` (the 1.7 provider requires consent
+ * whenever no stored consent covers the scopes, so nothing has to force the
+ * prompt) and the registration gate (dynamic registration is off, so there is
+ * no unauthenticated POST to refuse). `MCP_METADATA` is gone too: the provider
+ * builds both discovery documents from one `scopes` list.
  */
-describe("the before-hook's decision", () => {
-  it("forces consent on the authorization request", () => {
-    expect(mcpGateStep("/mcp/authorize")).toBe("force-consent")
-  })
-
-  it("requires a session to register a client", () => {
-    expect(mcpGateStep("/mcp/register")).toBe("require-session")
-  })
-
-  it("leaves every other path alone", () => {
-    for (const path of [
-      "/mcp/token",
-      "/mcp/get-session",
-      "/get-session",
-      "/sign-in/email",
-      "/oauth2/consent",
-      // The prefix trap proxy.ts had. A path that merely starts with one of
-      // ours must not inherit its rule.
-      "/mcp/authorize-something",
-      "/mcp/registered",
-    ]) {
-      expect(mcpGateStep(path)).toBe("pass")
-    }
-  })
-})
-
-describe("forcing the consent prompt", () => {
-  it("adds consent when the client asked for nothing", () => {
-    const query: Record<string, unknown> = {
-      client_id: "abc",
-      response_type: "code",
-    }
-
-    forceConsentPrompt(query)
-
-    expect(query.prompt).toBe("consent")
-  })
-
-  it("overwrites a prompt that would skip the screen", () => {
-    // `none` is the one a client sends when it wants a token without a person
-    // in the loop, and the plugin compares the whole string to "consent".
-    for (const prompt of ["none", "login", "select_account", "none consent"]) {
-      const query: Record<string, unknown> = { prompt }
-      forceConsentPrompt(query)
-      expect(query.prompt).toBe("consent")
-    }
-  })
-
-  it("mutates in place rather than replacing the object", () => {
-    // Load-bearing: a before-hook is handed a shallow copy of the context, so
-    // a new object would be thrown away and the endpoint would read the old
-    // query. Same reference in, same reference out.
-    const query: Record<string, unknown> = { state: "xyz" }
-
-    expect(forceConsentPrompt(query)).toBe(query)
-    expect(query.state).toBe("xyz")
-  })
-
-  it("survives a request that carried no query at all", () => {
-    expect(forceConsentPrompt(undefined)).toBeUndefined()
-    expect(forceConsentPrompt(null)).toBeNull()
-  })
-})
-
-describe("the advertised metadata", () => {
-  it("names the two scopes that decide anything", () => {
-    // The bug this pins: the plugin builds
-    // /.well-known/oauth-authorization-server from the *top-level* `metadata`
-    // and the protected-resource document from `oidcConfig.metadata`. Only the
-    // second was set, so a client reading RFC 8414 never saw these two.
-    expect(MCP_METADATA.scopes_supported).toContain("read")
-    expect(MCP_METADATA.scopes_supported).toContain("write")
+describe("the advertised scopes", () => {
+  it("names the two that decide anything", () => {
+    expect(MCP_SCOPES_SUPPORTED).toContain("read")
+    expect(MCP_SCOPES_SUPPORTED).toContain("write")
   })
 
   it("keeps the four OpenID scopes the provider always issues", () => {
-    expect(MCP_METADATA.scopes_supported).toEqual([
+    expect([...MCP_SCOPES_SUPPORTED]).toEqual([
       "openid",
       "profile",
       "email",
@@ -471,6 +414,157 @@ describe("the advertised metadata", () => {
       "read",
       "write",
     ])
+  })
+})
+
+describe("the protected resource", () => {
+  /**
+   * The plugin refuses to boot on a resource it cannot bind a token to, and
+   * `requireMcpAuth` refuses every token whose audience is not this exact
+   * string. Both read the same constant, so what is worth asserting is the
+   * shape the plugin validates: absolute, no query, no fragment.
+   */
+  it("is an absolute URL ending at the MCP route", () => {
+    const url = new URL(MCP_RESOURCE)
+
+    expect(url.pathname).toBe("/api/mcp")
+    expect(url.search).toBe("")
+    expect(url.hash).toBe("")
+    expect(["https:", "http:"]).toContain(url.protocol)
+  })
+})
+
+/**
+ * Registering an agent by hand, which is the path a client without a Client ID
+ * Metadata Document takes. Every rule here is one the provider would also
+ * enforce, and the reason to enforce it twice is the error: the endpoint
+ * answers `invalid_redirect_uri` with a sentence about application types, and
+ * the person reading it typed a URL into a form.
+ */
+describe("registering an agent", () => {
+  const ok = {
+    name: "My terminal agent",
+    redirectUri: "https://agent.example.com/cb",
+  }
+
+  it("takes an https redirect on a public host as a web client", () => {
+    expect(readAgentRegistration(ok)).toEqual({
+      ok: true,
+      name: "My terminal agent",
+      redirectUri: "https://agent.example.com/cb",
+      applicationType: "web",
+    })
+  })
+
+  it("takes http on the three loopback names as a native client", () => {
+    for (const uri of [
+      "http://127.0.0.1:33418/callback",
+      "http://localhost:8976/cb",
+      "http://[::1]:4000/cb",
+    ]) {
+      const result = readAgentRegistration({ ...ok, redirectUri: uri })
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.applicationType).toBe("native")
+    }
+  })
+
+  it("takes the whole 127.0.0.0/8 range, which is what RFC 8252 says", () => {
+    // The provider's own `isLoopbackIP` accepts the range, so a form that took
+    // only 127.0.0.1 refused URIs the endpoint would have accepted — and
+    // refused them with a sentence listing three spellings, none of which was
+    // the one the agent printed. 127.0.0.53 is a stub resolver's address and
+    // agents do print it.
+    for (const uri of [
+      "http://127.0.0.2:9000/cb",
+      "http://127.0.0.53:9000/cb",
+      "http://127.1.2.3:9000/cb",
+    ]) {
+      const result = readAgentRegistration({ ...ok, redirectUri: uri })
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.applicationType).toBe("native")
+    }
+  })
+
+  it("does not read a public host that merely starts with 127 as loopback", () => {
+    // The test is on the octet, not on the prefix: 127.example.com and
+    // 1270.0.0.1 are not loopback and an authorization code sent to either
+    // leaves this machine.
+    for (const uri of [
+      "http://127.example.com/cb",
+      "http://1270.0.0.1/cb",
+      "http://12.7.0.1/cb",
+    ]) {
+      expect(readAgentRegistration({ ...ok, redirectUri: uri }).ok).toBe(false)
+    }
+  })
+
+  it("refuses http on anything that is not loopback", () => {
+    // The whole point of the rule: an authorization code sent in the clear to
+    // a host that is not this machine.
+    const result = readAgentRegistration({
+      ...ok,
+      redirectUri: "http://agent.example.com/cb",
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it("refuses https on loopback, which the provider would refuse too", () => {
+    // `web` refuses loopback and `native` refuses https loopback, so there is
+    // no application type this could be registered under.
+    expect(
+      readAgentRegistration({ ...ok, redirectUri: "https://127.0.0.1:9000/cb" })
+        .ok
+    ).toBe(false)
+  })
+
+  it("refuses a scheme that is neither", () => {
+    for (const uri of [
+      "vscode://callback",
+      "com.example.app:/cb",
+      "javascript:alert(1)",
+      "not a url",
+    ]) {
+      expect(readAgentRegistration({ ...ok, redirectUri: uri }).ok).toBe(false)
+    }
+  })
+
+  it("refuses a redirect URI carrying a fragment or credentials", () => {
+    expect(
+      readAgentRegistration({
+        ...ok,
+        redirectUri: "https://a.example.com/cb#x",
+      }).ok
+    ).toBe(false)
+    expect(
+      readAgentRegistration({
+        ...ok,
+        redirectUri: "https://user:pw@a.example.com/cb",
+      }).ok
+    ).toBe(false)
+  })
+
+  it("trims the name and refuses an empty one", () => {
+    const trimmed = readAgentRegistration({ ...ok, name: "  Codex  " })
+    expect(trimmed.ok && trimmed.name).toBe("Codex")
+
+    expect(readAgentRegistration({ ...ok, name: "   " }).ok).toBe(false)
+  })
+
+  it("refuses a name longer than the label it has to fit in", () => {
+    expect(
+      readAgentRegistration({ ...ok, name: "a".repeat(MCP_CLIENT_NAME_MAX) }).ok
+    ).toBe(true)
+    expect(
+      readAgentRegistration({
+        ...ok,
+        name: "a".repeat(MCP_CLIENT_NAME_MAX + 1),
+      }).ok
+    ).toBe(false)
+  })
+
+  it("refuses an empty redirect URI rather than registering a client that cannot be used", () => {
+    expect(readAgentRegistration({ ...ok, redirectUri: "  " }).ok).toBe(false)
   })
 })
 
@@ -509,10 +603,10 @@ describe("the account behind a live token", () => {
   })
 
   it("answers 401 for an account that was banned after the token was minted", () => {
-    // `withMcpAuth` checks the token and stops. Banning ends the browser
-    // sessions and leaves `oauth_access_token` alone, so this is the only
-    // thing between a banned account and an hour of reads — plus a week of
-    // refreshes after that.
+    // `requireMcpAuth` verifies the token's signature and stops. Banning ends
+    // the browser sessions and cannot reach a JWT that is already signed, so
+    // this is the only thing between a banned account and the hour that token
+    // has left.
     expect(accountVerdict({ banned: true })).toEqual({
       ok: false,
       status: 401,
@@ -527,5 +621,135 @@ describe("the account behind a live token", () => {
       error: "No such account.",
     })
     expect(accountVerdict(undefined).ok).toBe(false)
+  })
+})
+
+/**
+ * The provider's admin OAuth surface, and why a predicate exists for it.
+ *
+ * `@better-auth/oauth-provider` registers seven endpoints under
+ * `/admin/oauth2`. Every one is gated on `clientPrivileges` or
+ * `resourcePrivileges`, and the plugin's own comment says an undefined callback
+ * "degrades to any authenticated session can manage resources" — which on a
+ * product anyone can sign up for is no gate at all. Admin create takes
+ * `skip_consent`; resource update takes `accessTokenTtl` and `disabled`.
+ *
+ * `lib/auth.ts` answers the whole prefix with 404 from its root before-hook.
+ * `disabledPaths` cannot do it: better-auth compares the normalized path with
+ * `includes`, an exact match, and two of the seven paths are parameterised.
+ */
+describe("the admin OAuth prefix", () => {
+  it("matches the flat admin endpoints", () => {
+    expect(isAdminOAuthPath("/admin/oauth2/create-client")).toBe(true)
+    expect(isAdminOAuthPath("/admin/oauth2/update-client")).toBe(true)
+    expect(isAdminOAuthPath("/admin/oauth2/resources")).toBe(true)
+  })
+
+  it("matches the parameterised resource endpoints, which a list cannot", () => {
+    expect(isAdminOAuthPath("/admin/oauth2/resources/x")).toBe(true)
+    expect(
+      isAdminOAuthPath("/admin/oauth2/resources/https%3A%2F%2Fa.example/clients/c")
+    ).toBe(true)
+    // The prefix itself, so a missing trailing segment is not a way through.
+    expect(isAdminOAuthPath("/admin/oauth2")).toBe(true)
+  })
+
+  it("leaves the user-scoped endpoints /settings needs alone", () => {
+    // These two are the product: Register an agent and Remove. Closing them
+    // would take the only sanctioned registration path down with the admin one.
+    expect(isAdminOAuthPath("/oauth2/create-client")).toBe(false)
+    expect(isAdminOAuthPath("/oauth2/delete-client")).toBe(false)
+    expect(isAdminOAuthPath("/oauth2/authorize")).toBe(false)
+    // Nothing that merely contains the string.
+    expect(isAdminOAuthPath("/oauth2/admin/oauth2/create-client")).toBe(false)
+    expect(isAdminOAuthPath("/admin/oauth2-something")).toBe(false)
+  })
+})
+
+/**
+ * The ceiling on registered clients.
+ *
+ * `oauth_client` is written by a session and a form, so without a bound one
+ * account can fill the table as fast as a script can post — and every row shows
+ * up on somebody's /settings.
+ */
+describe("the agent ceiling", () => {
+  it("lets an account register up to the limit", () => {
+    expect(atAgentLimit(0)).toBe(false)
+    expect(atAgentLimit(MCP_CLIENTS_PER_USER - 1)).toBe(false)
+  })
+
+  it("refuses at the limit and past it", () => {
+    expect(atAgentLimit(MCP_CLIENTS_PER_USER)).toBe(true)
+    expect(atAgentLimit(MCP_CLIENTS_PER_USER + 5)).toBe(true)
+  })
+
+  it("is a tripwire, not a product limit", () => {
+    // Same argument as MCP_DRAFTS_PER_DAY: nobody runs twenty agents, and an
+    // account that has twenty is a script.
+    expect(MCP_CLIENTS_PER_USER).toBe(20)
+  })
+})
+
+/**
+ * The session bridge, and the assertion that it is gone.
+ *
+ * `capture_riff` and `draft_angle` used to be the `/riffs` server actions,
+ * which read a cookie — so the MCP route ran them inside an `AsyncLocalStorage`
+ * and a `/get-session` branch in lib/auth.ts answered from it. That made a
+ * bearer token able to produce a session object, which is a thing no route
+ * should be able to do.
+ *
+ * Asserted against the source rather than by standing a route up, the same
+ * shape lib/adapt.test.ts uses for the cooldown: what is being pinned is a fact
+ * about the files.
+ */
+describe("the MCP write path", () => {
+  it("resolves no session anywhere", async () => {
+    const [route, auth, tools] = await Promise.all([
+      readFile(new URL("../app/api/mcp/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("./auth.ts", import.meta.url), "utf8"),
+      readFile(new URL("./chat-tools.ts", import.meta.url), "utf8"),
+    ])
+
+    // Code, not prose: all three files still *describe* the bridge in their
+    // comments, and that history is worth keeping. What must be gone is the
+    // import, the store and every call into it.
+    for (const source of [route, auth, tools]) {
+      expect(source).not.toContain("node:async_hooks")
+      expect(source).not.toContain("new AsyncLocalStorage")
+      expect(source).not.toMatch(/runAsMcpUser\(/)
+      expect(source).not.toMatch(/mcpActor\./)
+    }
+
+    // The hook that answered /get-session from the store, and the import that
+    // pulled the actions' session read into the tool factory.
+    expect(auth).not.toContain('ctx.path === "/get-session"')
+    expect(tools).not.toContain("riffs/actions")
+
+    // The tools take the user they were built with.
+    expect(tools).toContain("captureToRiffFor(user.id, text)")
+    expect(tools).toContain("draftAngleFor(user.id, angleId)")
+  })
+
+  it("still runs every gate the writes had", async () => {
+    const [route, writes] = await Promise.all([
+      readFile(new URL("../app/api/mcp/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("./riff-writes.ts", import.meta.url), "utf8"),
+    ])
+
+    // The route's own three, per tool call and before anything is spent.
+    expect(route).toContain("isEntitled(entitlement)")
+    expect(route).toContain("ceilingVerdict(spent.costMicros)")
+    expect(route).toContain("draftsToday(row.id)")
+
+    // The write path's own, which are the ones the bridge used to be needed
+    // for: a cooldown on each and an entitlement gate immediately before the
+    // spend. Removing the session read must not have removed these with it.
+    expect(writes.match(/spendCooldown\(userId, ADAPT_SPEND, 15_000\)/g))
+      .toHaveLength(2)
+    expect(writes.match(/resolveEntitlementForRequest\(\{ id: userId \}\)/g))
+      .toHaveLength(2)
+    expect(writes).toContain("spendTag: ADAPT_SPEND")
   })
 })

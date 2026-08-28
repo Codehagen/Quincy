@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { and, eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { draftFromAngle, type DraftAngleResult } from "@/lib/angle-draft"
+import { type DraftAngleResult } from "@/lib/angle-draft"
 import { isEntitled, resolveEntitlementForRequest } from "@/lib/entitlement"
 import { listConnections } from "@/lib/channels"
 import { renderBrainForUser } from "@/lib/brain"
@@ -19,9 +19,7 @@ import {
 import {
   channelGaps,
   CHANNEL_LABELS,
-  MAX_TRANSCRIPT_CHARS,
   createRiffFromPost,
-  createRiffFromSaid,
   getOwnedAngle,
   getOwnedRiff,
   newAngleId,
@@ -29,6 +27,11 @@ import {
   shapesForChannels,
   type Riff,
 } from "@/lib/riffs"
+import {
+  captureToRiffFor,
+  draftAngleFor,
+  type CaptureResult,
+} from "@/lib/riff-writes"
 import { getSession } from "@/lib/session"
 import { riff, riffAngle } from "@/lib/schema-app"
 import { recordUsage, spendCooldown } from "@/lib/usage"
@@ -36,12 +39,11 @@ import { recordUsage, spendCooldown } from "@/lib/usage"
 /**
  * Turn an angle into a draft, written in the user's voice.
  *
- * The work is in lib/angle-draft.ts. What stays here is the half a server
- * action owns and a cron must not have: the session, the entitlement gate, and
- * the two paths that have to be revalidated because a person is looking at
- * them. See the header there for why the split exists — Week Plan and Ship Log
- * write drafts with no cookie to read, and a second writer of `draft` rows was
- * the alternative.
+ * The session and nothing else. Everything the write does — the cooldown, the
+ * entitlement gate, the spend, the revalidation — is `draftAngleFor` in
+ * lib/riff-writes.ts, because the chat and `/api/mcp` reach the same write
+ * with a user they resolved their own way and a second copy of the money path
+ * is the copy that goes wrong.
  */
 export async function draftAngle(input: {
   /** The `riff_angle` row id. Everything else is read from the database. */
@@ -52,67 +54,7 @@ export async function draftAngle(input: {
     return { ok: false, reason: "auth", message: "Not signed in." }
   }
 
-  /**
-   * The cooldown, which this action went without for longer than it should
-   * have. AGENTS.md, "Money": a ceiling and a cooldown, not either.
-   *
-   * `MCP_DRAFTS_PER_DAY` is the ceiling and it is a day wide, so between here
-   * and there sat twenty presses at whatever rate a script could manage — and
-   * `draft_angle` is the most expensive call in the product. The idempotency
-   * guard inside `draftFromAngle` does not close it either: it refuses a second
-   * draft of the *same* angle, and an agent asked to "draft everything waiting"
-   * sends a different angle id every time.
-   *
-   * Same tag and same fifteen seconds as the three adapt buttons, because they
-   * spend from one wallet and a rate limit split per button is one a caller
-   * gets around by alternating. The spend below is tagged `ADAPT_SPEND` too —
-   * a cooldown that reads a tag nothing writes never fires.
-   */
-  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
-  if (!cooldown.ready) {
-    return {
-      ok: false,
-      reason: "cooldown",
-      message: `Give Quincy a moment — ${cooldown.secondsLeft}s before the next one.`,
-    }
-  }
-
-  const result = await draftFromAngle({
-    userId: session.user.id,
-    angleId: input.angleId,
-    spendTag: ADAPT_SPEND,
-    /**
-     * Called immediately before the spend, which is where it was.
-     *
-     * `resolveEntitlementForRequest` rather than the pure resolver, because
-     * this is a request and a trial may start on it. The order the checks run
-     * in is lib/angle-draft.ts's, unchanged: ownership and "nothing you have
-     * connected takes this shape" both answer before anybody is told their
-     * free day is over.
-     */
-    gate: async () => {
-      const entitlement = await resolveEntitlementForRequest(session.user)
-      if (isEntitled(entitlement)) return { ok: true }
-
-      return {
-        ok: false,
-        message:
-          entitlement.state === "lapsed"
-            ? "Your subscription is no longer active."
-            : "Your free day is over.",
-      }
-    },
-  })
-
-  // Only when something was actually written. The `existing` path returns a
-  // draft that was already there and already rendered, and revalidating for it
-  // would throw two caches away to show the same rows again.
-  if (result.ok && !result.existing) {
-    revalidatePath("/riffs")
-    revalidatePath("/drafts")
-  }
-
-  return result
+  return draftAngleFor(session.user.id, input.angleId)
 }
 
 /**
@@ -474,42 +416,12 @@ export async function askForAngle(input: {
 }
 
 /**
- * Paste somebody else's post; get angles you could take from it.
- *
- * The entry point that used to live on /drafts and produce finished writing.
- * plans/017 moved it here and stopped it one step earlier, for the reason
- * `createRiffFromPost` gives: going straight to a draft left no moment to
- * decide *which* idea to take, which is the whole job this page exists to do.
- *
- * Money patterns are plan 012's, in that order: session, entitlement, spend,
- * then a result object rather than a throw once anything has been spent.
- */
-
-export type CaptureResult =
-  | { ok: true; riffId: string; angles: number; groundedIn: string }
-  | { ok: false; message: string }
-
-/**
  * The user's own material, typed or pasted, turned into a riff with angles.
  *
- * **Not `adaptPostToRiff`, and the difference is the whole point.** That one
- * runs `generateAngles`, whose system prompt opens "Below is a post somebody
- * else wrote" and whose rules forbid reusing the source's numbers — correct
- * for a stranger's post, and exactly wrong for your own. Given a person's own
- * account of their own decision it has nothing to adapt, so it honestly returns
- * no angles. Measured on 2026-08-13: a nine-sentence paste with a number in it
- * came back empty twice through that path.
- *
- * This one runs `generateAnglesFromSaid` through `completeSpokenRiff`, which is
- * built for the user talking — a voice note, a passage from a meeting, and now
- * something they wrote in the chat. The numbers in it are theirs to keep.
- *
- * **No row exists until the angles do**, which is `createRiffFromSaid`'s whole
- * shape and the reason this does not call `completeSpokenRiff`. The first real
- * capture from the chat, on 2026-08-13, was killed mid-generation and left a
- * `working` row with the script in it and nothing else — the second riff on
- * that account to end up stranded. Nothing retries a chat tool, so the only
- * safe ordering is the one where a kill leaves nothing behind.
+ * The session and nothing else, for the reason `draftAngle` above gives. The
+ * entitlement gate, the cooldown, the length ceiling and the write itself are
+ * `captureToRiffFor` in lib/riff-writes.ts, which the chat and `/api/mcp`
+ * call with the user they resolved.
  */
 export async function captureToRiff(input: {
   /** Their words, verbatim. */
@@ -520,65 +432,20 @@ export async function captureToRiff(input: {
     return { ok: false, message: "Not signed in." }
   }
 
-  const entitlement = await resolveEntitlementForRequest(session.user)
-  if (!isEntitled(entitlement)) {
-    return {
-      ok: false,
-      message:
-        entitlement.state === "lapsed"
-          ? "Your subscription is no longer active."
-          : "Your free day is over.",
-    }
-  }
-
-  // The same family and the same window as the two adapt calls: all three are
-  // one model call started by one press, and a person capturing twice in ten
-  // seconds is a double submit rather than a second thought.
-  const cooldown = await spendCooldown(session.user.id, ADAPT_SPEND, 15_000)
-  if (!cooldown.ready) {
-    return {
-      ok: false,
-      message: `Give Quincy a moment — ${cooldown.secondsLeft}s before the next one.`,
-    }
-  }
-
-  const text = input.text.trim()
-
-  if (!text) {
-    return { ok: false, message: "There is nothing here to capture." }
-  }
-
-  if (text.length > MAX_TRANSCRIPT_CHARS) {
-    return {
-      ok: false,
-      message: `That is ${text.length} characters. Send at most ${MAX_TRANSCRIPT_CHARS} — the transferable idea is never in the last thousand.`,
-    }
-  }
-
-  // `notes`/`Pasted`, matching what `adaptPostToRiff` writes for a paste with
-  // no URL behind it. The tile says where the words came from, and these came
-  // from the person.
-  const result = await createRiffFromSaid({
-    userId: session.user.id,
-    text,
-    sourceId: "notes",
-    sourceLabel: "Pasted",
-  })
-
-  if (!result.ok) {
-    return { ok: false, message: result.message }
-  }
-
-  revalidatePath("/riffs")
-
-  return {
-    ok: true,
-    riffId: result.riffId,
-    angles: result.angles,
-    groundedIn: result.groundedIn,
-  }
+  return captureToRiffFor(session.user.id, input.text)
 }
 
+/**
+ * Paste somebody else's post; get angles you could take from it.
+ *
+ * The entry point that used to live on /drafts and produce finished writing.
+ * plans/017 moved it here and stopped it one step earlier, for the reason
+ * `createRiffFromPost` gives: going straight to a draft left no moment to
+ * decide *which* idea to take, which is the whole job this page exists to do.
+ *
+ * Money patterns are plan 012's, in that order: session, entitlement, spend,
+ * then a result object rather than a throw once anything has been spent.
+ */
 export type AdaptPostResult =
   | {
       ok: true

@@ -14,18 +14,18 @@ import { usageEvent } from "./schema-app"
  */
 export {
   accountVerdict,
+  atAgentLimit,
   describeScopes,
-  forceConsentPrompt,
-  mcpGateStep,
-  MCP_AUTHORIZE_PATH,
+  isAdminOAuthPath,
+  readAgentRegistration,
+  MCP_CLIENT_NAME_MAX,
+  MCP_CLIENTS_PER_USER,
   MCP_CONSENT_ENDPOINT,
   MCP_CONSENT_PAGE,
-  MCP_METADATA,
-  MCP_REGISTER_PATH,
-  MCP_REGISTER_REFUSAL,
+  MCP_RESOURCE,
   MCP_SCOPES_SUPPORTED,
+  type AgentRegistration,
   type McpAccountVerdict,
-  type McpGateStep,
 } from "./mcp-gate"
 
 /**
@@ -62,8 +62,9 @@ export {
  * stories — and with `write` it can spend a model call and leave a draft on
  * /drafts. It cannot approve, schedule or publish. The controls are the
  * consent screen the owner passes through to mint it (lib/mcp-gate.ts) and
- * the removal on /settings, which drops the client row and cascades every
- * token issued under it.
+ * the removal on /settings, which revokes the refresh token and drops the
+ * consent. A 1.7 access token is a signed JWT with no row behind it, so the
+ * hour it has left is the one thing removal cannot take back.
  */
 
 /** The reads. None of these spends anything; all are bounded strings. */
@@ -97,10 +98,10 @@ export function scopeFor(name: string): McpScope {
 /**
  * The scopes on an access token, as a set.
  *
- * Better Auth stores them space-separated on `oauth_access_token.scopes`
- * (`requestedScopes.join(" ")`), alongside the OpenID ones it always issues.
- * Splitting on any whitespace rather than a single space so a token minted by
- * hand with a tab in it is not silently read as one long scope.
+ * They arrive on the verified access token's `scope` claim, space-separated
+ * (`effectiveScopes.join(" ")`), alongside the OpenID ones the provider always
+ * issues. Splitting on any whitespace rather than a single space so a token
+ * minted by hand with a tab in it is not silently read as one long scope.
  */
 export function parseScopes(raw: string | null | undefined): Set<string> {
   return new Set(
@@ -147,9 +148,10 @@ export function textResult(value: unknown, isError = false): McpToolResult {
  * caller is a model, and "your free day is over" and "twenty drafts already"
  * want different next moves from it.
  */
-export type McpGuard = (
-  tool: { name: string; scope: McpScope }
-) => string | null | Promise<string | null>
+export type McpGuard = (tool: {
+  name: string
+  scope: McpScope
+}) => string | null | Promise<string | null>
 
 export type McpTool = {
   name: string
@@ -318,8 +320,7 @@ function sweepExpired(now: number): void {
 }
 
 export type RateVerdict =
-  | { ok: true; remaining: number }
-  | { ok: false; retryAfterSeconds: number }
+  { ok: true; remaining: number } | { ok: false; retryAfterSeconds: number }
 
 /**
  * Count one request against a user's minute, and say whether it may proceed.

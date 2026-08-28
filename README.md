@@ -61,10 +61,17 @@ follower charts, autoposting without approval.
 ## Agent access (MCP)
 
 Quincy is also a Model Context Protocol server, so an agent that is not the
-Studio chat can reach the same state. Point a client at `/api/mcp`; it
-registers itself and authorizes over OAuth 2.1 with PKCE, and you approve the
-scopes in a browser. Two scopes: `read` opens six reads, `write` adds
-capturing material and drafting an angle.
+Studio chat can reach the same state. Point a client at `/api/mcp` and it
+authorizes over OAuth 2.1 with PKCE at `/oauth2/*`, discovered from the
+metadata rather than configured. You approve the scopes in a browser. Two
+scopes: `read` opens six reads, `write` adds capturing material and drafting an
+angle.
+
+Anonymous self-registration is off. A client with a public HTTPS home
+identifies itself with a Client ID Metadata Document (MCP 2026-07-28); one
+running on your laptop is registered from **Settings → Register an agent**,
+which hands back a client id. Removing an agent there takes back your consent
+and revokes its refresh key.
 
 It cannot approve, schedule or publish — with any scope, on purpose. See the
 [MCP guide](docs/mcp.md).
