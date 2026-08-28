@@ -33,12 +33,12 @@ import { Input } from "@/components/ui/input"
  * the page revalidates, so the next render has no question to ask — which is
  * the truthful end state rather than a receipt claiming one.
  *
- * **Written for the merge question and now shared with the calendar's**
- * (plans/027 1c and 4d). Two sources ask, one form answers: what varies is the
- * sentence under the question, the placeholder, and which server action takes
- * the line. Everything a second copy would have had to keep in step — the
- * ceiling, the disabled rule, the error placement, the derived radius — is
- * here once.
+ * **Written for the merge question and shaped to be shared** (plans/027 1c).
+ * A second source that asks a question answers through this same form: what
+ * varies is the sentence under the question, the placeholder, and which server
+ * action takes the line. Everything a second copy would have had to keep in
+ * step — the ceiling, the disabled rule, the error placement, the derived
+ * radius — is here once.
  */
 
 export type SourceQuestion = {

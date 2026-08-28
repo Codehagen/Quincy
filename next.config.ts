@@ -157,10 +157,10 @@ const nextConfig: NextConfig = {
 /**
  * `withWorkflow` enables the `"use workflow"` and `"use step"` directives.
  *
- * Quincy's first background infrastructure. The Vercel crons in `vercel.json`
- * were the whole of it until now, and a cron is the wrong shape for a voice
- * note: it fires on a clock rather than on a person pressing record, and it
- * has no per-run state to show while the work is in flight.
+ * Quincy's first background infrastructure. Four Vercel crons were the whole
+ * of it until now, and a cron is the wrong shape for a voice note: it fires on
+ * a clock rather than on a person pressing record, and it has no per-run state
+ * to show while the work is in flight.
  *
  * `after()` was the cheaper alternative and does not survive the comparison.
  * It is not durable — a crashed function loses the work with nothing to

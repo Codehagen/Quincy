@@ -18,7 +18,9 @@ one read-only security review in between. Nothing was applied to Neon and no
 model was called; every check below is unit-level. The messaging channel
 (2a) and the first real post (2b) are deliberately not started — the owner
 asked for the channel to wait until the rest had landed, and 2b needs a
-browser and the owner's account.
+browser and the owner's account. The calendar source (4d) is built and then
+held: it is on branch `feat/calendar-source` and off `main`, because the
+owner has no Google OAuth client for it yet.
 
 | Item | State | Where |
 |---|---|---|
@@ -40,7 +42,7 @@ browser and the owner's account.
 | 4a retire the catalogue | built | 10 live of 29; 19 retired routes redirect to /rhythm |
 | 4b weekly review | built | `lib/weekly-review.ts`, Sun 19:00, no model call |
 | 4c week plan | built | `lib/week-plan.ts`, Mon 07:00, critique step, never approves |
-| 4d calendar source | built | read-only scope; owner must create the OAuth client |
+| 4d calendar source | held | built on branch `feat/calendar-source`; needs a Google OAuth client before it can return |
 | 4e MCP server | built, migration unapplied | `docs/mcp.md`; consent screen and revocation added after review |
 | 4f publisher boundary | built | `lib/publisher.ts`; external adapter env-gated |
 | 4g changelog claim | built | counts by date; entries for 23–26 Aug |

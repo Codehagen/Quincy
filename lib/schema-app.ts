@@ -752,28 +752,6 @@ export const SOURCE_ITEM_SOURCES = [
    */
   "hacker-news",
   "github-repo",
-  /**
-   * A meeting that already happened, reduced to what a question needs. See
-   * plans/027 4d and lib/calendar.ts.
-   *
-   * The thinnest row in this table by a distance, and deliberately: the title,
-   * the start, the end, how many people were invited, and whether the owner
-   * called it. **No description, no attendee names, no addresses, no link** —
-   * the description is read once, in memory, to decide whether the meeting
-   * touches a story the owner keeps, and is dropped with the response.
-   *
-   * `body` is the title rather than any prose, which makes both rules on
-   * `circleback` above bind harder rather than softer. `compileVoice` must
-   * never read this: a room name is not writing and not speech. And `proof`
-   * may not be cited from it — a meeting in somebody's calendar is not
-   * something anybody else can open, and a receipt nobody can check is not a
-   * receipt.
-   *
-   * `google-calendar` rather than `calendar` for the reason the two GitHub
-   * values give: the platform is named, so a second calendar provider is a
-   * second value rather than an ambiguity inside one namespace.
-   */
-  "google-calendar",
 ] as const
 
 export type SourceItemSource = (typeof SOURCE_ITEM_SOURCES)[number]

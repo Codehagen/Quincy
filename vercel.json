@@ -17,10 +17,6 @@
     {
       "path": "/api/cron/rhythms",
       "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/calendar",
-      "schedule": "5 * * * *"
     }
   ]
 }

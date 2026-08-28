@@ -72,7 +72,7 @@ const CAPABILITIES: Capability[] = [
     name: "Scheduled work",
     vars: ["CRON_SECRET"],
     without:
-      "all five crons answer 503 — nothing publishes, no rhythm runs, no meeting is read, and a post more than two hours late is refused rather than delayed",
+      "all four crons answer 503 — nothing publishes, no rhythm runs, and a post more than two hours late is refused rather than delayed",
   },
   {
     name: "Email",
@@ -137,24 +137,6 @@ const CAPABILITIES: Capability[] = [
     vars: ["GITHUB_TOKEN"],
     without:
       "the repository scan runs unauthenticated at ten searches a minute per IP, so on a shared address Trend Alerts falls back to Hacker News alone",
-  },
-  /**
-   * Read-only, and off by default because most deployments will never have a
-   * Google Cloud project. Its absence costs nothing else: the row on /sources
-   * hides its Connect button rather than offering one that fails on click, and
-   * every other source is unaffected.
-   *
-   * A separate client from `GOOGLE_CLIENT_ID` on purpose. That one is sign-in
-   * and holds no calendar scope; sharing it would mean adding
-   * `calendar.events.readonly` to the consent screen every person signing in
-   * has to read, which is a permission asked of everybody to serve the few who
-   * connect a calendar.
-   */
-  {
-    name: "Calendar as a source",
-    vars: ["GOOGLE_CALENDAR_CLIENT_ID", "GOOGLE_CALENDAR_CLIENT_SECRET"],
-    without:
-      "the calendar cannot be connected, so no meeting is read and no reflection question is ever asked",
   },
   {
     name: "Waitlist IP cooldown",

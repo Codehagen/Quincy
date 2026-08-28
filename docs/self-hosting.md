@@ -92,13 +92,6 @@ In short:
   publisher for {channel}" until you point these at a service you run. No code
   from that service is vendored here — Quincy POSTs to `{URL}/posts` with the
   token as a bearer, so its licence stays your deployment's question.
-- **`GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`** — the
-  calendar as a read-only source. A *second* Google client, not the sign-in
-  pair above: sharing one would put `calendar.events.readonly` on the consent
-  screen everybody signing in has to read. Redirect URI
-  `${BETTER_AUTH_URL}/api/connect/google-calendar/callback`, scope
-  `https://www.googleapis.com/auth/calendar.events.readonly`. Unset, the
-  calendar row on `/sources` hides its Connect button.
 - **Stripe** — billing, via the Better Auth Stripe plugin.
 - **AI gateway** — model access for drafting.
 
