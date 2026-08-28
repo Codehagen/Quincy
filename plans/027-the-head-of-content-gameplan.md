@@ -32,7 +32,7 @@ owner has no Google OAuth client for it yet.
 | 1f model A/B | run 2026-08-28 | `scripts/ab-shipped-models.ts`; ten merges, both models end to end; the cheap model scored higher on the three-beat checks (9/10 drafts make the owner the subject of the first line, the expensive one 1/8), never mixed languages, and cost 1/26 as much — **keep the cheap model**. Refusal is not stable run to run: two runs of the same model disagreed on two merges |
 | 2a messaging channel | held | by the owner's decision |
 | 2b one real post | owed | needs the owner and a browser |
-| 2c `post_metric` | built, migration unapplied | `scripts/apply-post-metric.ts`; daily refresh in `/api/cron/channels`; /numbers shows a live 30-day block |
+| 2c `post_metric` | built, migration applied 2026-08-28 | `scripts/apply-post-metric.ts`; daily refresh in `/api/cron/channels`; /numbers shows a live 30-day block |
 | 2d ship log | built | `lib/ship-log.ts`, rhythm `ship-log`, Fri 18:00 |
 | 3a strategy page | built | reuses `kind = "policy"`; `proposeStrategy` on /brain; no migration |
 | 3b needs material | built | `lib/story-gaps.ts`; on /brain and one line in the chat prompt |
@@ -59,10 +59,12 @@ every `select()` on that table: `listConnections` threw 42703 on
 shape. So the first two migrations below are not optional before `main` is
 deployed; they are what keeps /channels, /numbers and the rhythm sweep up.
 
-Migrations written and **not applied**, in the order to run them:
-`scripts/apply-post-metric.ts`, `scripts/apply-rhythm-run-result.ts`,
-`scripts/apply-mcp-oauth.ts` (after `pnpm auth:generate` confirms the
-hand-written block in `lib/schema.ts`).
+Migrations: `scripts/apply-post-metric.ts` and
+`scripts/apply-rhythm-run-result.ts` were **applied on 2026-08-28** and
+`main` deployed (`d350af1`). `scripts/apply-mcp-oauth.ts` is still
+**not applied**; run it after `pnpm auth:generate` confirms the hand-written
+block in `lib/schema.ts`. Until then `/api/mcp` answers 401 to everyone,
+which is the safe state.
 
 ## What the database says on 2026-08-26
 
