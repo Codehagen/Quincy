@@ -4,18 +4,54 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
+# A new push to a pull request cancels the run it supersedes. Runs on main are
+# never cancelled, so every commit there keeps its own result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# The three checks run side by side; each restores the same node_modules
+# (.github/actions/setup), so the wall time is the slowest check, not the sum.
 jobs:
-  check:
+  typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          filter: blob:none
+      - uses: ./.github/actions/setup
       - run: pnpm typecheck
-      - run: pnpm lint
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+      - uses: ./.github/actions/setup
+      - run: pnpm lint:oxlint
+      # ESLint's cache is keyed on file content, so it survives a fresh
+      # checkout; a config or dependency change starts a new one.
+      - uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/eslint
+          key: eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.mjs', '.oxlintrc.json') }}-${{ github.sha }}
+          restore-keys: eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.mjs', '.oxlintrc.json') }}-
+      - run: pnpm lint:eslint
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+      - uses: ./.github/actions/setup
       - run: pnpm test

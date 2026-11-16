@@ -1,0 +1,14 @@
+# Git hooks, installed by `pnpm install` (the `prepare` script).
+#
+# Before a push: oxlint on the files being pushed, and the full typecheck
+# (tsgo, about a second warm). Both together stay well under 15s. Tests,
+# ESLint and the build are left to CI on purpose — a hook people wait on is
+# a hook people skip. In an emergency: `git push --no-verify`.
+pre-push:
+  parallel: true
+  jobs:
+    - name: oxlint
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      run: pnpm exec oxlint {push_files}
+    - name: typecheck
+      run: pnpm typecheck

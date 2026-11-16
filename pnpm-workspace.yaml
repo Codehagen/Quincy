@@ -55,6 +55,9 @@ allowBuilds:
   # every step boundary, and prebuilt binaries exist for the platforms this
   # deploys to.
   cbor-extract: true
+  # Its postinstall only runs `lefthook install`. The `prepare` script does
+  # that instead, skipped under CI so Vercel and Actions never touch hooks.
+  lefthook: false
 
 minimumReleaseAgeExclude:
   # Not a version pin like the entries below it — this one is here because the
