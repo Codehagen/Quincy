@@ -10,6 +10,7 @@ import {
   Plug01Icon,
   QuillWrite01Icon,
   RepeatIcon,
+  Scissor01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
@@ -29,6 +30,8 @@ export type NavItem = {
   /** What a person reads. Never "Riffs": the page is Ideas (plans/029, "Words"). */
   label: string
   icon: IconSvgElement
+  /** A word beside the label, e.g. "Beta" on a surface that is not finished. */
+  badge?: string
 }
 
 /** The sidebar: the room you talk in, then the things you make and what feeds them. */
@@ -43,8 +46,9 @@ export const NAV: NavItem[] = [
   // In the sidebar, not in Setup: connecting a source is a thing you come
   // back to as the work changes, not a one-off.
   { href: "/sources", label: "Sources", icon: Plug01Icon },
-  // No Cuts row. /cuts is the largest unfinished surface in the app, and a
-  // row would promise a finished one (app/(app)/cuts/page.tsx, plans/031).
+  // The video editor. Still the largest unfinished surface (plans/031), so it
+  // carries "Beta" rather than promising a finished room.
+  { href: "/cuts", label: "Cuts", icon: Scissor01Icon, badge: "Beta" },
 ]
 
 /**

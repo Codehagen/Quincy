@@ -35,7 +35,7 @@ describe("isActive", () => {
 })
 
 describe("the route model (Desk)", () => {
-  it("is one flat sidebar list, Studio first, Sources last", () => {
+  it("is one flat sidebar list, Studio first, the Beta editor last", () => {
     expect(NAV.map((i) => i.label)).toEqual([
       "Studio",
       "Ideas",
@@ -43,7 +43,9 @@ describe("the route model (Desk)", () => {
       "Lineup",
       "Numbers",
       "Sources",
+      "Cuts",
     ])
+    expect(NAV.find((i) => i.href === "/cuts")?.badge).toBe("Beta")
   })
 
   it("puts setup and the account in the menu, not the sidebar", () => {
@@ -98,8 +100,8 @@ describe("the route model (Desk)", () => {
  * placed, or named below with the reason it has no row.
  */
 describe("every app route is reachable", () => {
-  // Not linked on purpose: /cuts is unfinished (nav.ts, plans/031).
-  const UNLINKED = new Set(["/cuts"])
+  // Every page has a row now; /cuts joined the sidebar as "Beta" (nav.ts).
+  const UNLINKED = new Set<string>([])
 
   function pages(dir: string, base = ""): string[] {
     const found: string[] = []

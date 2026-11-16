@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 
-import { NavRow } from "@/components/kit"
+import { NavRow, Tag } from "@/components/kit"
 import { QuincyMark } from "@/components/mascot"
 
 import { AccountMenu, type ShellUser } from "./account-menu"
@@ -54,6 +54,7 @@ export function AppSidebar({ user, waiting }: AppSidebarProps) {
                   current={current}
                   waiting={current ? 0 : waiting?.[item.href]}
                   density="compact"
+                  meta={item.badge ? <Tag>{item.badge}</Tag> : undefined}
                 >
                   {item.label}
                 </NavRow>
