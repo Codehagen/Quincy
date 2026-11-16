@@ -138,7 +138,10 @@ for a business.
 - [Better Auth](https://better-auth.com)
 - [Drizzle](https://orm.drizzle.team) on [Neon](https://neon.tech) Postgres
 - [Tailwind CSS v4](https://tailwindcss.com)
-- [Base UI](https://base-ui.com)
+- [shadcn/ui](https://ui.shadcn.com) on [Base UI](https://base-ui.com): the
+  components start from shadcn, and the chat in Studio follows shadcn's
+  chatbot template
+- [ui-sdk](https://ui-sdk.dev) for the behaviours Base UI does not cover
 - [Hugeicons](https://hugeicons.com)
 - [Resend](https://resend.com) for mail, [Stripe](https://stripe.com) for billing
 

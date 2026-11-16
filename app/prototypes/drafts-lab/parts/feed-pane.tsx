@@ -14,7 +14,9 @@ import { LAB_ACCOUNT, THREAD_BREAK, threadPosts, type LabDraft, type LabVersion 
 import { LabOptionsContext } from "../lab-options"
 import type { DraftsStore, Row } from "../use-drafts"
 import { Head, Notices, PostNow, Provenance, STRANDED, Status, noteFor, offerQuestion } from "./draft-sheet"
+import { FeedColumn, FeedPost, FeedSkeleton, FeedThread, type FeedPlatform } from "./feed/feed"
 import { feedCut } from "./feed-preview"
+import { MarginRoom } from "./margin-room"
 
 /**
  * C · Feed, picked (owner, 2026-11-16: "So the feed, but we need to make it
@@ -150,17 +152,15 @@ function VersionFeed({
   return (
     <section aria-labelledby={titleId}>
       <span id={titleId} className="sr-only">{`Draft for ${v.label}`}</span>
-      <div className="dl-room @container/kit-stage" data-channel={v.channel}>
+      <MarginRoom data-channel={v.channel}>
         <div ref={postRef} className="flex flex-col gap-kit-related">
-          {linkedin ? (
-            <LinkedInFeed v={v} posts={shown} writing={writing} field={field} onStartEdit={startEdit} />
-          ) : (
-            <XFeed v={v} posts={shown} writing={writing} field={field} onStartEdit={startEdit} />
-          )}
+          <MarginRoom.Column>
+            <DraftFeed platform={linkedin ? "linkedin" : "x"} posts={shown} writing={writing} field={field} onStartEdit={startEdit} />
+          </MarginRoom.Column>
 
           {editing ? (
             // The counter is ours, under the post: a ring is the composer's, not the feed's, and the column must read as the feed.
-            <div className="dl-col flex flex-wrap items-center gap-kit-controls">
+            <MarginRoom.Column className="flex flex-wrap items-center gap-kit-controls">
               <Button size="sm" variant="action" onClick={save}>
                 Save
               </Button>
@@ -170,14 +170,14 @@ function VersionFeed({
               <span aria-live="polite" className="ms-auto">
                 <Counter posts={shown} channel={v.channel} />
               </span>
-            </div>
+            </MarginRoom.Column>
           ) : (
             <>
-              <div className="dl-col">
+              <MarginRoom.Column>
                 <Notices v={v} text={shown.length > 1 ? shown[0]! : text} twin={twin} hook={draft.from.riffHook} />
-              </div>
+              </MarginRoom.Column>
               {writing ? (
-                <div className="dl-col flex flex-wrap items-center gap-kit-controls">
+                <MarginRoom.Column className="flex flex-wrap items-center gap-kit-controls">
                   <Button
                     size="sm"
                     variant={approveIsAction ? "action" : "quiet"}
@@ -198,9 +198,9 @@ function VersionFeed({
                       Discard
                     </HoldButton>
                   </span>
-                </div>
+                </MarginRoom.Column>
               ) : (
-                <div className="dl-col flex flex-col gap-kit-related">
+                <MarginRoom.Column className="flex flex-col gap-kit-related">
                   <Status line={line} sending={going.kind === "sending"} onReopen={line.undoable ? () => store.reopen(v.id) : undefined} />
                   {line.placeable || line.postable ? (
                     <div className="flex flex-wrap items-center gap-kit-controls">
@@ -224,12 +224,12 @@ function VersionFeed({
                       answered="Added to your voice. It's on your voice page now."
                     />
                   ) : null}
-                </div>
+                </MarginRoom.Column>
               )}
             </>
           )}
         </div>
-      </div>
+      </MarginRoom>
     </section>
   )
 }
@@ -272,20 +272,53 @@ type Field = {
   onKey: (e: React.KeyboardEvent) => void
 } | null
 
-/* ── X ───────────────────────────────────────────────────────────────── */
+/* ── The draft drawn as the feed, on the compound parts ──────────────── */
 
-function XFeed({ v, posts, writing, field, onStartEdit }: { v: LabVersion; posts: string[]; writing: boolean; field: Field; onStartEdit?: () => void }) {
-  const threadBeats = !field && posts.length === 3 && readBeats(posts.join("\n\n")) != null
+/**
+ * The draft's posts as the platform's feed, with a skeleton neighbour above
+ * and below. Reading: the words with their fold and Quincy's marks. Editing:
+ * each post's words as its field. A three-post thread whose middle post
+ * holds the number is bracketed one beat per post.
+ */
+function DraftFeed({
+  platform,
+  posts,
+  writing,
+  field,
+  onStartEdit,
+}: {
+  platform: FeedPlatform
+  posts: string[]
+  writing: boolean
+  field: Field
+  onStartEdit?: () => void
+}) {
+  const shown = platform === "linkedin" ? posts.slice(0, 1) : posts
+  const threadBeats = !field && shown.length === 3 && readBeats(shown.join("\n\n")) != null
   const BEATS = ["did", "happened", "meant"] as const
-  const own = posts.map((p, i) => {
+  const items = shown.map((p, i) => {
     const post = (
-      <XPost key={i} connectAbove={i > 0} connectBelow={i < posts.length - 1}>
-        {field ? (
-          <FeedField value={field.posts[i]!} label={posts.length > 1 ? `Post ${i + 1} of ${posts.length} for X` : "Text for X"} autoFocus={i === 0} onChange={(t) => field.set(i, t)} onKeyDown={field.onKey} />
-        ) : (
-          <FeedText text={p} channel="x" more="Show more" marks={!threadBeats} note={writing} onStartEdit={onStartEdit} />
-        )}
-      </XPost>
+      <FeedPost key={i} initials={LAB_ACCOUNT.initials}>
+        <FeedPost.Header
+          name={LAB_ACCOUNT.name}
+          handle={platform === "x" ? LAB_ACCOUNT.handle : undefined}
+          headline={platform === "linkedin" ? LAB_ACCOUNT.headline : undefined}
+        />
+        <FeedPost.Body>
+          {field ? (
+            <FeedPost.Field
+              value={field.posts[i]!}
+              onValueChange={(t) => field.set(i, t)}
+              onKeyDown={field.onKey}
+              autoFocus={i === 0}
+              aria-label={shown.length > 1 ? `Post ${i + 1} of ${shown.length} for X` : `Text for ${platform === "x" ? "X" : "LinkedIn"}`}
+            />
+          ) : (
+            <FeedText text={p} channel={platform} marks={!threadBeats} note={writing} onStartEdit={onStartEdit} />
+          )}
+        </FeedPost.Body>
+        <FeedPost.Actions />
+      </FeedPost>
     )
     return threadBeats ? (
       <BeatBracket key={i} beat={BEATS[i]!}>
@@ -295,220 +328,23 @@ function XFeed({ v, posts, writing, field, onStartEdit }: { v: LabVersion; posts
       post
     )
   })
+  const thread = <FeedThread>{items}</FeedThread>
   return (
-    <div className="dl-col xf">
-      <div aria-hidden className="xf-tabs">
-        <span className="xf-tab" data-on="">
-          For you
-        </span>
-        <span className="xf-tab">Following</span>
-      </div>
-      <XSkeleton />
-      {threadBeats ? <Beats>{own}</Beats> : own}
-      <XSkeleton />
-    </div>
-  )
-}
-
-function XPost({ connectAbove, connectBelow, children }: { connectAbove: boolean; connectBelow: boolean; children: React.ReactNode }) {
-  return (
-    <div className="xf-post" data-thread-above={connectAbove || undefined} data-thread-below={connectBelow || undefined}>
-      <div className="xf-gutter">
-        {connectAbove ? <span aria-hidden className="xf-line-above" /> : null}
-        <span aria-hidden className="xf-avatar">
-          {LAB_ACCOUNT.initials}
-        </span>
-        {connectBelow ? <span aria-hidden className="xf-line-below" /> : null}
-      </div>
-      <div className="xf-main">
-        <div className="xf-head">
-          <span className="xf-name">{LAB_ACCOUNT.name}</span>
-          <span className="xf-dim xf-handle">{`@${LAB_ACCOUNT.handle}`}</span>
-          <span className="xf-dim" aria-hidden>
-            ·
-          </span>
-          <span className="xf-dim">now</span>
-          <span aria-hidden className="xf-more">
-            <XIcon d={X_ICONS.more} />
-          </span>
-        </div>
-        {children}
-        <XActions />
-      </div>
-    </div>
-  )
-}
-
-function XActions() {
-  return (
-    <div aria-hidden className="xf-actions">
-      <span>
-        <XIcon d={X_ICONS.reply} />
-      </span>
-      <span>
-        <XIcon d={X_ICONS.repost} />
-      </span>
-      <span>
-        <XIcon d={X_ICONS.like} />
-      </span>
-      <span>
-        <XIcon d={X_ICONS.views} />
-      </span>
-      <span className="xf-actions-end">
-        <XIcon d={X_ICONS.bookmark} />
-        <XIcon d={X_ICONS.share} />
-      </span>
-    </div>
-  )
-}
-
-function XSkeleton() {
-  return (
-    <div aria-hidden className="xf-post xf-skel">
-      <div className="xf-gutter">
-        <span className="xf-avatar" />
-      </div>
-      <div className="xf-main">
-        <div className="xf-head">
-          <span className="xf-bar" style={{ width: "28%" }} />
-          <span className="xf-bar" style={{ width: "18%" }} />
-        </div>
-        <div className="flex flex-col gap-2 pt-1">
-          <span className="xf-bar" style={{ width: "94%" }} />
-          <span className="xf-bar" style={{ width: "86%" }} />
-          <span className="xf-bar" style={{ width: "48%" }} />
-        </div>
-        <XActions />
-      </div>
-    </div>
-  )
-}
-
-/**
- * X's action icons, drawn here in the same form (outline, round joins) on a
- * 24 grid: reply, repost, like, views, bookmark, share, and the "more" dots.
- */
-const X_ICONS = {
-  reply: "M4.5 10.5a6.5 6.5 0 0 1 6.5-6.5h2a6.5 6.5 0 0 1 0 13h-1.2L7 20.2V16.4a6.5 6.5 0 0 1-2.5-5.9Z",
-  repost: "M4.5 9V7.5A2.5 2.5 0 0 1 7 5h9.5m0 0L14 2.5M16.5 5 14 7.5M19.5 15v1.5A2.5 2.5 0 0 1 17 19H7.5m0 0L10 16.5M7.5 19l2.5 2.5",
-  like: "M12 20s-7.5-4.6-7.5-10A4.25 4.25 0 0 1 12 7.3 4.25 4.25 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z",
-  views: "M5 20V12M10 20V5M15 20v-9M20 20V8",
-  bookmark: "M6.5 4.5h11v15.5L12 16.2l-5.5 3.8V4.5Z",
-  share: "M12 3.5V15m0-11.5L7.5 8M12 3.5 16.5 8M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14",
-  more: "M5.5 12h.01M12 12h.01M18.5 12h.01",
-} as const
-
-function XIcon({ d }: { d: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="18.75" height="18.75" fill="none" stroke="currentColor" strokeWidth={d === X_ICONS.more ? 3 : 1.75} strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  )
-}
-
-/* ── LinkedIn ────────────────────────────────────────────────────────── */
-
-function LinkedInFeed({ v, posts, writing, field, onStartEdit }: { v: LabVersion; posts: string[]; writing: boolean; field: Field; onStartEdit?: () => void }) {
-  return (
-    <div className="dl-col lf">
-      <LinkedInSkeleton />
-      <div className="lf-card">
-        <div className="lf-head">
-          <span aria-hidden className="lf-avatar">
-            {LAB_ACCOUNT.initials}
-          </span>
-          <div className="min-w-0">
-            <div className="lf-name">{LAB_ACCOUNT.name}</div>
-            <div className="lf-dim lf-small truncate">{LAB_ACCOUNT.headline}</div>
-            <div className="lf-dim lf-small flex items-center gap-1">
-              now <span aria-hidden>·</span>
-              <svg aria-hidden viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <circle cx="8" cy="8" r="6.2" />
-                <path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.6 3.8 2.6 6.2s-.8 4.5-2.6 6.2M8 1.8C6.2 3.5 5.4 5.6 5.4 8s.8 4.5 2.6 6.2" />
-              </svg>
-            </div>
-          </div>
-        </div>
-        <div className="lf-body">
-          {field ? (
-            <FeedField value={field.posts[0]!} label="Text for LinkedIn" autoFocus onChange={(t) => field.set(0, t)} onKeyDown={field.onKey} />
-          ) : (
-            <FeedText text={posts[0]!} channel={v.channel} more="…more" marks note={writing} onStartEdit={onStartEdit} />
-          )}
-        </div>
-        <LinkedInActions />
-      </div>
-      <LinkedInSkeleton />
-    </div>
-  )
-}
-
-const LI_ICONS = {
-  Like: "M7.5 10.5V19.5H4.5V10.5h3Zm0 0 3.6-6.3a1.7 1.7 0 0 1 3.1 1.2l-.7 3.6h4.6a1.9 1.9 0 0 1 1.9 2.2l-1.1 6.6a2 2 0 0 1-2 1.7H7.5",
-  Comment: "M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4.5 3.5v-3.5h0a2 2 0 0 1-2-2v-8Z",
-  Repost: "M7 7.5h10.5l-2.5-2.5M17 16.5H6.5L9 19M17.5 7.5V12M6.5 16.5V12",
-  Send: "M20.5 3.5 3.5 10.2l6.8 3.1 3.1 6.8 7.1-16.6ZM10.3 13.3l4.6-4.6",
-} as const
-
-function LinkedInActions() {
-  return (
-    <div aria-hidden className="lf-actions">
-      {(Object.keys(LI_ICONS) as (keyof typeof LI_ICONS)[]).map((k) => (
-        <span key={k} className="lf-action">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d={LI_ICONS[k]} />
-          </svg>
-          <span>{k}</span>
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function LinkedInSkeleton() {
-  return (
-    <div aria-hidden className="lf-card lf-skel">
-      <div className="lf-head">
-        <span className="lf-avatar" />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-1">
-          <span className="xf-bar" style={{ width: "32%" }} />
-          <span className="xf-bar" style={{ width: "54%" }} />
-        </div>
-      </div>
-      <div className="lf-body flex flex-col gap-2">
-        <span className="xf-bar" style={{ width: "92%" }} />
-        <span className="xf-bar" style={{ width: "60%" }} />
-      </div>
-      <LinkedInActions />
-    </div>
+    <FeedColumn platform={platform}>
+      {platform === "x" ? (
+        <FeedColumn.Tabs>
+          <FeedColumn.Tab current>For you</FeedColumn.Tab>
+          <FeedColumn.Tab>Following</FeedColumn.Tab>
+        </FeedColumn.Tabs>
+      ) : null}
+      <FeedSkeleton />
+      {threadBeats ? <Beats>{thread}</Beats> : thread}
+      <FeedSkeleton />
+    </FeedColumn>
   )
 }
 
 /* ── The words: read with the fold and Quincy's marks, or edited ──────── */
-
-/** The body as the field, set exactly as the post's text, the caret at the end. */
-function FeedField({
-  value,
-  label,
-  autoFocus,
-  onChange,
-  onKeyDown,
-}: {
-  value: string
-  label: string
-  autoFocus?: boolean
-  onChange: (t: string) => void
-  onKeyDown: (e: React.KeyboardEvent) => void
-}) {
-  const ref = React.useRef<HTMLTextAreaElement>(null)
-  React.useEffect(() => {
-    const el = ref.current
-    if (!autoFocus || !el) return
-    el.focus({ preventScroll: true })
-    el.setSelectionRange(el.value.length, el.value.length)
-  }, [autoFocus])
-  return <textarea ref={ref} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} className="feed-text feed-field" />
-}
 
 type Placed = { text: string; start: number; end: number }
 
@@ -532,14 +368,12 @@ function placed(text: string, paras: Paragraph[]): Placed[][] {
 function FeedText({
   text,
   channel,
-  more,
   marks,
   note,
   onStartEdit,
 }: {
   text: string
   channel: string
-  more: string
   marks: boolean
   note: boolean
   onStartEdit?: () => void
@@ -563,11 +397,11 @@ function FeedText({
               <p>
                 {l.text.slice(0, split).replace(/\s+$/, "")}
                 {cut.kind === "fold" ? " " : null}
-                {cut.kind === "fold" ? <span className="feed-more">{more}</span> : null}
+                {cut.kind === "fold" ? <FeedPost.More /> : null}
               </p>
             ) : null}
-            {cut.kind === "limit" ? <span className="feed-more">{more}</span> : null}
-            <FoldLine kind={cut.kind!} channel={channel} />
+            {cut.kind === "limit" ? <FeedPost.More /> : null}
+            <FeedPost.Fold>{cut.kind === "fold" ? "The feed cuts here" : `Stops at ${CHANNEL_RULES[channel]?.limit}. The rest won't post`}</FeedPost.Fold>
             <p className="feed-behind">{l.text.slice(split).replace(/^\s+/, "")}</p>
           </React.Fragment>
         )
@@ -617,15 +451,5 @@ function FeedText({
     >
       {body}
     </div>
-  )
-}
-
-/** Where the feed stops showing it, drawn for you only (the feed draws nothing here). */
-function FoldLine({ kind, channel }: { kind: "fold" | "limit"; channel: string }) {
-  return (
-    <span role="separator" aria-label={kind === "fold" ? "The feed cuts here" : "The limit"} className="feed-fold">
-      <span aria-hidden className="feed-fold-rule" />
-      <span aria-hidden>{kind === "fold" ? "The feed cuts here" : `Stops at ${CHANNEL_RULES[channel]?.limit}. The rest won't post`}</span>
-    </span>
   )
 }

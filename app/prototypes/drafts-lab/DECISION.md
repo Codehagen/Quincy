@@ -197,6 +197,58 @@ keeps Table's left side as picked and replaces only the right pane. Round 1
      marks sit inside the clickable words. Only a click on a line of text
      opens it now.
 
+### API (a component API pass, 2026-11-16)
+
+The C · Feed parts, shaped as the product's API before the move. The code
+stays in the lab (parts/feed/feed.tsx, parts/margin-room.tsx,
+parts/feed-pane.tsx) until /drafts moves. After the pass the screens are
+pixel for pixel the same as before it, at 1440 light, for X, LinkedIn, the
+thread and the editing state.
+
+Rules every part follows: compound parts share state through context, not
+props passed down. The platform is set once on the column, and a post's
+place in a thread reaches it through context. Every part takes `ref`,
+spreads the rest of its props onto its root, and takes `className`. There
+is a `platform` variant, not booleans, and children instead of
+configuration objects. No part renders a button: the platform's actions
+are a picture (`aria-hidden`, inert), and the verbs live under the column
+in the kit's Buttons, which already default to `type="button"`.
+
+**Into `components/kit/`** (the kit's rules, any object, no platform look):
+
+| Part | Props | What it is |
+| --- | --- | --- |
+| `MarginRoom` | `objectWidth?` ("598px"), `align?` "start" \| "center", `ref`, `className`, rest on the root `div` | a `kit-stage` size container: from 32rem its Columns are the object's width less the margin and gap, so `BeatBracket` and `MarginNote` stand outside any object, not only a Card. Under 32rem the marks fall under their lines. Inside the object, `--kit-card-pad` is the distance from the text to the object's outer edge. |
+| `MarginRoom.Column` | `ref`, `className`, rest on the `div` | a block at the object's width: the object, its notices, its verbs |
+| `revealInPanel(el)` | an element inside a `PanelBody` | scroll that panel (never the page) the least that shows the element, instantly. It sits beside `revealDataListRow`. |
+
+**Into `components/drafts/feed/`** (drawn in the platform's look, which
+the kit must never carry; the colours stay in one stylesheet beside them):
+
+| Part | Props | What it is |
+| --- | --- | --- |
+| `FeedColumn` | `platform` "x" \| "linkedin" (required), `ref`, `className`, rest | X's 598 column with hairline sides, or LinkedIn's grey feed. It provides the platform to every part inside it. |
+| `FeedColumn.Tabs`, `FeedColumn.Tab` | `Tab`: `current?`, children | X's column-head tabs, a picture (`aria-hidden`) |
+| `FeedThread` | children (FeedPosts, or a wrapper such as a `BeatBracket` around one) | gives each child its place in the thread through context; posts draw the connector themselves |
+| `FeedPost` | `initials` (required), `ref`, `className`, rest | one post: X's avatar column and main column, or LinkedIn's card |
+| `FeedPost.Header` | `name` (required), `handle?` (X, no "@"), `headline?` (LinkedIn), `time?` (default "now") | the account line in the platform's layout: X's dots, LinkedIn's avatar, headline and "now · globe" |
+| `FeedPost.Body` | `ref`, `className`, rest, children | the text column (LinkedIn's padded body; on X a plain block) |
+| `FeedPost.Field` | `value?` + `onValueChange?` (controlled) or `defaultValue?` (uncontrolled), `autoFocus?` (caret at the end, no page scroll), `ref`, and every other textarea prop | the post's words as the field, set exactly like the read text |
+| `FeedPost.More` | children (default "Show more" on X, "…more" on LinkedIn) | the platform's truncation word, inline |
+| `FeedPost.Fold` | children (the label, default "The feed cuts here"), `ref`, rest | the cut line, drawn for the writer only; a `role="separator"` |
+| `FeedPost.Actions` | `ref`, `className`, rest | the platform's action row with no counts; a picture |
+| `FeedSkeleton` | `ref`, `className`, rest | a neighbour post with no words, in the platform's look |
+
+**Into `components/drafts/`** (Quincy's reading of a draft, on the parts
+above):
+
+| Part | Props | What it is |
+| --- | --- | --- |
+| `DraftFeed` | `platform`, `posts`, `writing`, the editing state, `onStartEdit` | a draft's version drawn as the feed: skeleton, posts (a thread when there are several), skeleton; one beat bracket per post for a three-post story |
+| `FeedText` | `text`, `channel`, `marks`, `note`, `onStartEdit` | the words as lines, with `FeedPost.More` and `FeedPost.Fold` where `feedCut` says, and the beat brackets or the missing-beat note around their lines |
+| `DraftVerbs` | the version, its session, the store's verbs | the row under the column: Approve, Edit and the Discard hold; Save, Cancel and the counter while editing; the status line, Give it a time, Post now and the rule offer once decided. Inline in `VersionFeed` today; it is lifted out at the move. |
+| `feedCut(text, channel)` | | into lib/post-length.ts, beside `splitAtFold`, so the drawing and the fold notice share it |
+
 Proposed with the pick: **14. The feed rendering** of a draft (X and
 LinkedIn), read-only around an editable body, with the account's real name,
 handle and headline from the connected channel (the lab uses fixture
