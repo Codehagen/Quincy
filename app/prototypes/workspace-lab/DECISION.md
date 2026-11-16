@@ -181,5 +181,7 @@ channels-card.css). Also in the lab header (audit.ts).
 - The lab imports `../ideas-lab/fixtures.ts` and `../ideas-lab/frames.tsx`.
   Delete the two labs together, or copy those files here first.
 - Marked up still needs `Angle.line` and `note` from lib/adapt.ts
-  (quincy-riffs.md, "Data gaps"); the lab's lines are fixtures.
+  (quincy-riffs.md, "Data gaps"); the lab's lines are fixtures. The type
+  (`Angle.mark`) and the quote resolver (lib/source-span.ts) exist; the
+  `riff_angle.line` column waits on a migration.
 - "Later" has no column in the schema. The lab keeps it in memory.

@@ -20,6 +20,7 @@ has not looked at anything (lab README, "When not to lab").
 | **ui-sdk for new behaviours** (2026-11-16) | existing kit components stay on Base UI; a new component whose behaviour Base UI does not cover well uses `@ui-sdk/react` + `@ui-sdk/core`. One component never mixes both | reorder, virtual lists, a command palette, date-time are real needs Base UI does not cover well | plans/029 revision, controls.md |
 | **Quincy is a human editor** | margin notes (Caveat), the yellow highlighter, blue-pen beat brackets | the owner kept every piece that marked up a page; it makes the product feel like a person, not a dashboard | editor-marks.md |
 | **Ideas, never riffs** | an angle is an *idea*; a riff is named by its source ("3 ideas from your voice note"); the page is **Ideas** | "riff" is a word nobody outside the codebase uses. Code and schema keep `riff` until a planned rename (one database) | plans/029 "Words", quincy-riffs.md |
+| **Ideas is a working surface — Table** (2026-11-16) | Ideas is a workspace: two toolbar rows (page, filters with counts), a dense DataList with columns (glyph · idea · source · shape · for · age), and the open idea Marked up in a fixed Panel beside it, worked by key (j k D N L U /). Under ~900px of workspace it folds into one column of rows that open in place | the owner, on the three layouts side by side in /prototypes/workspace-lab: "Jeg liker egentlig table veldig godt". Ideas is a queue worked daily; columns read down as well as across, and the open idea sits beside its row without the list moving. Rejected: Three panes (a third scroll region, no columns; the grouped view covers "what did I say in that call?"), Inline (kept as the narrow fold) | workspace.md, `app/prototypes/workspace-lab/DECISION.md` |
 | **Cuts, not Studio** | the video editor is **Cuts** in visible copy (route `/cuts`) | "Studio" is the chat page; one word for two pages makes both unclear. The component is still `Studio` in code | `app/prototypes/video/name.ts`, plans/031 |
 | **Pixel friend, smooth from 32** | the mark is icon piece 31; under 32px the pixel drawing, from 32 the vector one (piece 20), same beats | whole pixels are the sharpest drawing at 16 (why 31 won); from 32 there is room for curves, and eased moves read as alive where cut frames read as jumps | mascot.md, `components/mascot/friend.tsx` |
 | **Quincy comes to you** | Quincy writes first, a few lines, and every note ends in the person's choice | an agent that only answers is a tool; one that reaches out reads as staff. Ending on a choice keeps "Quincy drafts, you send" | `components/showcase/demos/quincy-texts.tsx` |
@@ -77,4 +78,7 @@ Tried in the labs, looked at, and thrown out. Do not bring them back.
   control is shown inside the surface it belongs to.
 - **The live-ritual pill** (20). Live is a dot, never a pill or a fill.
 - **A borrowed character** (landing 05, 10, 30's ink blob). mascot-iterating.md.
-- **A follower chart, a dashboard.** `docs/vision.md`.
+- **A follower chart, or a metrics/vanity dashboard** (tiles of counts, a
+  chart of items per week, a bare total). `docs/vision.md`. A dense working
+  surface (toolbar, table, panels; workspace.md) is allowed: it is where
+  the work is done, not a wall of numbers about it.

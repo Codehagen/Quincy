@@ -1,7 +1,9 @@
 /**
  * Class strings shared by the step-2 controls (plans/029). Not exported from
  * the kit's index: they are how the controls agree with each other, not a
- * way for a page to restyle one.
+ * way for a page to restyle one. The one exception is ICON_DENSE (and its
+ * chevron), which is icon props, not classes: a page draws a glyph in a
+ * DataList cell with it.
  */
 
 /** The white control surface: ring + short soft fall, after Stageshow's collage. */
@@ -108,8 +110,36 @@ export const SEGMENT_HEIGHT: Record<ControlSize, string> = {
   lg: "h-kit-control-lg",
 }
 
-/** `md` (36px) is the app default; `lg` (44px) is a hero action. */
-export type ButtonSize = "md" | "lg"
+/**
+ * The smaller control heights, for a workspace's toolbar and foot only
+ * (docs/design/workspace.md): `xs` 28 (a filter chip, a ghost Clear, the
+ * view switch), `sm` 32 (the toolbar's search and its button). Kept out of
+ * ControlSize so Tabs, Select and Stepper do not grow sizes nobody asked for.
+ */
+export type DenseSize = "xs" | "sm"
+
+export const DENSE_HEIGHT: Record<DenseSize, string> = {
+  xs: "h-kit-control-xs",
+  sm: "h-kit-control-sm",
+}
+
+/**
+ * Icons beside 13px text (a dense control, a DataList cell): 16 at stroke
+ * 1.75. Stroke 2, the kit's default beside 14px body, reads bold next to
+ * 460 type at 13. Chevrons in a 28px chip are 14 at 1.75. Spread it onto
+ * HugeiconsIcon: `<HugeiconsIcon icon={X} {...ICON_DENSE} aria-hidden />`.
+ */
+export const ICON_DENSE = { size: 16, strokeWidth: 1.75 } as const
+export const ICON_DENSE_CHEVRON = { size: 14, strokeWidth: 1.75 } as const
+
+/** The label of a 28 or 32 control: 13/19, 16px under a coarse pointer for a field. */
+export const DENSE_TEXT = "text-kit-dense"
+
+/**
+ * `xs` (28) and `sm` (32) are for a workspace's toolbar and foot; `md` (36px)
+ * is the app default; `lg` (44px) is a hero action.
+ */
+export type ButtonSize = DenseSize | "md" | "lg"
 
 /**
  * The Button look, shared by Button, ButtonLink and HoldButton so a link and
@@ -119,15 +149,21 @@ export type ButtonSize = "md" | "lg"
  * press (140ms), colours are state (200ms).
  */
 export const BUTTON_BASE =
-  "relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full text-kit-body font-kit-strong whitespace-nowrap select-none " +
+  "relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full font-kit-strong whitespace-nowrap select-none " +
   "transition-[scale,background-color,color] duration-[var(--kit-duration-press),var(--kit-duration-state),var(--kit-duration-state)] ease-kit-out " +
   "not-data-disabled:active:scale-(--kit-press-scale) motion-reduce:transition-none motion-reduce:not-data-disabled:active:scale-100 " +
   `${FOCUS_RING} data-disabled:cursor-default ${HIT_44}`
 
-/** The landing's pill padding: 16 at md, 22 at lg (MarketingButton). */
+/**
+ * The landing's pill padding: 16 at md, 22 at lg (MarketingButton). The
+ * workspace sizes are 10 at xs and 12 at sm, with the 13px label. The text
+ * step lives here, not in BUTTON_BASE, so a size can change it.
+ */
 export const BUTTON_SIZE: Record<ButtonSize, string> = {
-  md: "h-kit-control-md px-kit-cta-md",
-  lg: "h-kit-control-lg px-kit-cta-lg",
+  xs: "h-kit-control-xs px-2.5 text-kit-dense",
+  sm: "h-kit-control-sm px-3 text-kit-dense",
+  md: "h-kit-control-md px-kit-cta-md text-kit-body",
+  lg: "h-kit-control-lg px-kit-cta-lg text-kit-body",
 }
 
 /**
@@ -135,14 +171,29 @@ export const BUTTON_SIZE: Record<ButtonSize, string> = {
  * the glyph's side bearing reads as extra space.
  */
 export const BUTTON_ICON_SIZE: Record<ButtonSize, string> = {
+  xs: "pl-2",
+  sm: "pl-2.5",
   md: "pl-kit-cta-md-icon",
   lg: "pl-kit-cta-lg-icon",
 }
 
-/** A trailing icon tightens the trailing side by the same 2px. */
+/**
+ * A trailing icon tightens the trailing side by the same 2px. A trailing key
+ * cap (Button `shortcut`) does too, but only under a fine pointer: on touch
+ * the cap is hidden and the side goes back to the label's padding.
+ */
 export const BUTTON_ICON_END_SIZE: Record<ButtonSize, string> = {
+  xs: "pr-2",
+  sm: "pr-2.5",
   md: "pr-kit-cta-md-icon",
   lg: "pr-kit-cta-lg-icon",
+}
+
+export const BUTTON_SHORTCUT_END_SIZE: Record<ButtonSize, string> = {
+  xs: "pr-2 pointer-coarse:pr-2.5",
+  sm: "pr-2.5 pointer-coarse:pr-3",
+  md: "pr-kit-cta-md-icon pointer-coarse:pr-kit-cta-md",
+  lg: "pr-kit-cta-lg-icon pointer-coarse:pr-kit-cta-lg",
 }
 
 /**
@@ -169,4 +220,20 @@ export const BUTTON_VARIANT = {
     "bg-kit-primary text-kit-primary-on hover:not-data-disabled:bg-kit-primary-hover data-disabled:bg-kit-primary-disabled",
   quiet: `${BUTTON_CONTROL} text-kit-ink`,
   danger: `${BUTTON_CONTROL} text-kit-danger`,
+  // No surface at rest, muted label; the row-hover grey and ink on hover
+  // and while its menu is open. For a toolbar or a foot of several
+  // controls, where every one a floating pill is the noise that makes a
+  // toolbar read busy. Never the action, never on its own in a Card.
+  ghost:
+    "text-kit-ink-muted hover:not-data-disabled:bg-kit-row-hover hover:not-data-disabled:text-kit-ink data-popup-open:bg-kit-row-hover data-popup-open:text-kit-ink data-disabled:opacity-50",
 } as const
+
+/**
+ * A selected row in a dense list (DataList): the selected grey, plus a 3px
+ * ink bar at the row's start, 8px in from its top and foot. The grey alone
+ * is 1.12:1 in light; the bar reads from across the table in both modes.
+ * Not a lifted row: a shadow says "raised object", and a row is not one.
+ * The element needs `relative`.
+ */
+export const SELECTION_BAR =
+  "data-selected:before:absolute data-selected:before:inset-y-2 data-selected:before:start-0.5 data-selected:before:w-kit-selection-bar data-selected:before:rounded-full data-selected:before:bg-kit-ink"

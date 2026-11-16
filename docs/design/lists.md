@@ -4,6 +4,13 @@ List is the object rows sit in; ListRow, NavRow and FileChip share the
 control surface with IconButton (menus.md). Where the open item goes is in
 page.md, "List and detail".
 
+```
+Which list?
+ ├── A short list in a Card (under ~20, read more than worked) → List + ListRow (44)
+ ├── Navigation                                                → NavRow
+ └── A queue worked through by key, scanned by column          → DataList (36, workspace.md)
+```
+
 ## List
 
 The white object for rows: a Card padded 6px (`kit-row-inset`), so the 12px
@@ -57,7 +64,10 @@ heading is the break.
 
 One row look, after the landing's idea rows: 44px minimum, 16px side
 inset, quiet grey hover, and picked or current in the selected grey with
-ink, never blue. Rows sit in a `List`.
+ink, never blue. Rows sit in a `List`. Hover is always a lighter step than
+selected, in both themes (colour.md, "Rows"). DataList's rows add a 3px
+ink bar and a 560 title to the grey (workspace.md); a ListRow in a short
+list does without them.
 
 - **ListRow** — a button that opens the thing it names (a riff, a person).
   `children` (title), `description`, `leading` (an `Avatar`, a `LiveDot`),

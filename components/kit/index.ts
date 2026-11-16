@@ -13,7 +13,7 @@ export { Mono } from "./mono"
 export { Code } from "./code"
 export { Rule } from "./rule"
 export { Well, type WellProps } from "./well"
-export { Tag, Tags } from "./tag"
+export { Tag, Tags, type TagLook } from "./tag"
 export { Avatar } from "./avatar"
 export { Count, type CountProps } from "./count"
 export { LiveDot, type LiveDotProps } from "./live-dot"
@@ -207,3 +207,45 @@ export {
   type TimeInputProps,
   type DateInputProps,
 } from "./time-input"
+
+// Workspace (2026-11-16, docs/design/workspace.md): a dense working surface
+// (toolbar, DataList, panels), promoted from /prototypes/workspace-lab after
+// the owner picked Table. Base UI for FilterMenu; ui-sdk for DataList only.
+export {
+  Toolbar,
+  ToolbarGroup,
+  ToolbarDivider,
+  ToolbarTitle,
+  type ToolbarProps,
+  type ToolbarSize,
+  type ToolbarGroupProps,
+  type ToolbarTitleProps,
+} from "./toolbar"
+export { KeyBar, FootBar, type KeyBarProps, type KeyBarItem, type FootBarProps } from "./key-bar"
+export { FilterMenu, type FilterMenuProps, type FilterOption } from "./filter-menu"
+export {
+  DataList,
+  DataListTitle,
+  DataListMeta,
+  DataListMono,
+  DataListEmpty,
+  DATA_LIST_ROW,
+  revealDataListRow,
+  type DataListProps,
+  type DataListColumn,
+  type DataListGroup,
+  type DataListStatus,
+  type DataListTitleProps,
+  type DataListEmptyProps,
+} from "./data-list"
+export {
+  Panel,
+  PanelHeader,
+  PanelBody,
+  type PanelProps,
+  type PanelHeaderProps,
+  type PanelBodyProps,
+} from "./panel"
+export { StatusPill, type StatusPillProps, type StatusPillStatus } from "./status-pill"
+export { Announcer, useAnnounce, type AnnouncerProps } from "./announcer"
+export { ICON_DENSE, ICON_DENSE_CHEVRON } from "./control-styles"

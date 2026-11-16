@@ -18,11 +18,34 @@ Closed. Nothing else exists; an unlisted size is a bug.
 | `text-kit-mono` | 12 / 18, 0 | — | `Mono` only |
 | `text-kit-hand` | Caveat 21 / 0.95, rotated −2° | 500 | `MarginNote`, `BeatBracket` only |
 
+### The workspace steps (2026-11-16)
+
+A workspace (workspace.md) reads one px denser than a Card page. These four
+exist only there: never in a Card page, where body and small stay the scale.
+
+| Utility | Size / line | Weight | Used by |
+| --- | --- | --- | --- |
+| `text-kit-heading` | 15 / 1.2, −0.012em | 600 | the page's name in a Toolbar (`ToolbarTitle`), in place of the 28px title |
+| `text-kit-dense` | 13 / 19, −0.006em | 460 | a DataList row title (`DataListTitle`; 560 ink on the open row), an `xs`/`sm` control's label |
+| `text-kit-meta` | 12 / 16, −0.003em | 460, tabular | column heads (560), the facts beside a title, a toolbar's count line, KeyBar words, `Tag look="text"`, `StatusPill` |
+| `text-kit-mono-sm` | mono 11 / 16, 0 | —, tabular | ages and counts in a column (`DataListMono`), FilterMenu counts |
+
+Meta carries counts, so every component that uses it adds `tabular-nums`;
+a count that changes must not change width. Mono is a px under meta
+because the system mono's x-height sits a step above Inter's.
+
+**Icons beside 13px text are 16 at stroke 1.75** (`ICON_DENSE`), chevrons
+14 at 1.75 (`ICON_DENSE_CHEVRON`). Stroke 2 reads bold next to 460 type at
+13. Spread it: `<HugeiconsIcon icon={X} {...ICON_DENSE} aria-hidden />`.
+Button `xs`/`sm`, SearchField `sm`, Segmented `xs`, FilterMenu and
+StatusPill already do. Beside 14px body, icons stay 16–18 at 2.
+
 Weights: `font-kit-regular` (460) and `font-kit-strong` (560). 600 lives only
 inside `text-kit-figure` and `text-kit-title`. Inter is loaded variable, so 460 and 560 are real
 instances, not rounded to 400 and 600.
 
-Never below 12px for text a person reads (mono is the floor at 12). Caveat at
+Never below 12px for text a person reads (mono is the floor at 12; in a
+workspace column, mono 11 for an age or a count). Caveat at
 400 goes thin in grey at 21px, hence 500.
 
 `<KitRoot>` sets Inter, 14/20 at 460, ink and `cv11 ss01` for the whole page,
@@ -100,7 +123,11 @@ angles waiting.") in body or small text. Either way it never counts on mount.
 A word Quincy filed something under: the kind and shape of an angle, a
 source. `<Tags><Tag>Story</Tag><Tag>Short post</Tag></Tags>`: one value per
 Tag, muted small text in a hairline ring (`shadow-kit-inset`), 8px radius, 24px
-tall, Tags 6px apart. Not
+tall, Tags 6px apart.
+
+`look` `chip` (default, the above) | `text`: muted 12px meta text with no
+ring, for a fact in a named column (DataList's Shape) or a dense row's meta
+line. A ring on twenty rows is twenty objects louder than the titles. Not
 pressable, not a filter (Segmented), not a status (LiveDot, Checklist), and
 never more than three on one item. A sentence about the item ("writes 2
 posts, for LinkedIn") is `Text variant="small" tone="muted"`, not a Tag.
@@ -120,6 +147,7 @@ Display type (`text-kit-display-*`) is for marketing pages only
 
 - `text-[…]`, `font-[…]`, `tracking-…` or `leading-…` in kit code. The scale
   carries its own line height and tracking.
+- A workspace step (`dense`, `meta`, `mono-sm`, `heading`) in a Card page.
 - `font-bold` / `font-semibold`. They are 700 / 600 and skip the 560 step.
 - Caveat for anything that is not Quincy's note. It is a pen, not a typeface.
 - Size for hierarchy inside a page. Two Text sizes on one card is the limit (body + figure,

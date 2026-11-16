@@ -700,11 +700,18 @@
   --kit-elevation-knob-on-fill:
     0 0 0 2px var(--kit-gray-178), 0 0 0 3px oklch(1 0 0 / 0.14);
   --kit-track: var(--kit-gray-320);
-  /* Restated so they resolve where .dark is set. Row hover goes up (1.31:1
-     vs the object) while selected goes down into the well (1.17:1): the two
-     never meet. Check ring 6.72:1 object · 7.61:1 ground · 7.88:1 stage. */
-  --kit-row-hover: var(--kit-control-hover);
-  --kit-selected: var(--kit-well);
+  /* Row states, fixed 2026-11-16 (workspace lab): selected must out-rank
+     hover here as it does in light. The old pair put hover UP at 0.32 and
+     selected DOWN in the well (0.155, below the ground), so the hovered row
+     was the brighter one and read as the picked one. Now both go up, hover
+     half a step (mix of object and ground, ~0.206: 1.06:1 vs the ground)
+     and selected two (0.30, the hairline grey: 1.38:1 vs the ground, 1.31:1
+     vs hover). On an object (0.235) hover reads as a slight recess (1.07:1)
+     and selected still lifts (1.22:1). Ink on selected 12.2:1, muted 5.50:1;
+     on hover 15.9 / 7.20. The 3px ink bar (DataList) carries the rest.
+     Check ring 6.72:1 object · 7.61:1 ground · 7.88:1 stage. */
+  --kit-row-hover: color-mix(in oklch, var(--kit-gray-235) 50%, var(--kit-gray-178));
+  --kit-selected: var(--kit-gray-300);
   --kit-check-ring: var(--kit-ink-muted);
   --kit-grid-line: color-mix(in oklch, var(--kit-gray-961) 5%, transparent);
   /* 6.78:1 stage · 5.79:1 object. */
@@ -812,6 +819,32 @@
   --text-kit-mono: 0.75rem;
   --text-kit-mono--line-height: 1.125rem;
   --text-kit-mono--letter-spacing: 0;
+  /* The workspace steps (2026-11-16, docs/design/workspace.md): a dense
+     working surface (toolbar, DataList, panels) reads one px below body.
+     Never in a Card page; there body and small stay the scale.
+     - dense: a DataList row title and a 28/32 control's label (13/19).
+     - meta: the facts beside a row title, column heads, a toolbar's count
+       line (12/16). Carries counts, so components add tabular-nums.
+     - mono-sm: ages and counts in a column (11/16); tabular, set by the
+       component. One px under meta because the system mono's x-height
+       sits a step above Inter's.
+     - heading: the page's name in a Toolbar (15/600), in place of the
+       28px KitPage title on a workspace page. */
+  --text-kit-dense: 0.8125rem;
+  --text-kit-dense--line-height: 1.1875rem;
+  --text-kit-dense--letter-spacing: -0.006em;
+  --text-kit-dense--font-weight: 460;
+  --text-kit-meta: 0.75rem;
+  --text-kit-meta--line-height: 1rem;
+  --text-kit-meta--letter-spacing: -0.003em;
+  --text-kit-meta--font-weight: 460;
+  --text-kit-mono-sm: 0.6875rem;
+  --text-kit-mono-sm--line-height: 1rem;
+  --text-kit-mono-sm--letter-spacing: 0;
+  --text-kit-heading: 0.9375rem;
+  --text-kit-heading--line-height: 1.2;
+  --text-kit-heading--letter-spacing: -0.012em;
+  --text-kit-heading--font-weight: 600;
   /* A keycap's letter (Kbd): 11/1, centred in its 20px cap. */
   --text-kit-kbd: 0.6875rem;
   --text-kit-kbd--line-height: 1;
@@ -872,11 +905,37 @@
   --radius-kit-control-inner: 0.5rem;
   --radius-kit-chip: 0.375rem;
 
-  /* Control heights. md is the app default; lg is a hero action ("Live");
-     Every size keeps a 44px hit area on coarse pointers. (An sm step had no
-     consumer and was removed; dense rows use ListRow, which is 44px.) */
+  /* Control heights. md is the app default; lg is a hero action ("Live").
+     xs and sm (2026-11-16) are for a workspace's toolbar and foot only:
+     xs a filter chip, a ghost Clear, a view switch; sm a toolbar's search
+     and its button. Every size keeps a 44px hit area on coarse pointers. */
+  --spacing-kit-control-xs: 1.75rem; /* 28 */
+  --spacing-kit-control-sm: 2rem; /* 32 */
   --spacing-kit-control-md: 2.25rem;
   --spacing-kit-control-lg: 2.75rem;
+
+  /* The workspace's rhythm (docs/design/workspace.md). The page row matches
+     the shell bar and the filter row is a 28px chip in 8 + 8, so the two
+     read as one band with one hairline under both. The column heads and a
+     panel's sticky strip are one 32px band, so one hairline runs across
+     every pane. The key bar and the Undo note share the 36px foot, so
+     swapping one for the other moves nothing. A dense row is 36 (44 on
+     touch); ListRow stays 44 for a short list in a Card. */
+  --spacing-kit-bar: 3.25rem; /* 52 */
+  --spacing-kit-filter-bar: 2.75rem; /* 44 */
+  --spacing-kit-head: 2rem; /* 32 */
+  --spacing-kit-foot: 2.25rem; /* 36 */
+  --spacing-kit-row-dense: 2.25rem; /* 36 */
+  /* A row's scroll-margin under the sticky head band: the band + 8, so j/k
+     never park the open row under the heads or flush against them. */
+  --spacing-kit-head-clear: 2.5rem; /* 40 */
+  /* The ink bar at a selected DataList row's start (3). */
+  --spacing-kit-selection-bar: 0.1875rem;
+  /* DataList's optional columns appear once the list itself is this wide
+     (@kit-data-wide/kit-data-list), and a ToolbarGroup with grow stops
+     taking a whole row once the toolbar is this wide. */
+  --container-kit-data-wide: 46rem; /* 736 */
+  --container-kit-toolbar-wrap: 40rem; /* 640 */
   /* The stage's graph-paper square. */
   --spacing-kit-grid: 1.5rem;
 

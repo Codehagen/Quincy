@@ -21,6 +21,26 @@ guessing, and two guesses never agree. Layout utilities (`flex`, `gap-…`,
 | `kit-row-inset` | 6 | object edge and its rows (12px row radius in the 18px object) | List, Menu, Select |
 | `kit-sidebar` / `kit-shell-bar` / `kit-shell-pad` | 240 / 52 / 8 | the app frame (app-shell.md) | AppShell |
 
+## A workspace's rhythm (2026-11-16)
+
+Heights, not gaps, for a workspace (workspace.md). Set by the components;
+a page never writes them.
+
+| Token | px | What | Set by |
+| --- | --- | --- | --- |
+| `kit-bar` | 52 | the page row, the shell bar's height | `Toolbar size="bar"` |
+| `kit-filter-bar` | 44 | the filter row: a 28 chip in 8 + 8 | `Toolbar size="filter"` |
+| `kit-head` | 32 | DataList's column heads and a PanelHeader: one band, one hairline across every pane | `DataList`, `PanelHeader` |
+| `kit-foot` | 36 | the KeyBar and the Undo note, the same height so swapping them moves nothing (plus the home indicator) | `KeyBar`, `FootBar` |
+| `kit-row-dense` | 36 | a DataList row (44 on touch), 1px apart | `DataList` |
+| `kit-head-clear` | 40 | a DataList row's scroll-margin under the head band (32 + 8) | `DataList` |
+| `kit-selection-bar` | 3 | the ink bar at the open row's start | `DataList` |
+
+One left edge, 20 (`kit-group`), in every region of a workspace: toolbars
+pad 20; DataList rows are 8 inset + 12 padding. Containers:
+`kit-data-wide` (46rem: DataList's `wide` columns appear),
+`kit-toolbar-wrap` (40rem: a growing ToolbarGroup stops taking a row).
+
 ## Inside an object (you write these)
 
 Four steps. Nothing else goes between kit content inside a Card. More air
@@ -56,9 +76,11 @@ What sits between these two things?
 <div className="mt-3 flex gap-3"><div className="mt-4 px-3 py-2.5">…</div></div>
 ```
 
-`kit-control-md` / `lg` (36 / 44) are control heights, not gaps. There is no
-`sm`: a dense row is a 44px ListRow. `kit-cta-md` / `lg` (16 / 22) are the
-pill's side padding, set by Button.
+`kit-control-md` / `lg` (36 / 44) are control heights, not gaps.
+`kit-control-xs` / `sm` (28 / 32, 2026-11-16) are for a workspace's toolbar
+and foot only; a short list in a Card is still a 44px ListRow, a long one
+worked by key a 36px DataList row. `kit-cta-md` / `lg` (16 / 22) are the
+pill's side padding, set by Button (xs and sm pad 10 and 12).
 
 ## Well
 

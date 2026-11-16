@@ -27,7 +27,8 @@ and `components/quincy/` (`@/components/quincy`). Live examples:
 - **Never `--kit-action`** (the old blue) in new code. It remains only for
   the showcase pictures until they are rebuilt (showcase.md).
 - **A page moves whole**: `<KitPage title="…">`, then Stages, inside the app
-  shell. Never half a page, never a hand-made page column (page.md).
+  shell. Never half a page, never a hand-made page column (page.md). A
+  queue worked through by key is a workspace instead (workspace.md).
 - **Behaviour**: existing kit components are on Base UI. A new component
   whose behaviour Base UI does not cover well is on ui-sdk. One component
   never mixes both (controls.md, "Behaviour libraries").
@@ -56,6 +57,7 @@ borrowed character, a follower chart, a blue button. Reasons in decisions.md.
 | [controls.md](controls.md) | any choice: Segmented, Tabs, Switch, Stepper, Slider, Checklist; Base UI or ui-sdk |
 | [menus.md](menus.md) | Select vs Menu, menu rows, focus after a command, IconButton |
 | [lists.md](lists.md) | `List`, `ListHeading`, `ListRow`, `NavRow`, `GlyphTile`, `FileChip`, `SourceMark` |
+| [workspace.md](workspace.md) | a page worked through by key: `Toolbar`, `FilterMenu`, `DataList`, `Panel`, `KeyBar`, `StatusPill`, `Announcer` |
 | [forms.md](forms.md) | `Field`, `Input`, `Textarea`, `SearchField`, validation |
 | [states.md](states.md) | working (LiveDot + words), empty, refused or failed |
 | [motion.md](motion.md) | `Arrive`, durations, curves, reduced motion |

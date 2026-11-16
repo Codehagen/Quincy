@@ -5,6 +5,7 @@ import { controls } from "./controls"
 import { foundations } from "./foundations"
 import { landing } from "./landing"
 import { patterns } from "./patterns"
+import { workspace } from "./workspace"
 import { showcase } from "./showcase"
 import { quincyDrafts } from "./quincy-drafts"
 import { quincyRiffs } from "./quincy-riffs"
@@ -23,6 +24,7 @@ export const SECTIONS: readonly Section[] = [
   ...components,
   ...controls,
   ...patterns,
+  ...workspace,
   ...showcase,
   ...quincyDrafts,
   ...quincyRiffs,

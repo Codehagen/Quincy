@@ -69,11 +69,31 @@ tone. Reach the colour only through `bg-kit-mark`, `border-kit-mark`,
 | `kit-track` | switch off-track, empty slider (never the check ring) | 1.31:1 vs white: pair state with position or a label |
 | `kit-check-ring` | the empty Checklist circle (via `shadow-kit-unchecked`) | muted ink: 5.28 object light, 6.72 object dark (WCAG 1.4.11 needs 3:1) |
 | `kit-knob-on` | an on switch's knob | white on ink 18.9 light; dark ground on light ink 16.9 dark |
-| `kit-row-hover` | hover on an unselected ListRow or NavRow | one step lighter than selected (light 1.07 vs 1.12 against white); a selected row keeps selected on hover |
+| `kit-row-hover` | hover on an unselected ListRow, NavRow or DataList row; a ghost Button's hover | one step short of selected in both themes (see Rows below); a selected row keeps selected on hover |
 | `kit-grid-line` | `Stage backdrop="grid"` | ink alpha |
 | `kit-focus` | keyboard focus outline | ink, so it reads on every surface |
 | `kit-link-line` | TextLink's underline: the text's own colour at 40% | the text beside it carries the contrast |
 | `kit-scrim` | behind the phone's sidebar sheet only (app-shell.md) | ink alpha |
+
+## Rows: hover, selected, the ink bar
+
+Selected must out-rank hover in both themes, or a hovered row reads as the
+picked one. Until 2026-11-16 dark mode had it backwards (hover went up to
+0.32 while selected went down into the well, 0.155, below the ground);
+the workspace lab caught it, and both now go up from the ground:
+
+| | Light | Dark (on the 0.178 ground) |
+| --- | --- | --- |
+| `kit-row-hover` | gray-975 (1.07:1 vs white) | mix of object and ground, ~0.206 (1.06:1 vs ground) |
+| `kit-selected` | gray-961, the well (1.12:1 vs white) | gray-300, the hairline grey (1.38:1 vs ground, 1.31:1 vs hover) |
+| ink / muted on selected | 16.9 / 4.71 | 12.2 / 5.50 |
+| ink / muted on hover | — / 4.91 | 15.9 / 7.20 |
+
+On a dark object (0.235: a menu panel, a List in a Card) hover reads as a
+slight recess (1.07:1) and selected still lifts (1.22:1). Because the grey
+alone is ~1.1:1, a DataList's open row adds a **3px ink bar** at its start
+(`SELECTION_BAR`: `bg-kit-ink`, 8px in from top and foot) and its title at
+560. Not a shadow: a lifted row says "raised object", and a row is not one.
 
 ## Contrast (WCAG 2, against the surface the text paints on)
 

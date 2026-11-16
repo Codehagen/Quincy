@@ -9,11 +9,32 @@ import * as React from "react"
  * Not pressable, not a filter (that is Segmented), not a status: running is
  * LiveDot, done is Checklist. Muted on the object is 5.28:1, on the well 4.71:1.
  */
-export function Tag({ children }: { children: string }) {
+export type TagLook = "chip" | "text"
+
+const LOOK: Record<TagLook, string> = {
+  chip: "h-6 rounded-kit-control-inner px-2 text-kit-small shadow-kit-inset",
+  // A fact in a named column (DataList "Shape"): muted meta text, no ring.
+  // A ring on twenty rows is twenty objects louder than the titles.
+  text: "text-kit-meta",
+}
+
+export function Tag({
+  children,
+  look = "chip",
+}: {
+  children: string
+  /**
+   * `chip` (default): the ringed chip, on a card or a detail. `text`: muted
+   * 12px text with no ring, the look in a DataList column and in a dense
+   * row's meta line (docs/design/workspace.md).
+   */
+  look?: TagLook
+}) {
   return (
     <span
       data-slot="kit-tag"
-      className="inline-flex h-6 max-w-full min-w-0 items-center rounded-kit-control-inner px-2 text-kit-small whitespace-nowrap text-kit-ink-muted shadow-kit-inset"
+      data-look={look}
+      className={`inline-flex max-w-full min-w-0 items-center whitespace-nowrap text-kit-ink-muted ${LOOK[look]}`}
     >
       {/* A long word ends in an ellipsis inside the chip instead of
           running out of it. */}

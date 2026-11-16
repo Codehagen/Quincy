@@ -37,9 +37,16 @@ others are muted until hovered. Use Tabs when picking swaps the content below; u
 for 6+ options or long labels. On Base UI's RadioGroup: arrows move and pick,
 Tab enters and leaves as one stop, `name` submits with a form.
 
-Props: `options` (`{ value, label, disabled? }[]`, `V` inferred), `value` /
+Props: `options` (`{ value, label, icon?, disabled? }[]`, `V` inferred), `value` /
 `defaultValue` (default: the first option) / `onValueChange`, `size` `md` |
-`lg`, and `aria-label` or `aria-labelledby` (required by the type).
+`lg` | `xs`, and `aria-label` or `aria-labelledby` (required by the type).
+
+`size="xs"` (28, 2026-11-16) is icon-only, for a workspace toolbar's view
+switch ("Every idea" / "Grouped by source", workspace.md): every option
+needs an `icon`, and its `label` becomes the segment's name and its hover
+hint. The picked one is a white chip on the well, not the ink thumb: a
+toolbar's one ink belongs to the view's action. A filter with counts is a
+`FilterMenu`, not a Segmented.
 
 ```
 Does picking it change what is shown below it?

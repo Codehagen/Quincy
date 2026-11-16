@@ -18,6 +18,7 @@ import { recentKinds } from "./drafts"
 import { formatConversationDate } from "./format-date"
 import { draft, draftVersion, riff, riffAngle, sourceItem } from "./schema-app"
 import type { ShippedOutcome } from "./shipped-outcome"
+import type { SourceSpan } from "./source-span"
 import { readShippedQuestion } from "./shipped-work"
 import { resolveTimeZone } from "./timezone"
 import { recordUsage } from "./usage"
@@ -102,6 +103,21 @@ export type Angle = {
    * there the moment you write over the draft yourself.
    */
   fellBack?: boolean
+  /**
+   * The sentence(s) of the scrap this idea comes from, verbatim, and where
+   * they stand in it — what Marked up underlines and numbers.
+   *
+   * Undefined means "no mark": every angle written before the line existed,
+   * an angle drawn from the whole note, and a stored quote that no longer
+   * matches the scrap. Never an error. The span is resolved in code from
+   * `riff.scrap` by `markFor` (lib/source-span.ts), never taken from the
+   * model.
+   *
+   * Not populated yet: `riff_angle` has no `line` column, and adding one is a
+   * migration the owner runs (quincy-riffs.md, "Data gaps"). Until then the
+   * loaders leave this unset and every idea renders unmarked.
+   */
+  mark?: { line: string; span: SourceSpan }
 }
 
 /**

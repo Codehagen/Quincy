@@ -94,8 +94,12 @@ Filters or finds. Magnifier, input, and a round clear button once there is
 text; Escape clears, and clearing returns focus to the input. Props: `value`
 / `defaultValue` / `onValueChange`, `aria-label` (default "Search"; set it
 when the page has two), `size` `md` | `lg` (`lg` only as a page's main
-search), `placeholder`. Not inside a Field: the magnifier is its label.
-Spellcheck and autocomplete are off.
+search) | `sm` (32, a workspace toolbar's search: flat, ring only, a hover
+step, 13px text and 16 on touch), `shortcut` (the key that reaches it on
+its surface, "/": an 18px cap while empty and unfocused, and
+`aria-keyshortcuts`; the page's handler does the focusing), `ref` (the
+input, for that handler), `placeholder`. Not inside a Field: the magnifier
+is its label. Spellcheck and autocomplete are off.
 
 ## Never
 

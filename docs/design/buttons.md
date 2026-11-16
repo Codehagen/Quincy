@@ -24,9 +24,11 @@ development.
 
 ## Button
 
-Variants: `action`, `quiet`, `danger`. Nothing else exists; an unlisted
-variant is a bug. Sizes: `md` (36px, default) and `lg` (44px, a hero action
-only). Nothing else.
+Variants: `action`, `quiet`, `danger`, `ghost`. Nothing else exists; an
+unlisted variant is a bug. Sizes: `md` (36px, default), `lg` (44px, a hero
+action only), and for a workspace's toolbar and foot only `sm` (32px) and
+`xs` (28px), with the 13px label and icons at stroke 1.75 (workspace.md).
+Nothing else.
 
 - `quiet` — **the default.** Edit, Undo, Cancel, everything that is not the
   action: a white pill with a ring and a soft fall, ink label. A forgotten
@@ -36,6 +38,11 @@ only). Nothing else.
   pill. Never blue: blue is the pen (colour.md).
 - `danger` — destructive only: the quiet control with a red label, never a
   red fill. Sits away from the action.
+- `ghost` (2026-11-16) — no surface at rest, muted label; the row-hover
+  grey and ink on hover and while its menu is open. Only in a workspace's
+  toolbar or foot, beside other controls (Clear after the filters, Undo in
+  the foot), where six floating pills would be the noise. Never in a Card,
+  never the action, never alone on a page.
 
 Props that change behaviour:
 
@@ -55,6 +62,12 @@ Props that change behaviour:
 - `reserve` — the other labels this button can show ("Preview" while it
   says "Edit", "Copied" while it says "Copy"). It reserves the widest, as
   for `pendingLabel`, so a toggle never moves under the pointer.
+- `shortcut` — one key that does the same thing on this surface ("U" for
+  Undo, "D" for Draft), drawn as an 18px `Kbd` at the label's end (on-ink
+  on the action) and hidden on touch. It sets `aria-keyshortcuts` (the key
+  in lower case unless you pass your own). It only shows the key: the
+  surface's own handler does the work (workspace.md, "Keys"). The key side
+  of the pill takes 2px less, as an icon's does.
 
 What it does for you, so do not redo it: press scales to `--kit-press-scale` (0.96) in 140ms;
 colour changes in 200ms; hover on the ink fill is `--kit-primary-hover` (a
@@ -150,7 +163,8 @@ ButtonLink also takes `iconEnd` and `width`, as Button.
 
 - `className` or `style` on a Button, ButtonLink or TextLink. A one-off
   colour or size is a missing variant, which is a kit change.
-- A red fill, a ghost or a link variant of Button. They do not exist.
+- A red fill or a link variant of Button. They do not exist. A `ghost`
+  outside a workspace toolbar or foot.
 - A hover or pressed state made with an alpha (`bg-kit-primary/90`).
 - A blue button. `--kit-action` is legacy, kept only for the showcase
   pictures (colour.md).

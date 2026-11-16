@@ -20,7 +20,7 @@ export type Section = {
   id: string
   title: string
   /** The TOC group it sits under. Groups appear in first-seen order. */
-  group: "Reference" | "Foundations" | "Components" | "Controls" | "Patterns" | "Showcase" | "Quincy cards" | "Overlays"
+  group: "Reference" | "Foundations" | "Components" | "Controls" | "Patterns" | "Workspace" | "Showcase" | "Quincy cards" | "Overlays"
   /** The doc it mirrors, under docs/design/. */
   doc: string
   body: React.ReactNode

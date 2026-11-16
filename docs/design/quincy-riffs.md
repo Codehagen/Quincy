@@ -96,10 +96,22 @@ opens with filler ("…so, the deploy thing.") far more often than the point.
 
 ## Data gaps
 
-- **The sentence an idea stands on** is not on `Angle`. The generator does
-  not return it, so `readings` is passed by the caller; without it the scrap
-  shows unmarked. Add `Angle.line` (and a ≤ 6-word `note`) to the angle
-  generation in lib/adapt.ts.
+- **The sentence an idea stands on** is half there. `Angle.mark`
+  (`{ line, span }`, optional) is on the type, and lib/source-span.ts turns
+  a quote into a span of the scrap: `markFor(scrap, line)`. It forgives
+  whitespace, curly quotes, dashes, "…", case and quote marks around the
+  quote, and returns nothing for a paraphrase, a quote under 8 or over 240
+  characters, or a quote not in the scrap. The span is always found in code,
+  never taken from the model, and derived on read from the stored scrap, so
+  it cannot go stale. Undefined means no mark (every old angle); Marked up
+  lists those under "From the whole note".
+  Still missing: storage. Angles are rows in `riff_angle` (typed columns, not
+  jsonb), so the quote needs a migration the owner runs:
+  `ALTER TABLE riff_angle ADD COLUMN line text NOT NULL DEFAULT ''`. After
+  it: `line: text("line").notNull().default("")` on `riffAngle`; `line`
+  in the angle schema (required, "" allowed, so strict structured output
+  holds) and one rule line in `ANGLE_BASE_RULES` (lib/adapt.ts); `settleLine`
+  on insert; `markFor` in the loaders. The ≤ 6-word `note` is not started.
 - **A take's length** is not on `Riff`; `meta` carries it ("4:12").
 - **`CHANNELS_FOR_SHAPE`** is read from lib/riffs.ts in a client component,
   as `components/riffs/channel-gap.tsx` already does. That module imports

@@ -8,13 +8,16 @@ import {
   BUTTON_BASE,
   BUTTON_ICON_END_SIZE,
   BUTTON_ICON_SIZE,
+  BUTTON_SHORTCUT_END_SIZE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   BUTTON_WIDTH,
+  ICON_DENSE,
   type ButtonSize,
   type ButtonWidth,
 } from "./control-styles"
 import { devWarn } from "./dev-warn"
+import { Kbd } from "./kbd"
 import { PendingAnnouncer, StableLabel } from "./stable-label"
 import { useOneAction } from "./use-one-action"
 
@@ -26,8 +29,11 @@ import { useOneAction } from "./use-one-action"
  *   a soft fall, ink label. The same surface step 2's controls use.
  * - `danger` — destructive only: the quiet control with a red label, never a
  *   red fill. Where letting go should cancel, use HoldButton instead.
+ * - `ghost` — no surface at rest, a muted label. Only in a workspace's
+ *   toolbar or foot (Clear, Undo), where six floating pills would be noise
+ *   (docs/design/workspace.md). Never in a Card.
  */
-export type ButtonVariant = "action" | "quiet" | "danger"
+export type ButtonVariant = "action" | "quiet" | "danger" | "ghost"
 
 export type { ButtonSize, ButtonWidth }
 
@@ -55,6 +61,14 @@ export type ButtonProps = Omit<
   iconEnd?: IconSvgElement
   /** `auto` (default) or `full`, to span the container (an auth card's column). */
   width?: ButtonWidth
+  /**
+   * A single key that does the same thing on this surface ("U" for Undo),
+   * drawn as an 18px cap at the label's end. The cap is decorative and
+   * hidden on touch; the key is announced through `aria-keyshortcuts`,
+   * which defaults to the key in lower case (pass your own to override).
+   * The surface's own key handler does the work; this only shows it.
+   */
+  shortcut?: string
   /**
    * Other labels this button can show ("Preview" while it says "Edit",
    * "Copied" while it says "Copy"). It reserves the widest, as it does for
@@ -92,6 +106,7 @@ export function Button({
   mark,
   iconEnd,
   width = "auto",
+  shortcut,
   reserve,
   pending = false,
   pendingLabel,
@@ -122,8 +137,14 @@ export function Button({
   }
 
   const labels = [children, ...(pendingLabel ? [pendingLabel] : []), ...(reserve ?? [])]
-  const iconSize = size === "lg" ? 18 : 16
+  const dense = size === "xs" || size === "sm"
+  // 16 at stroke 1.75 beside the dense 13px label; 16/18 at 2 beside body.
+  const iconProps = dense ? ICON_DENSE : { size: size === "lg" ? 18 : 16, strokeWidth: 2 }
   const leading = icon != null || mark != null
+  const trailing = iconEnd && !leading
+  const end = trailing ? BUTTON_ICON_END_SIZE[size] : shortcut ? BUTTON_SHORTCUT_END_SIZE[size] : ""
+  const keyshortcuts =
+    props["aria-keyshortcuts"] ?? (shortcut && shortcut.length === 1 ? shortcut.toLowerCase() : shortcut)
 
   return (
     <>
@@ -136,18 +157,23 @@ export function Button({
         disabled={disabled || pending}
         focusableWhenDisabled={pending || props.focusableWhenDisabled}
         aria-busy={pending || undefined}
-        className={`${BUTTON_BASE} ${BUTTON_SIZE[size]} ${leading ? BUTTON_ICON_SIZE[size] : ""} ${iconEnd && !leading ? BUTTON_ICON_END_SIZE[size] : ""} ${BUTTON_WIDTH[width]} ${BUTTON_VARIANT[variant]}`}
+        aria-keyshortcuts={keyshortcuts}
+        className={`${BUTTON_BASE} ${BUTTON_SIZE[size]} ${leading ? BUTTON_ICON_SIZE[size] : ""} ${end} ${BUTTON_WIDTH[width]} ${BUTTON_VARIANT[variant]}`}
       >
         {icon ? (
-          <HugeiconsIcon icon={icon} size={iconSize} strokeWidth={2} aria-hidden className="shrink-0" />
+          <HugeiconsIcon icon={icon} {...iconProps} aria-hidden className="shrink-0" />
         ) : mark != null ? (
           <span aria-hidden className={`grid shrink-0 place-items-center ${size === "lg" ? "size-4.5" : "size-4"} *:size-full`}>
             {mark}
           </span>
         ) : null}
         <StableLabel current={pending && pendingLabel ? 1 : 0} labels={labels} />
-        {iconEnd && !leading ? (
-          <HugeiconsIcon icon={iconEnd} size={iconSize} strokeWidth={2} aria-hidden className="shrink-0" />
+        {trailing && iconEnd ? (
+          <HugeiconsIcon icon={iconEnd} {...iconProps} aria-hidden className="shrink-0" />
+        ) : shortcut ? (
+          <span className="pointer-coarse:hidden">
+            <Kbd keys={[shortcut]} size="sm" tone={variant === "action" ? "on-ink" : "muted"} decorative />
+          </span>
         ) : null}
       </ButtonPrimitive>
       {pendingLabel ? <PendingAnnouncer message={pending ? pendingLabel : null} /> : null}
