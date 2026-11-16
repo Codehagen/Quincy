@@ -107,7 +107,7 @@ export {
   type NavRowDensity,
 } from "./list-row"
 export { FileChip, type FileChipProps } from "./file-chip"
-export { SourceMark, type SourceMarkProps } from "./source-mark"
+export { SourceMark, SourceGlyph, type SourceMarkProps, type SourceGlyphProps } from "./source-mark"
 export { GlyphTile, type GlyphTileProps } from "./glyph-tile"
 
 // Overlays and feedback (round 2), on Base UI.
@@ -248,4 +248,6 @@ export {
 } from "./panel"
 export { StatusPill, type StatusPillProps, type StatusPillStatus } from "./status-pill"
 export { Announcer, useAnnounce, type AnnouncerProps } from "./announcer"
+export { WorkspacePage, WorkspacePanes, type WorkspacePageProps } from "./workspace-page"
+export { useLetterKeys, type LetterKeyHandler, type LetterKeyMap } from "./use-letter-keys"
 export { ICON_DENSE, ICON_DENSE_CHEVRON } from "./control-styles"

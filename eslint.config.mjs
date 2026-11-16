@@ -2,6 +2,31 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import oxlint from "eslint-plugin-oxlint";
+import { builtinRules } from "eslint/use-at-your-own-risk";
+
+// The design rules a selector can see (docs/design/README.md, "Checks").
+// Oxlint has no `no-restricted-syntax`, so they run here. Each is ESLint's
+// own `no-restricted-syntax` under its own name: one rule can hold only one
+// options list per file, and these three cover different files, so a single
+// `no-restricted-syntax` would let the last matching block drop the others.
+const restrictedSyntax = builtinRules.get("no-restricted-syntax");
+const quincyDesign = {
+  rules: {
+    "no-riff-copy": restrictedSyntax,
+    "no-kit-primitive": restrictedSyntax,
+    "no-kit-action": restrictedSyntax,
+  },
+};
+
+/** A string anywhere: a className, a cn() or cva() argument, a template. */
+function inStrings(regex, message) {
+  return [
+    { selector: `Literal[value=${regex}]`, message },
+    { selector: `TemplateElement[value.raw=${regex}]`, message },
+  ];
+}
+
+const TESTS = ["**/*.test.ts", "**/*.test.tsx"];
 
 // Oxlint runs first (`pnpm lint`) and owns every rule it can run, including
 // the showcase import ban: see .oxlintrc.json. The last entry below switches
@@ -25,6 +50,82 @@ const eslintConfig = defineConfig([
     // Agent worktrees carry their own .next builds, untracked.
     ".claude/**",
   ]),
+  {
+    plugins: { "quincy-design": quincyDesign },
+  },
+  {
+    // A: visible copy says "idea". JSX text only: ids, routes and type
+    // names keep `riff` until the planned rename (plans/029, "Words").
+    files: [
+      "app/(app)/**/*.tsx",
+      "app/(marketing)/**/*.tsx",
+      "app/(auth)/**/*.tsx",
+      "app/(welcome)/**/*.tsx",
+      "components/**/*.tsx",
+    ],
+    ignores: ["app/prototypes/**", ...TESTS],
+    rules: {
+      "quincy-design/no-riff-copy": [
+        "error",
+        {
+          selector: "JSXText[value=/\\briffs?\\b/i]",
+          message: "Visible copy says 'idea', never 'riff' (docs/design/decisions.md)",
+        },
+      ],
+    },
+  },
+  {
+    // B: the semantic utilities only. A ramp step (`kit-gray-530`) is
+    // re-pointed by nothing in dark mode, and the page ground is the
+    // KitRoot's job. Warn while the hits listed in docs/design/README.md
+    // ("Checks") remain; make it an error once they are gone.
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["app/prototypes/**", "components/kit/**", ...TESTS],
+    rules: {
+      "quincy-design/no-kit-primitive": [
+        "warn",
+        ...inStrings(
+          "/\\bkit-(gray|blue|yellow|green|red)-\\d+\\b/",
+          "Use a semantic kit utility, never a ramp step like kit-gray-530 (docs/design/colour.md)",
+        ),
+        ...inStrings(
+          "/\\bbg-kit-ground\\b/",
+          "The ground is painted once, by KitRoot (components/kit/root.tsx). Objects use bg-kit-object (docs/design/surfaces.md)",
+        ),
+      ],
+    },
+  },
+  {
+    // B, inside the kit: ramp steps are the kit's own business, the ground
+    // is still only KitRoot's.
+    files: ["components/kit/**/*.{ts,tsx}"],
+    ignores: ["components/kit/root.tsx", ...TESTS],
+    rules: {
+      "quincy-design/no-kit-primitive": [
+        "warn",
+        ...inStrings(
+          "/\\bbg-kit-ground\\b/",
+          "The ground is painted once, by KitRoot (components/kit/root.tsx). Objects use bg-kit-object (docs/design/surfaces.md)",
+        ),
+      ],
+    },
+  },
+  {
+    // C: --kit-action is the old blue, kept for the showcase pictures only.
+    // `data-kit-action` (use-one-action.ts) is an attribute name, not the
+    // colour, so the lookbehind lets it through.
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["app/prototypes/**", "components/showcase/**", ...TESTS],
+    rules: {
+      "quincy-design/no-kit-action": [
+        "error",
+        ...inStrings(
+          "/(?<!data-)\\bkit-action\\b/",
+          "--kit-action is the old blue, for the showcase pictures only. The action is ink: Button variant=\"action\" (docs/design/colour.md)",
+        ),
+      ],
+    },
+  },
   // Must stay last: it turns off what .oxlintrc.json already runs.
   ...oxlint.buildFromOxlintConfigFile("./.oxlintrc.json"),
   {

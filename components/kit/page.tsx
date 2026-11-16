@@ -28,7 +28,7 @@ export type KitPageProps = {
   /**
    * `page` (default): the 720px column (`max-w-kit-page`) every page reads
    * in. `wide`: up to 1280px (`max-w-kit-wide`), for a page whose list and
-   * open item stand side by side once the stage is wide enough (Ideas;
+   * open item stand side by side once the stage is wide enough (Drafts, when it moves;
    * docs/design/page.md, "Wide"). Only for list and detail: a page of prose
    * or of single objects stays `page`, because a wide column is a long line.
    */

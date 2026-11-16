@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { Friend } from "@/components/mascot/friend"
+
 import { Card, type CardWidth } from "./card"
 import { Lead, Text } from "./text"
 
@@ -18,10 +20,13 @@ export type EmptyStateProps = {
    */
   baseline?: string
   /**
-   * The friend, above the words: `<Friend size={40} state="idle" />` from
-   * components/mascot. Optional, and at most once per page: it is Quincy
-   * saying it, not decoration (docs/design/mascot.md). Never an icon in a
-   * tinted circle.
+   * What stands above the words. Leave it out and the friend is there:
+   * `<Friend size={40} state="idle" />`, because an empty page is where
+   * Quincy speaks (docs/design/quincy-chat.md, "EmptyState"). Pass another
+   * Friend when a more fitting state applies. `null` leaves the words alone,
+   * on purpose; use it only where a friend already stands for this object.
+   * The friend may appear more than once on a page, one per object
+   * (docs/design/mascot.md). Never an icon in a tinted circle.
    */
   media?: React.ReactNode
   /** The one way in: a Button, a ButtonLink, EmptyStarters. One, never two. */
@@ -34,6 +39,16 @@ export type EmptyStateProps = {
   frame?: "card" | "none"
   /** With `frame="card"`: the width of the object it stands in for. */
   width?: CardWidth
+}
+
+/**
+ * What an EmptyState shows above its words: the friend unless the caller
+ * passed something, and nothing when the caller passed `null`. Exported so
+ * the default can be tested without a DOM.
+ */
+export function emptyStateMedia(media: React.ReactNode | undefined): React.ReactNode {
+  if (media === undefined) return <Friend size={40} state="idle" className="text-kit-ink" />
+  return media
 }
 
 /**
@@ -54,9 +69,10 @@ export function EmptyState({
   frame = "card",
   width = "full",
 }: EmptyStateProps) {
+  const shown = emptyStateMedia(media)
   const body = (
     <div data-slot="kit-empty-state" className="flex flex-col gap-kit-related">
-      {media != null ? <div className="flex">{media}</div> : null}
+      {shown != null ? <div className="flex">{shown}</div> : null}
       <div className="flex flex-col gap-kit-tight">
         <Lead bold={bold} rest={rest} />
         {baseline ? (

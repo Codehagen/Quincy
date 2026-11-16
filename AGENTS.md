@@ -53,6 +53,8 @@ the typecheck.
 
 ## Non-negotiables
 
+Before building or changing UI, read docs/design/README.md.
+
 **Icons are `hugeicons`, never `lucide`.** Import from `@hugeicons/react` +
 `@hugeicons/core-free-icons` and render with `<HugeiconsIcon icon={X} />`. Never
 mix two icon libraries on one surface — stroke weights and corner radii diverge

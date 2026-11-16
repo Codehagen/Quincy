@@ -8,7 +8,7 @@ import { archiveRiffFor } from "@/lib/riff-archive"
  * The Dismiss on /ideas, written as the page goes away.
  *
  * Dismiss hides a riff at once and holds the archive back while its Undo is on
- * screen (components/riffs/ideas-screen.tsx). If the tab closes or the page is
+ * screen (components/riffs/use-ideas.ts). If the tab closes or the page is
  * hidden for good in that window, a server action cannot be trusted to finish:
  * it is a fetch the browser is free to cancel. The screen calls this route
  * with `fetch(..., { keepalive: true })` instead, which the browser lets

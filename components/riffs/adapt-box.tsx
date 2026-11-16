@@ -7,6 +7,7 @@ import { MagicWand01Icon } from "@hugeicons/core-free-icons"
 import { adaptPostToRiff } from "@/app/(app)/ideas/actions"
 import {
   Button,
+  type ButtonSize,
   Dialog,
   DialogClose,
   DialogFooter,
@@ -35,9 +36,12 @@ import { useValidatedField } from "@/hooks/use-validated-field"
  */
 
 export function AdaptBox({
+  size = "md",
   onOpen,
   onCaptured,
 }: {
+  /** The trigger's size: `md` on a page, `sm` in a workspace toolbar. */
+  size?: ButtonSize
   /** Called when the dialog opens, so the page can clear its Undo. */
   onOpen?: () => void
   /** The riff it made, so the page can open it. */
@@ -95,7 +99,7 @@ export function AdaptBox({
         else setFailure(null)
       }}
     >
-      <DialogTrigger render={<Button icon={MagicWand01Icon}>Adapt a post</Button>} />
+      <DialogTrigger render={<Button size={size} icon={MagicWand01Icon}>Adapt a post</Button>} />
 
       <DialogPanel
         title="Adapt a post"

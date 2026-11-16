@@ -15,8 +15,8 @@ import { FOCUS_RING } from "./control-styles"
 const ROW =
   `relative flex w-full min-w-0 items-center gap-kit-related rounded-kit-control px-kit-row-x text-left text-kit-body select-none ${FOCUS_RING} focus-visible:outline-offset-0 ` +
   "transition-[scale,background-color,color] duration-[var(--kit-duration-press),var(--kit-duration-state),var(--kit-duration-state)] ease-kit-out motion-reduce:transition-none " +
-  "text-kit-ink hover:not-data-selected:not-data-disabled:bg-kit-row-hover active:scale-[0.985] motion-reduce:active:scale-100 " +
-  "data-selected:bg-kit-selected " +
+  "text-kit-ink hover:not-data-[selected]:not-data-disabled:bg-kit-row-hover active:scale-[0.985] motion-reduce:active:scale-100 " +
+  "data-[selected]:bg-kit-selected " +
   "data-disabled:cursor-default data-disabled:opacity-50 data-disabled:active:scale-100"
 
 export type ListRowProps = Omit<

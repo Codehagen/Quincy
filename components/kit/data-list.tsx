@@ -132,10 +132,13 @@ const ROW =
   `relative mx-2 ${GRID} min-h-kit-row-dense cursor-default rounded-kit-control-inner px-3 py-1.5 text-kit-dense text-kit-ink select-none pointer-coarse:min-h-11 ` +
   `${FOCUS_RING} focus-visible:outline-offset-0 ` +
   "transition-[background-color] duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none " +
+  // `data-[selected]`, not `data-selected:`: shadcn's tailwind.css makes the
+  // latter `[data-selected="true"]`, and the listbox writes `data-selected=""`
+  // (as calendar-month.tsx notes), so the selected row never painted.
   // Hover is a lighter step than selected in both themes (colour.md); a
   // press is one step past hover, with no scale: a full-width row that
   // shrinks reads as the list moving.
-  "hover:not-data-selected:bg-kit-row-hover active:not-data-selected:bg-kit-selected data-selected:bg-kit-selected " +
+  "hover:not-data-[selected]:bg-kit-row-hover active:not-data-[selected]:bg-kit-selected data-[selected]:bg-kit-selected " +
   SELECTION_BAR
 
 const WIDE = "hidden @kit-data-wide/kit-data-list:flex"
@@ -330,7 +333,7 @@ export function DataListTitle({ children, lines = 1, quiet = false }: DataListTi
       onPointerEnter={fullTitleIfCut}
       className={
         `min-w-0 text-kit-dense ${lines === 1 ? "truncate" : "line-clamp-2 text-pretty"} ${quiet ? "text-kit-ink-muted" : "text-kit-ink"} ` +
-        "in-data-selected:font-kit-strong in-data-selected:text-kit-ink"
+        "in-data-[selected]:font-kit-strong in-data-[selected]:text-kit-ink"
       }
     >
       {children}

@@ -33,6 +33,21 @@ and `components/quincy/` (`@/components/quincy`). Live examples:
   whose behaviour Base UI does not cover well is on ui-sdk. One component
   never mixes both (controls.md, "Behaviour libraries").
 - Icons are `hugeicons`, never `lucide`.
+- **A new direction is a lab round**, and a reference gives one idea, never
+  its layout (decisions.md, top).
+- **Motion is held to an iOS-native bar**; "better animation" changes only
+  the motion (motion.md).
+- **Every EmptyState shows the friend** above the words (quincy-chat.md);
+  the friend may appear more than once on a page, one per object
+  (mascot.md).
+- **A tool's sidebar row opens the most recent work**; the index is one
+  click behind it (app-shell.md).
+- **Reorderable rows travel**, keyboard moves too (controls.md).
+- **DraftCard brackets sit in the margin from 32rem**, under the lines when
+  narrow; the text never shifts (quincy-drafts.md).
+- **Examples are what a user would get**: a before→after number from their
+  own work, one story, never a currency example (marketing.md).
+- **Page titles are `${title} · Quincy`** (Copy, below).
 
 ## Never
 
@@ -60,18 +75,18 @@ borrowed character, a follower chart, a blue button. Reasons in decisions.md.
 | [workspace.md](workspace.md) | a page worked through by key: `Toolbar`, `FilterMenu`, `DataList`, `Panel`, `KeyBar`, `StatusPill`, `Announcer` |
 | [forms.md](forms.md) | `Field`, `Input`, `Textarea`, `SearchField`, validation |
 | [states.md](states.md) | working (LiveDot + words), empty, refused or failed |
-| [motion.md](motion.md) | `Arrive`, durations, curves, reduced motion |
+| [motion.md](motion.md) | `Arrive`, durations, curves, reduced motion; the iOS-native bar |
 | [editor-marks.md](editor-marks.md) | `Highlight`, `MarginNote`, `Beats`, `BeatBracket` |
 | [quincy-drafts.md](quincy-drafts.md) | `DraftCard`, `ScheduledPost`, `SlotCell`, `PostResult`, `AgainstMedian` |
 | [quincy-riffs.md](quincy-riffs.md) | `RiffCard` + `AngleTabs` (shown as "ideas"), `ProvenanceMark` |
 | [quincy-chat.md](quincy-chat.md) | `QuincyReply`, `YourTurn`, `QuincyAsks`, `EmptyState`, kit markdown |
-| [marketing.md](marketing.md) | a public page: `MarketingShell`, `Section`, display type, `MarketingButton`, `WaitlistForm` |
+| [marketing.md](marketing.md) | a public page: `MarketingShell`, `Section`, display type, `MarketingButton`, `WaitlistForm`; demo and fixture examples |
 | [showcase.md](showcase.md) | marketing and docs pictures only; never in the app |
 | [showcase-demos.md](showcase-demos.md) | which picture tells which story; thread motion; the copy-leak rule |
 | [mascot.md](mascot.md) | the friend: `Friend`, `QuincyMark`, which state means what |
 | [mascot-timing.md](mascot-timing.md) | the beats both drawings share, per-state timing, reduced motion |
 | [mascot-iterating.md](mascot-iterating.md) | changing the friend: a frame, a new state, the favicon, exports |
-| [decisions.md](decisions.md) | before proposing a look: what was chosen, what was superseded; [visual](decisions-visual.md), [landing](decisions-landing.md) |
+| [decisions.md](decisions.md) | before proposing a look or a new direction (a reference gives one idea, never its layout; a new direction is a lab round): what was chosen, what was superseded; [visual](decisions-visual.md), [landing](decisions-landing.md) |
 | [history-brass-sand.md](history-brass-sand.md) | why the old app looked as it did (superseded 2026-11-16) |
 
 ## Copy
@@ -85,3 +100,39 @@ borrowed character, a follower chart, a blue button. Reasons in decisions.md.
 - Never "riff" in visible copy. An angle is an **idea**; name the group by
   its source ("3 ideas from your voice note"). The page is **Ideas**. Code
   keeps `Riff` / `Angle` (plans/029, "Words").
+
+**Page titles are always `${title} · Quincy` — never an em dash.**
+Why: an em dash breaks the writing rules, and a page title is visible copy:
+it is the tab, the history and the shared card. `constructMetadata`
+(`lib/metadata.ts`) writes the suffix; pass `title`, never a whole string
+with the brand in it.
+<!-- 2026-11-16: "Jeg er enig med « · Quincy»" -->
+
+## Checks
+
+The rules a machine can hold. `pnpm lint` and `pnpm test` run them; a check
+that fails names the doc it came from.
+
+- **A. Never "riff" in visible copy.** ESLint `quincy-design/no-riff-copy`
+  (eslint.config.mjs): JSX text matching `riff`/`riffs` in `app/(app)`,
+  `app/(marketing)`, `app/(auth)`, `app/(welcome)` and `components/`. Error.
+- **B. No ramp steps, one ground.** ESLint `quincy-design/no-kit-primitive`:
+  a string with `kit-gray|blue|yellow|green|red-<L>` outside
+  `components/kit/`, or `bg-kit-ground` outside `components/kit/root.tsx`.
+  Warn until the hits below are gone, then error.
+- **C. No old blue.** ESLint `quincy-design/no-kit-action`: `kit-action` in a
+  string outside `components/showcase/` (`data-kit-action` is a name, not the
+  colour, and passes). Error.
+- **D. Every nav row has an icon.** `components/quincy/shell/nav.test.ts`.
+- **E. Every EmptyState shows the friend.** `components/kit/empty-state.test.ts`
+  (quincy-chat.md, "EmptyState").
+- **F. Titles end in " · Quincy", never an em dash.** `lib/metadata.test.ts`.
+
+A, B and C skip `app/prototypes/` (frozen lab records) and test files.
+
+Open hits for B (2026-11-16), each a warning: `bg-kit-ground` in
+`components/editor/studio-chat.tsx`, `components/editor/studio-frame.tsx`
+(twice), `components/kit/data-list.tsx`, `components/kit/panel.tsx`,
+`components/marketing/never-list.tsx` and
+`components/quincy/shell/app-shell.tsx`; a ramp step (`--kit-gray-450`,
+`--kit-gray-300`) in `components/showcase/demos/desk-and-pocket.tsx`.

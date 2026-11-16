@@ -98,9 +98,12 @@ where you have run `pnpm next typegen`.
 ### Width
 
 ```
-Which width?
- ├── Default, every page                                   → width="page" (720)
- └── List and detail that should use a wide screen (Ideas) → width="wide" (1280)
+Which frame?
+ ├── A queue worked through daily, item by item, by key (Ideas)
+ │     → no KitPage: WorkspacePage, full bleed and full height ("Workspace", below)
+ └── Every other page → KitPage
+      ├── Default, every page                                 → width="page" (720)
+      └── List and detail that should use a wide screen      → width="wide" (1280)
 ```
 
 `wide` raises the column's cap to `--container-kit-wide` (80rem) and
@@ -111,7 +114,7 @@ and a line of prose that long is not read.
 
 ```tsx
 // Correct — the screen lays its list and detail side by side when the stage allows
-<KitPage title="Ideas" summary={summary} width="wide">…</KitPage>
+<KitPage title="Drafts" summary={summary} width="wide">…</KitPage>
 
 // Incorrect — a wide page with nothing to put beside anything: a 1216px Card of prose
 <KitPage title="Settings" width="wide">…</KitPage>
@@ -217,6 +220,45 @@ window, and what matters is the room the Stage actually has.
 <div className="xl:grid xl:grid-cols-[380px_1fr]">…</div>
 ```
 
-Ideas (components/riffs/ideas-screen.tsx) is the one wide page. Drafts has
-the same list and open shape and would take the same treatment; it is still
-`page`.
+No page is `wide` today: Ideas was, until it became a workspace
+(2026-11-16, below). Drafts has the same list and open shape and would take
+this treatment; it is still `page`.
+
+## Workspace
+
+A page you work through rather than read (docs/design/workspace.md): a
+toolbar, a dense list, the open item in a pane beside it, a foot of keys.
+It replaces KitPage whole: no 28px title, no Stage leads, no 720 column.
+Ideas is the first (components/riffs/ideas-workspace.tsx).
+
+`WorkspacePage` (components/kit/workspace-page.tsx) is its frame, chosen
+over a `width="full"` on KitPage because nothing of KitPage survives: not
+the title, not the gutter, not the top and bottom air, not the gaps.
+
+- **Full bleed, full height.** It fills `<main>`, which AppShell gives a
+  definite height, so each Panel scrolls inside itself and the toolbars and
+  the foot never scroll away. The page never scrolls as a whole.
+- **One Announcer, `data-letter-keys`, and a size container**
+  (`kit-workspace`), so a pane's width is `cqi` of the workspace, never `vw`.
+- **The shell's corner.** With the sidebar hidden, the first Toolbar starts
+  its controls past the Show control (`--kit-shell-inset`).
+- **The fold is the page's.** Under ~900px of workspace (or where the
+  detail pane would leave the title column under 320) the page renders one
+  column whose rows open in place, from the same store. Measured on the
+  frame (`ref`), never the viewport.
+
+```tsx
+// Correct — the frame, then its rows: toolbars, panes, foot
+<WorkspacePage ref={ref}>
+  <Toolbar label="Ideas" divided={false}><ToolbarTitle>Ideas</ToolbarTitle>…</Toolbar>
+  <Toolbar label="Filters" size="filter">…</Toolbar>
+  <WorkspacePanes>
+    <Panel label="Ideas"><PanelBody><DataList …/></PanelBody></Panel>
+    <Panel label="Open idea" width="clamp(440px, 36cqi, 560px)" edge="start">…</Panel>
+  </WorkspacePanes>
+  <KeyBar keys={KEYS} />
+</WorkspacePage>
+
+// Incorrect — a workspace inside a KitPage: a 28px title over a toolbar, and a page that scrolls the panes away
+<KitPage title="Ideas" width="wide"><Toolbar …/>…</KitPage>
+```

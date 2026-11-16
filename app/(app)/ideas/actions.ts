@@ -34,6 +34,7 @@ import {
 } from "@/lib/riff-writes"
 import { archiveRiffFor } from "@/lib/riff-archive"
 import { getSession } from "@/lib/session"
+import { settleLine } from "@/lib/source-span"
 import { voiceExamples } from "@/lib/voice"
 import { riffAngle } from "@/lib/schema-app"
 import { recordUsage, spendCooldown } from "@/lib/usage"
@@ -263,6 +264,8 @@ export async function askForChannelAngle(input: {
      */
     kind: asAngleKind(angle.kind),
     why: (angle.why ?? "").trim(),
+    // The quote Marked up underlines; "" when there is none (lib/source-span.ts).
+    line: settleLine(angle.line),
     // Last, so an angle you asked for lands under the ones you were given
     // rather than jumping the queue you were already reading.
     position: owned.angles.length,
@@ -436,6 +439,8 @@ export async function askForAngle(input: {
     shape: angle.shape,
     kind: asAngleKind(angle.kind),
     why: (angle.why ?? "").trim(),
+    // The quote Marked up underlines; "" when there is none (lib/source-span.ts).
+    line: settleLine(angle.line),
     // Last, so the angle you asked for lands under the ones you were given.
     position: owned.angles.length,
   })

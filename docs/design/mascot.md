@@ -86,9 +86,14 @@ What is Quincy doing that the person can see the result of?
   state; a sentence beside it says it. A state with no sentence or no
   product moment behind it teaches the reader that the eyes mean nothing,
   and then `stuck` beside a failure means nothing either.
-- **One friend per object.** One card, one picture, one window: one face.
-  Two friends in one object read as two characters. A marketing page may
-  show one per picture as it scrolls; a frozen icon does not count.
+- **The friend may appear more than once on a page; the limit is one
+  friend per object.** One card, one picture, one window: one face. The
+  sidebar's mark, an EmptyState and a reply beside each other are three
+  objects and three friends. A frozen icon does not count.
+  Why: two friends in one object read as two characters, but a friend in
+  every object reads as one character that is everywhere, which is the
+  point.
+  <!-- 2026-11-15: "Jeg liker speiselt godt at figurene er overalt" -->
 - **The body never moves.** Life is blinks, gaze and the sash. No bob,
   bounce or scale: a bobbing page reads as a toy, and a test holds every
   frame's silhouette to the mark (`engine.test.ts`, `smooth.test.ts`).

@@ -12,6 +12,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   Button,
+  type ButtonSize,
   Dialog,
   DialogClose,
   DialogFooter,
@@ -218,9 +219,12 @@ type Take = {
 
 export function RecordBox({
   isAction = false,
+  size = "md",
   onOpen,
   onCaptured,
 }: {
+  /** The trigger's size: `md` on a page, `sm` in a workspace toolbar. */
+  size?: ButtonSize
   /**
    * Whether Record a thought is the page's one action right now. The page
    * decides (docs/design/actions.md, "Which action wins"): it is the standing
@@ -749,7 +753,7 @@ export function RecordBox({
   const sending = phase === "sending"
 
   const trigger = (
-    <Button variant={isAction ? "action" : "quiet"} icon={Mic01Icon}>
+    <Button variant={isAction ? "action" : "quiet"} size={size} icon={Mic01Icon}>
       Record a thought
     </Button>
   )

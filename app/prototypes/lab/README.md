@@ -12,12 +12,16 @@ What kind of question is it?
  ├── Already decided (decisions.md, a plan)        → build it; no lab
  ├── An open question with 2–3 clear options       → 3 variants behind a picker
  │     on one prototype route (app/prototypes/<page>/harness.tsx and
- │     picker.css; the emil-prototype skill)
+ │     picker.css)
  └── The direction itself is unknown               → a lab round of 20
 ```
 
 A lab round costs 20 pieces and an afternoon of looking. Spend it only when
 nobody can yet name the options.
+
+A new direction for a surface always starts here, never as a build, and a
+reference gives one idea carried by something Quincy owns, never its layout
+(`docs/design/decisions.md`, top).
 
 ## The three tracks
 

@@ -1,10 +1,10 @@
 import { Suspense } from "react"
 
-import { channelGaps, CHANNEL_LABELS, getRiffs } from "@/lib/riffs"
+import { channelGaps, CHANNEL_LABELS, getIdeasPace, getRiffs } from "@/lib/riffs"
 import { listConnections } from "@/lib/channels"
 import { writesPerShape } from "@/lib/drafting"
 import { getSession } from "@/lib/session"
-import { IdeasScreen } from "@/components/riffs/ideas-screen"
+import { IdeasWorkspace } from "@/components/riffs/ideas-workspace"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -16,19 +16,14 @@ import { constructMetadata } from "@/lib/metadata"
  * (angles) in it, and you decide which is worth writing before a word is
  * committed to a platform. Nothing here is a post.
  *
- * **Capture is the page; the queue is what came back.** Decided from the
- * four-way prototype at /prototypes/riffs on 2026-08-08: the product then held
- * six riffs across two accounts, every one from voice or paste, so the live
- * problem was input rather than the size of the queue.
- *
  * **The list is a working queue, not an archive.** It stays short because
- * acting on a riff removes it, not because it is filtered.
+ * acting on an idea removes it, not because it is filtered.
  *
- * **A kit page since 2026-11-16** (plans/029). The stack of riff cards became
- * list and detail in one Stage (docs/design/page.md): the riffs as rows by
- * day, the open one under them as a RiffCard. That is the Fold the 2026-08-08
- * decision named as the next change, taken with the move to the kit. See
- * components/riffs/ideas-screen.tsx.
+ * **A workspace since 2026-11-16** (docs/design/workspace.md; decisions.md,
+ * "Ideas is a working surface — Table"): a toolbar, a dense table of ideas,
+ * and the open idea Marked up beside it, worked by key. Capture (Record a
+ * thought, Adapt a post) moved into the toolbar; the queue is the page. See
+ * components/riffs/ideas-workspace.tsx.
  */
 
 export const metadata = constructMetadata({
@@ -42,11 +37,12 @@ export default async function IdeasPage() {
   const session = await getSession()
   if (!session) return null
 
-  // Concurrent: neither read needs the other, and RiffsRefresh re-runs this
-  // page every four seconds while a voice riff processes.
-  const [riffs, allConnections] = await Promise.all([
+  // Concurrent: none of the reads needs another, and RiffsRefresh re-runs
+  // this page every four seconds while a voice riff processes.
+  const [riffs, allConnections, pace] = await Promise.all([
     getRiffs(session.user),
     listConnections(session.user.id),
+    getIdeasPace(session.user),
   ])
 
   /**
@@ -61,21 +57,17 @@ export default async function IdeasPage() {
 
   /**
    * How many drafts "Draft this idea" writes, per shape, from the same
-   * `targetsFor` the action uses, so the card states what will happen.
+   * `targetsFor` the action uses, so the open idea states what will happen.
    */
   const writes = writesPerShape(connected.map((c) => c.id))
 
   /** Per riff, the channels none of its ideas reach. Resolved here, once. */
   const gaps = Object.fromEntries(riffs.map((r) => [r.id, channelGaps(r, connected)]))
 
-  /**
-   * The screen renders KitPage itself, because the summary counts the ideas
-   * still waiting (docs/design/page.md, "Where KitPage renders"). Suspense
-   * because `useQueryState` reads which idea is open (`?idea=`).
-   */
+  // Suspense because `useQueryState` reads which idea is open (`?idea=`).
   return (
     <Suspense>
-      <IdeasScreen riffs={riffs} gaps={gaps} writes={writes} />
+      <IdeasWorkspace riffs={riffs} gaps={gaps} writes={writes} pace={pace} />
     </Suspense>
   )
 }

@@ -16,9 +16,10 @@ import { listConnections } from "./channels"
 import { db } from "./db"
 import { recentKinds } from "./drafts"
 import { formatConversationDate } from "./format-date"
+import { ideasPace, type IdeasPace } from "./ideas-pace"
 import { draft, draftVersion, riff, riffAngle, sourceItem } from "./schema-app"
 import type { ShippedOutcome } from "./shipped-outcome"
-import type { SourceSpan } from "./source-span"
+import { markFor, settleLine, type SourceSpan } from "./source-span"
 import { readShippedQuestion } from "./shipped-work"
 import { resolveTimeZone } from "./timezone"
 import { recordUsage } from "./usage"
@@ -113,9 +114,8 @@ export type Angle = {
    * `riff.scrap` by `markFor` (lib/source-span.ts), never taken from the
    * model.
    *
-   * Not populated yet: `riff_angle` has no `line` column, and adding one is a
-   * migration the owner runs (quincy-riffs.md, "Data gaps"). Until then the
-   * loaders leave this unset and every idea renders unmarked.
+   * Stored as `riff_angle.line` since 2026-11-16; angles written before then
+   * have "" there and render unmarked.
    */
   mark?: { line: string; span: SourceSpan }
 }
@@ -518,6 +518,9 @@ export async function getRiffs(user: {
         shape: a.shape as Angle["shape"],
         kind: a.kind,
         why: a.why,
+        // Resolved against the scrap on every read, never stored as offsets
+        // (lib/source-span.ts). Absent, not undefined, when there is no mark.
+        ...markOf(row.scrap, a.line),
         ...(draftedHooks.has(a.hook)
           ? {
               status: "drafted" as const,
@@ -528,6 +531,35 @@ export async function getRiffs(user: {
   }))
 
   return real
+}
+
+/**
+ * The person's own drafting pace, for the Ideas header (lib/ideas-pace.ts).
+ *
+ * One instant per idea, not per draft: an idea drafted for two channels is two
+ * `draft` rows with one `riff_hook`, so the hook is grouped and its first draft
+ * is when it was drafted. A draft with no hook was not written from an idea.
+ * Every hook, not a window: the baseline needs to know when they started.
+ */
+export async function getIdeasPace(user: {
+  id: string
+  timezone?: string | null
+}): Promise<IdeasPace> {
+  const rows = await db
+    .select({ at: sql<Date>`min(${draft.createdAt})`.mapWith(draft.createdAt) })
+    .from(draft)
+    .where(and(eq(draft.userId, user.id), ne(draft.riffHook, "")))
+    .groupBy(draft.riffHook)
+  return ideasPace(
+    rows.map((r) => r.at),
+    new Date(),
+    resolveTimeZone(user.timezone)
+  )
+}
+
+function markOf(scrap: string, line: string): Pick<Angle, "mark"> {
+  const mark = markFor(scrap, line)
+  return mark ? { mark } : {}
 }
 
 /**
@@ -730,6 +762,7 @@ export async function createRiffFromPost({
       shape: angle.shape,
       kind: asAngleKind(angle.kind),
       why: angle.why.trim(),
+      line: settleLine(angle.line),
       position,
     }))
   )
@@ -1125,6 +1158,8 @@ export type SourceRiff = {
     hook: string
     shape: string
     why: string
+    /** As `Angle.mark`: the quote and its span in `scrap`, or undefined. */
+    mark?: { line: string; span: SourceSpan }
     drafted: boolean
   }[]
 }
@@ -1254,6 +1289,7 @@ export async function readSourceByRef(input: {
           hook: a.hook,
           shape: a.shape,
           why: a.why,
+          mark: markFor(row.scrap, a.line),
           drafted: draftedHooks.has(a.hook),
         })),
     })),
@@ -1390,6 +1426,7 @@ export async function createRiffFromSaid({
       shape: angle.shape,
       kind: asAngleKind(angle.kind),
       why: angle.why.trim(),
+      line: settleLine(angle.line),
       position,
     }))
   )
@@ -1590,6 +1627,7 @@ export async function completeSpokenRiff({
         shape: angle.shape,
         kind: asAngleKind(angle.kind),
         why: angle.why.trim(),
+        line: settleLine(angle.line),
         position,
       }))
     )

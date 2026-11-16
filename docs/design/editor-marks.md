@@ -111,6 +111,13 @@ and keyboard always see all three.
 <BeatBracket beat="meant"><Text>People answer a question.</Text></BeatBracket>
 ```
 
+**A DraftCard's beat brackets sit in the margin when the card's container
+has room (container query ≥32rem) and fall back to labels under the lines
+when narrow; the text never shifts.**
+Why: the owner accepted the margin brackets as they stand in the hero
+picture.
+<!-- 2026-11-16: "rett de 2" -->
+
 **A draft card is its own room.** `DraftCard` (and the chat's writing card)
 wraps its Card in `DRAFT_ROOM`, a `kit-stage` size container, so the card
 measures the space it sits in rather than needing a Stage around it. From

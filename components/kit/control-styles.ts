@@ -236,4 +236,4 @@ export const BUTTON_VARIANT = {
  * The element needs `relative`.
  */
 export const SELECTION_BAR =
-  "data-selected:before:absolute data-selected:before:inset-y-2 data-selected:before:start-0.5 data-selected:before:w-kit-selection-bar data-selected:before:rounded-full data-selected:before:bg-kit-ink"
+  "data-[selected]:before:absolute data-[selected]:before:inset-y-2 data-[selected]:before:start-0.5 data-[selected]:before:w-kit-selection-bar data-[selected]:before:rounded-full data-[selected]:before:bg-kit-ink"

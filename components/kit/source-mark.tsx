@@ -54,9 +54,44 @@ export type SourceMarkProps = {
  * own grey: a brand palette per row would turn a list into a wall of logos.
  * A source with neither a mark nor a glyph shows its name alone.
  */
-export function SourceMark({ id, label, when, meta }: SourceMarkProps) {
+export type SourceGlyphProps = {
+  /** As SourceMark's `id`. */
+  id: string
+  /**
+   * `small` (14, stroke 2): beside 12.5 text, as in SourceMark. `dense` (16,
+   * stroke 1.75): a DataList cell or a workspace strip, beside 12–13 text.
+   */
+  size?: "small" | "dense"
+}
+
+/**
+ * The source's mark alone: its brand mark, a material icon, or the pen for
+ * typed text. Monochrome, decorative (the name beside it, or an sr-only
+ * span, says it). A source with no glyph renders nothing.
+ */
+export function SourceGlyph({ id, size = "small" }: SourceGlyphProps) {
   const mark = MARK_FOR[id] ?? id
   const icon = MATERIAL_ICON[id] ?? (!id ? Edit01Icon : undefined)
+  if (hasPlatformMark(mark)) {
+    return size === "dense" ? (
+      // Brand marks are drawn edge to edge; at 85% of the icon box they sit
+      // at the optical size of a 16px stroke icon beside them.
+      <span aria-hidden className="grid size-4 shrink-0 place-items-center *:size-[85%]">
+        <PlatformMark platform={mark} size={14} />
+      </span>
+    ) : (
+      <PlatformMark platform={mark} size={14} />
+    )
+  }
+  if (!icon) return null
+  return size === "dense" ? (
+    <HugeiconsIcon icon={icon} size={16} strokeWidth={1.75} aria-hidden className="shrink-0" />
+  ) : (
+    <HugeiconsIcon icon={icon} size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+  )
+}
+
+export function SourceMark({ id, label, when, meta }: SourceMarkProps) {
   const name = label || (!id ? "Written here" : "")
   const tail = [when, meta].filter(Boolean).join(" · ")
 
@@ -65,11 +100,7 @@ export function SourceMark({ id, label, when, meta }: SourceMarkProps) {
       data-slot="kit-source-mark"
       className="inline-flex max-w-full min-w-0 items-center gap-kit-controls text-kit-small text-kit-ink-muted"
     >
-      {hasPlatformMark(mark) ? (
-        <PlatformMark platform={mark} size={14} />
-      ) : icon ? (
-        <HugeiconsIcon icon={icon} size={14} strokeWidth={2} aria-hidden className="shrink-0" />
-      ) : null}
+      <SourceGlyph id={id} />
       {name ? <span className="truncate">{name}</span> : null}
       {tail ? (
         <span className="shrink-0 font-kit-mono text-kit-mono tabular-nums">

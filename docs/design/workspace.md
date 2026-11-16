@@ -2,8 +2,9 @@
 
 A workspace is a page you work through, not a page you read: a toolbar, a
 dense list with columns, and the open item in a pane beside it. Ideas is
-the first one (decisions.md, "Ideas is a working surface — Table",
-2026-11-16). It is **not a dashboard**: no tiles, no charts, no totals. The
+the first one (components/riffs/ideas-workspace.tsx; decisions.md, "Ideas
+is a working surface — Table", 2026-11-16). It has no L: nothing in the
+data can hold "later", so the key and the filter wait for a column. It is **not a dashboard**: no tiles, no charts, no totals. The
 one number on the page is stated against the person's own week ("you
 usually draft 4"), as everywhere (README.md, Copy).
 
@@ -46,7 +47,10 @@ whole). It has no 28px title and no Stage leads: the page's name is a
   32px band, so one hairline runs across all panes.
 - **The foot never moves the panes**: KeyBar and the Undo note are both a
   `FootBar`, exactly 36 plus the home indicator.
-- Wrap the frame in `<Announcer>` and put `data-letter-keys` on its root.
+- The frame is `WorkspacePage` (page.md, "Workspace"): full bleed and full
+  height under the shell, with the Announcer, `data-letter-keys` and the
+  `kit-workspace` size container on its root. The panes sit in
+  `WorkspacePanes`.
 
 Heights are tokens (spacing.md): `kit-bar` 52, `kit-filter-bar` 44,
 `kit-head` 32, `kit-foot` 36, `kit-row-dense` 36.
@@ -132,8 +136,10 @@ control. Its verbs live in the open item's pane, as ListRow's do.
 The list owns ↑ ↓ Home End and typeahead. Letters that act on the open row
 (j k to move, D to draft, N, L, U, / to search) are the **page's**:
 
-- **One document listener in the capture phase**, and a handled key calls
-  `preventDefault()` and `stopPropagation()`. Otherwise, with focus on a
+- **`useLetterKeys`** does this part: **one document listener in the
+  capture phase**, and a handled key calls `preventDefault()` and
+  `stopPropagation()`. A key that spends or removes takes `{ once: true }`,
+  so a held D is one Draft. Otherwise, with focus on a
   row, the typeahead takes N as the first letter of a title and moves
   before the action runs. Ignore keys in a field, with a modifier, or
   inside an open menu (`[role="menu"]`).
@@ -176,7 +182,7 @@ The fixed pane's width is a share of the **workspace**, in `cqi` on a
 container around the panes, never `vw`: the sidebar is not the page's.
 Under the fold (a workspace under ~900px, or where the title column would
 drop under 320px) the page folds to one column whose rows open in place
-(workspace-lab `layouts/table.tsx`, `shouldFold`). Fold on the page's own
+(components/riffs/ideas-workspace.tsx, `shouldFold`). Fold on the page's own
 width, never the viewport.
 
 ## KeyBar and FootBar

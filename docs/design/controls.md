@@ -151,6 +151,18 @@ On ui-sdk (2026-11-16): `CommandPalette`, `TokenInput`, `Calendar`,
 selector (`[&[data-selected]]:`), not a value-matching variant.
 
 
+### Reorderable: rows travel
+
+**Reorderable rows travel between positions (FLIP, ~220ms
+`--kit-duration-shift`, `ease-kit-out`), including keyboard moves; reduced
+motion reorders instantly.**
+Why: the owner wants the move "smooth mellom de". Keyboard moves animate
+too, because the slide shows where the row went; a row that jumps on an
+arrow key leaves the person to find it again. Only `translate` moves, and a
+step that lands mid-slide retargets from where the row is drawn
+(`components/kit/reorderable.tsx`).
+<!-- 2026-11-16: "må du kjøre en … slik at den er mer smooth mellom de" -->
+
 ### Reorderable: the active row and the position
 
 `activeKey` + `onActiveChange` pick a row: a row takes focus on a click or

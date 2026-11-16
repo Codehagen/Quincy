@@ -43,6 +43,7 @@ export {
   ideasFrom,
   sourcePhrase,
   dismissedSentence,
+  writesSentence,
   angleTabLabels,
   type RiffCardProps,
   type AngleTabsProps,

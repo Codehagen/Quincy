@@ -44,13 +44,13 @@ ramps and shadcn tokens are deleted and `docs/colour.md` is rewritten.
 
 ## Order of work
 
-1. Tokens + core components (`components/kit/`), with `/emil-color` and
-   `/emil-component-design`.
+1. Tokens + core components (`components/kit/`), with a colour pass and a
+   component API review.
 2. App controls and showcase components, in parallel.
-3. Docs (`docs/design/`, `/emil-design-system-docs`) and the component lab at
+3. Docs (`docs/design/`, generated design docs) and the component lab at
    `/prototypes/kit`, laid out like the Stageshow page.
 4. Verify: one-sentence prompt builds a real screen from the kit;
-   `/emil-ui-review` reads the drift; fix the docs, not the output.
+   a UI review reads the drift; fix the docs, not the output.
 
 ## Behaviour layer
 
@@ -109,4 +109,4 @@ Order of work, revised:
    picture of Approve is the app's Approve, then delete `--kit-action*` and
    its `--ss-*` mappings in `components/showcase/theme.css`.
 4. Verify as before: a one-sentence prompt builds a real screen from the
-   kit; `/emil-ui-review` reads the drift; fix the docs, not the output.
+   kit; a UI review reads the drift; fix the docs, not the output.

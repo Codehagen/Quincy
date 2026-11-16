@@ -5,6 +5,14 @@ record and the riff card rises in; a rule slides into the brain. Every motion
 has a cause the person made. Nothing moves on a timer, on load for its own
 sake, or in a loop.
 
+**Motion is held to an iOS-native bar: arrivals push up and settle. When
+asked for "better animation", change only the motion — never the content or
+the component.**
+Why: the owner judges motion against Apple's own apps. A request about
+motion is about how a thing moves; rewriting what moves answers a question
+nobody asked and loses the version that was approved.
+<!-- 2026-11-15: "Slik som denne ser jo ikke ut som apple" / "Jeg mente bare at du skulle gjøre animation bedre på det som var" -->
+
 ## Durations and curves
 
 Closed set. Name them by token, never as numbers in a class.
@@ -13,6 +21,7 @@ Closed set. Name them by token, never as numbers in a class.
 | --- | --- | --- |
 | `--kit-duration-press` | 140 | press, to `--kit-press-scale` (0.96) |
 | `--kit-duration-state` | 200 | hover, colour, dim, a tab swap |
+| `--kit-duration-shift` | 220 | rows trading places (Reorderable, FLIP) |
 | `--kit-duration-enter` | 320 | something arrives (Arrive, a margin note) |
 | `--kit-duration-travel` | 520 | an object crossing the surface (a draft into its slot) |
 | `--kit-duration-sweep` | 700 | the highlighter |

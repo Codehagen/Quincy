@@ -16,7 +16,7 @@ setup pages in the account menu, the conversation history in Studio.
 | --- | --- |
 | `AppShell` | `defaultOpen` (from the `sidebar_state` cookie, so a collapsed sidebar never flashes open), `conversations` (Studio's history), `user`, `waiting`, `banner`, `children` |
 | `AppSidebar` | the same contents on a desktop and in the phone's sheet: `QuincyMark`, the `NAV` rows, then the `AccountMenu` in the foot |
-| `NAV` | the sidebar, flat, each row with its icon: Studio, Ideas, Drafts, Lineup, Numbers, Sources |
+| `NAV` | the sidebar, flat, each row with its icon: Studio, Ideas, Drafts, Lineup, Numbers, Sources, Cuts (Beta) |
 | `SETUP_NAV`, `ACCOUNT_NAV` | the account menu's links: Brain, Channels, Rhythm (touched once, then left), then Credits, Billing, Settings |
 | `isActive`, `navItemFor`, `CONVERSATIONS_HREF` | the route model in `nav.ts`: adding a surface is one line. A plain module, so a server component and a test can read it. `nav.test.ts` fails when a page in `app/(app)` has no way in |
 | `AccountMenu` | who you are; the setup and account links; theme (System, Light, Dark, and D from anywhere); Why Quincy works this way; sign out |
@@ -25,6 +25,12 @@ setup pages in the account menu, the conversation history in Studio.
 
 ## Rules
 
+- **A tool's sidebar row opens the tool on the most recent work (Cuts
+  opens the latest cut; Studio opens a fresh composer with history one
+  click away); the index sits one click behind it.**
+  Why: the row should take you into the room, not to a list of rooms. This
+  holds for every tool row, not only Cuts.
+  <!-- 2026-11-16: "Ok, så for cuts skal vi da ikke komme rett inn i studioet da?" -->
 - **The sidebar is the frame, not an object.** 208px (`kit-sidebar`). Rows
   sit straight on the ground (`NavRow density="compact"`: 36px under a fine
   pointer, 44 under a coarse one) with no List around them; a white object
@@ -99,7 +105,8 @@ setup pages in the account menu, the conversation history in Studio.
 - **Skip link first.** "Skip to the page" is the first Tab stop and moves
   focus into `<main>`.
 - **Labels follow plans/029 "Words"**: the row is **Ideas** and the route is
-  `/ideas` (it was `/riffs`, which redirects). No Cuts row until `/cuts` is finished.
+  `/ideas` (it was `/riffs`, which redirects). Cuts has its row, marked
+  "Beta" (`badge`), while `/cuts` is unfinished.
 - **Rows only go places.** Deleting a conversation is a HoldButton on the
   thread, never a row in the sidebar or the history menu (removing.md).
 

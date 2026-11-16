@@ -1210,6 +1210,14 @@ export const riffAngle = pgTable(
     kind: text("kind").notNull().default(""),
     /** One line on why this angle is worth writing. Quincy's reasoning, shown. */
     why: text("why").notNull().default(""),
+    /**
+     * The sentence (or two) of the scrap this angle comes from, verbatim, as
+     * the model quoted it and `settleLine` cleaned it (at most 240
+     * characters). Empty for every angle written before the column existed
+     * and for an angle drawn from the whole material. Never offsets: the span
+     * is found in `riff.scrap` on read, by `markFor` (lib/source-span.ts).
+     */
+    line: text("line").notNull().default(""),
     /** Render order, so the model's ranking survives the round trip. */
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),

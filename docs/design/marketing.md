@@ -141,6 +141,18 @@ same on purpose.
 <form onSubmit={…}><Input /><Button>Join</Button></form>
 ```
 
+## Example content
+
+**Demo, fixture and showcase content always shows what a real user would
+get: a relatable before→after number from their own work (for example
+41% → 68% from a merged PR). Never a contrived finance or currency
+example. All pictures tell one story.**
+Why: a visitor judges the product by whether the example looks like their
+own week. A made-up currency figure reads as a template, and five pictures
+with five examples read as five products. The one story is decisions.md,
+"The onboarding story".
+<!-- 2026-11-15: "eksempelet med currency er veldig dårlig. Ta noe som er bedre som vil være litt mer som faktisk de får" -->
+
 ## Never
 
 - `className` or `style` on any part. A missing size or gap is a token.

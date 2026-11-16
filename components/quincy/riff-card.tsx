@@ -151,7 +151,7 @@ function destinations(angle: Angle): string {
  * that is when the page knows (a short post for two channels is written
  * twice, and nothing else says so).
  */
-function writesSentence(angle: Angle, writes: number | undefined): string {
+export function writesSentence(angle: Angle, writes: number | undefined): string {
   const where = destinations(angle)
   if (writes === undefined) return where ? `For ${where}.` : ""
   if (writes === 0) return "No channel for this yet."

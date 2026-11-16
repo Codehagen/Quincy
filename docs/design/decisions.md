@@ -6,6 +6,14 @@ the next round was made from what was kept. This file is the record, like
 colour.md's "the four that lost". The rounds in detail: decisions-visual.md
 (visual style, icons) and decisions-landing.md (landing).
 
+**A reference gives one idea, carried by something Quincy owns — never its
+layout. A new direction for a surface always starts as a lab round
+(several directions behind a picker), never as a build.**
+Why: a near-copy of a reference is not ours. A page that copies another
+product's layout says nothing about Quincy, and a direction built before it
+was compared with others was never chosen, only accepted.
+<!-- 2026-11-15: "Også var denne landingpagen nesten 100% copy av …? skulle ikke vi kjøre en labs som vi gjorde også på denne?" -->
+
 **To reopen a decision, run a lab round, not an argument.** A decision here
 was made by looking at the alternatives side by side. A paragraph against it
 has not looked at anything (lab README, "When not to lab").
@@ -24,6 +32,7 @@ has not looked at anything (lab README, "When not to lab").
 | **Cuts, not Studio** | the video editor is **Cuts** in visible copy (route `/cuts`) | "Studio" is the chat page; one word for two pages makes both unclear. The component is still `Studio` in code | `app/prototypes/video/name.ts`, plans/031 |
 | **Pixel friend, smooth from 32** | the mark is icon piece 31; under 32px the pixel drawing, from 32 the vector one (piece 20), same beats | whole pixels are the sharpest drawing at 16 (why 31 won); from 32 there is room for curves, and eased moves read as alive where cut frames read as jumps | mascot.md, `components/mascot/friend.tsx` |
 | **Quincy comes to you** | Quincy writes first, a few lines, and every note ends in the person's choice | an agent that only answers is a tool; one that reaches out reads as staff. Ending on a choice keeps "Quincy drafts, you send" | `components/showcase/demos/quincy-texts.tsx` |
+| **Examples are what a user would get** (2026-11-15) | every demo, fixture and showcase picture shows a relatable before→after number from the person's own work (41% → 68% from a merged PR); never a contrived finance or currency example; all pictures tell one story | the owner found the currency example "veldig dårlig": an example has to look like what the person actually gets | marketing.md, "Example content"; "The onboarding story" below |
 | **Editor marks in 2–3 places per marketing page** | a highlight or margin note on two or three pictures, not all of them | a mark says "this one". On every picture, none of them is this one | landing round 3, showcase.md |
 | **Light first** | marketing pages are designed and judged on the light ground; dark is the token remap | the dark pages of landing round 2 (26–30) were not carried into round 3 | landing round 3 note |
 | ~~**Base UI stays the one behaviour layer**~~ | a behaviour library looked at on 2026-11-15 was not adopted | it does Base UI's job; two would mean two ways to build a menu. Revisit per missing behaviour (reorder, virtual lists) | plans/029 |

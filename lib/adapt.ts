@@ -380,6 +380,12 @@ export type GeneratedAngle = {
   kind: string
   /** One line, addressed to the user, on why this one is theirs to write. */
   why: string
+  /**
+   * The sentence(s) of the material it comes from, verbatim, or "". Optional
+   * in the type because injected generators and older fixtures omit it; the
+   * schema requires it of the model. Stored through `settleLine`.
+   */
+  line?: string
 }
 
 export type AngleGeneration = {
@@ -738,6 +744,13 @@ type AngleRuleParts =
     }
 
 /**
+ * The quote Marked up underlines (`Angle.mark`). Verbatim, because the span
+ * is found by searching the scrap for it in code (lib/source-span.ts), never
+ * by offsets from the model; "" is an honest answer and renders unmarked.
+ */
+const LINE_RULE = `- "line" is the sentence (or two) of the material this angle comes from, copied verbatim, at most 240 characters. Use "" when the angle draws on the whole material rather than one passage.`
+
+/**
  * The shared body, from the hook rule down.
  *
  * Every one of the five is `Rules:` plus the lines that are genuinely its own
@@ -752,6 +765,7 @@ function ANGLE_BASE_RULES(parts: AngleRuleParts): string {
       NO_INVENTION_RULE,
       HOOK_RULE,
       `- "why" ${parts.why}`,
+      LINE_RULE,
       STRATEGY_RULE,
       `- Return at most one angle.`,
       describeKinds(),
@@ -765,6 +779,7 @@ function ANGLE_BASE_RULES(parts: AngleRuleParts): string {
     HOOK_RULE,
     SIGNATURE_RULE,
     `- "why" ${parts.why}`,
+    LINE_RULE,
     STRATEGY_RULE,
     describeShapes(parts.shapes),
     describeKinds(parts.recentKinds),
@@ -895,8 +910,11 @@ function buildAnglesSchema(shapes: readonly string[]) {
             shape: { type: "string", enum: usable },
             kind: { type: "string", enum: [...ANGLE_KINDS] },
             why: { type: "string" },
+            // Empty allowed, and no `maxLength`: the keywords above broke the
+            // gateway, so the 240 cap is held in code by `settleLine`.
+            line: { type: "string" },
           },
-          required: ["hook", "shape", "kind", "why"],
+          required: ["hook", "shape", "kind", "why", "line"],
           additionalProperties: false,
         },
       },

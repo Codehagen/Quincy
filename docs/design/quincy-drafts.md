@@ -30,6 +30,14 @@ read-only snapshot (chat history) is the root, Header and Body, no Actions.
   with a line that is only a number in the middle one. Otherwise the
   paragraphs render plain. Most real bodies today are opinion posts with no
   number on its own line, and brackets on them would invent a "happened".
+- **A DraftCard's beat brackets sit in the margin when the card's container
+  has room (container query ≥32rem) and fall back to labels under the lines
+  when narrow; the text never shifts.**
+  Why: the owner accepted the margin brackets as they stand in the hero
+  picture. The width comes from the card's own room (`DRAFT_ROOM`), never
+  from the marks, so the lines do not reflow when the brackets appear
+  (editor-marks.md, "A draft card is its own room").
+  <!-- 2026-11-16: "rett de 2" -->
 - **Approve is the action only when the page says so.** Pass `isAction={false}` when
   the precedence in actions.md gives the action to something else (a
   recorder underway, a second DraftCard on the page).

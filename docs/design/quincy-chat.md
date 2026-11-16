@@ -99,8 +99,23 @@ Nothing here yet, and the one next step (lab 38). Use it for every empty list
 or page; a filter with no results is a muted line, not an EmptyState. Put it
 in a Stage with no `lead`.
 
+**Every EmptyState on an app page shows the Friend mascot
+(`<Friend state="idle" size={40}>` unless a more fitting state applies)
+above the words.**
+Why: an empty page is where Quincy speaks, so it carries the landing's
+character. The friend is one per object (mascot.md), so a page with an
+EmptyState and other friends is fine.
+<!-- 2026-11-16: "jeg ønsker jo empty statte nå med figuren vår" -->
+
+The kit's `EmptyState` (`components/kit/empty-state.tsx`) does this by
+default: leave `media` out and the idle friend at 40 stands above the words.
+Pass `media={<Friend … />}` for a more fitting state, and `media={null}` only
+where a friend already stands for this object. Check:
+`components/kit/empty-state.test.ts` fails if the default loses the friend.
+
 Props: `bold`, `rest`, `baseline` (the person's own median line; leave it out
-rather than invent one), `children` (the one way in). `EmptyStarters`
+rather than invent one), `media` (default: the friend), `children` (the one
+way in). `EmptyStarters`
 (`starters`, `note`, `onPick`) is the way in when Quincy asks: picking a row
 brings its next question in under the rows.
 
