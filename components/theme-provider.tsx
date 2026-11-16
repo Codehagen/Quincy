@@ -34,6 +34,15 @@ function isTypingTarget(target: EventTarget | null) {
   )
 }
 
+/**
+ * A surface that answers to bare letters of its own (the Ideas workspace:
+ * j k D N L U) marks its root `data-letter-keys`. Inside it, D belongs to
+ * the surface, so the theme key stands down instead of firing beside it.
+ */
+function insideLetterKeys(target: EventTarget | null) {
+  return target instanceof Element && target.closest("[data-letter-keys]") !== null
+}
+
 function ThemeHotkey() {
   const { resolvedTheme, setTheme } = useTheme()
 
@@ -51,7 +60,7 @@ function ThemeHotkey() {
         return
       }
 
-      if (isTypingTarget(event.target)) {
+      if (isTypingTarget(event.target) || insideLetterKeys(event.target)) {
         return
       }
 

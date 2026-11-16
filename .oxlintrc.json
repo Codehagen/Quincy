@@ -137,6 +137,12 @@
         "app/prototypes/landing/**",
         "app/prototypes/video/**",
         "app/prototypes/lab/landing/**",
+        // Judges /ideas against the landing's ideas picture, by import.
+        "app/prototypes/ideas-lab/**",
+        // Judges the workspace layouts for /ideas against the same picture.
+        "app/prototypes/workspace-lab/**",
+        // Judges the app's personality against the landing's pictures, by import.
+        "app/prototypes/personality-lab/**",
         "components/showcase/**"
       ],
       "rules": {

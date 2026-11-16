@@ -1,0 +1,250 @@
+/* ══════════════════════════════════════════════════════════════════
+   CANDIDATES — lab-local, not kit tokens.
+
+   Every --ws-* value below is a number the owner has not decided yet. The
+   control panel writes them on .ws (the workspace root) and the
+   data-attributes switch the treatments. Colours, shadows and radii come
+   from the kit (--kit-*); only sizes and the treatment switches are new.
+   When a value is picked it becomes a kit token (DECISION.md says which)
+   and this file is deleted with the lab.
+   ══════════════════════════════════════════════════════════════════ */
+
+.ws {
+  /* ── Still on the control panel (DECISION.md, "Picked") ── */
+  /* Density: a table row. Kit today: ListRow min 44, 60 with two lines. */
+  --ws-row-h: 36px;
+  /* The row title. Kit today: body 14/20 at 560 for every title. */
+  --ws-row-title: 13px;
+  /* The open idea's pane: a share of the workspace, held between a floor
+     and a ceiling (both on the control panel). A fixed 520 left the title
+     column ~260px at 1280; 36% of the workspace's own width (cqi, not vw:
+     the lab frame is scaled, and the sidebar is not ours to count) gives
+     the table back what the detail does not need. From 608 the margin moves
+     beside the prose, so the ceiling sits under it by default. Resolved at
+     the pane, inside @container/ws. Under the fold (layouts/table.tsx) the
+     page is Inline and this is unused. */
+  --ws-detail-min: 440px;
+  --ws-detail-max: 560px;
+  --ws-detail-w: clamp(var(--ws-detail-min), 36cqi, var(--ws-detail-max));
+
+  /* ── Baked by the surfaces / foundations pass (2026-11-16) ── */
+  /* Type steps: page 15/600 · title 13 · meta 12 · mono 11. One px between
+     title and meta, one more for mono, because the system mono's x-height
+     sits a step above Inter's at the same size. */
+  --ws-meta: 12px;
+  --ws-mono: 11px;
+  --ws-page-title: 15px;
+  /* Icons beside 13px text: 16 at 1.75. 2 reads bold next to 460 type. */
+  --ws-icon: 16px;
+  --ws-stroke: 1.75;
+  /* Vertical rhythm of the chrome: the page row matches the shell bar (52),
+     the filter row is a 28px chip in 8 + 8 (44), and the column head and
+     the detail's source strip share one 32px band, so one hairline runs
+     across both panes. The key bar and the Undo note are both 36, so
+     swapping one for the other does not move the panes. */
+  --ws-bar-h: 52px;
+  --ws-filter-h: 44px;
+  --ws-head-h: 32px;
+  --ws-foot-h: 36px;
+  /* Row states. Selected must out-rank hover in both themes; the kit's
+     dark pair inverts that (hover 0.32 above a 0.155 well, below the
+     ground), so the lab flips its own pair. Light keeps the kit steps. */
+  --ws-row-hover: var(--kit-gray-975);
+  --ws-row-selected: var(--kit-gray-961);
+
+  /* Source rail (layout B, rejected). Kept so that layout still renders. */
+  --ws-rail-w: 232px;
+
+  /* ── Polish (2026-11-16) ── */
+  /* ?bare renders outside KitRoot, which is where the kit sets smoothing
+     and Inter's cv11/ss01; state both here so the two views render the
+     same glyphs at the same weight. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
+}
+.dark .ws {
+  /* Ground is 0.178. Hover half a step up (~0.206, between ground and
+     object), selected two (0.30, the dark hairline grey), so hover never
+     reads as the selection; the ink bar carries it the rest. */
+  --ws-row-hover: color-mix(in oklch, var(--kit-gray-235) 50%, var(--kit-gray-178));
+  --ws-row-selected: var(--kit-gray-300);
+}
+
+/* Icons take the candidate size and stroke wherever the lab marks them. */
+.ws [data-ws-icon] {
+  width: var(--ws-icon);
+  height: var(--ws-icon);
+}
+.ws [data-ws-icon] path,
+.ws [data-ws-icon] circle,
+.ws [data-ws-icon] rect,
+.ws [data-ws-icon] line {
+  stroke-width: var(--ws-stroke);
+}
+
+.ws .ws-row-title {
+  font-size: var(--ws-row-title);
+  line-height: calc(var(--ws-row-title) + 6px);
+  letter-spacing: -0.006em;
+}
+.ws .ws-meta {
+  font-size: var(--ws-meta);
+  line-height: calc(var(--ws-meta) + 4px);
+  letter-spacing: -0.003em;
+  /* Meta carries the counts ("17 ideas waiting", "Drafted 2"); a count
+     that changes must not change width. */
+  font-variant-numeric: tabular-nums;
+}
+/* Age, counts: mono 11, tabular, so a column of dates stacks. */
+.ws .ws-mono {
+  font-family: var(--font-kit-mono);
+  font-size: var(--ws-mono);
+  line-height: 16px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.ws .ws-page-title {
+  font-size: var(--ws-page-title);
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  font-weight: 600;
+}
+
+/* ── Rows: hover and selected ───────────────────────────────────── */
+
+.ws [data-ws-row] {
+  min-height: var(--ws-row-h);
+  /* j/k scroll the open row into view with block: "nearest"; without a
+     margin it lands under the sticky 32px column heads. 8 more so it is not
+     flush against them, and 8 at the foot so it clears the pane's edge. */
+  scroll-margin-block: calc(var(--ws-head-h) + 8px) 8px;
+}
+/* Inline's rows have no sticky column heads above them: 8 is enough. */
+.ws [data-ws-row][data-ws-fold] {
+  scroll-margin-block: 8px;
+}
+/* On touch a row is a tap target: 44, whatever the row-height control
+   says (36 stays the pointer's density). */
+@media (pointer: coarse) {
+  .ws [data-ws-row] {
+    min-height: 44px;
+  }
+}
+/* Pressed: one step past hover, for the instant between down and select.
+   No scale: a full-width row that shrinks reads as the list moving. */
+.ws [data-ws-row]:active:not([data-selected]) {
+  background-color: var(--ws-row-selected);
+}
+/* Hover enhances, never enables: gated as Tailwind's hover: is. */
+@media (hover: hover) {
+  .ws [data-ws-row]:hover:not([data-selected]) {
+    background-color: var(--ws-row-hover);
+  }
+}
+/* Selected: the grey plus an ink bar at the row's start, so the open row
+   reads from across the table even where the grey alone is 1.12:1. Not a
+   lifted row: a shadow says "raised object", and a row in a list is not one. */
+.ws [data-ws-row][data-selected] {
+  background-color: var(--ws-row-selected);
+}
+/* The open row's title alone goes to 560 and ink: weight is the cue that
+   does not depend on a 1.1:1 grey. */
+.ws [data-ws-row][data-selected] .ws-row-title {
+  font-weight: 560;
+  color: var(--kit-ink);
+}
+.ws [data-ws-row][data-selected]::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: 2px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--kit-ink);
+}
+
+/* ── Panes: one surface, divided by hairlines ───────────────────── */
+
+/* Panes are regions of one surface, not objects on it: the line between
+   them separates, it does not elevate, so it is a border, not a shadow. */
+.ws [data-ws-pane="detail"],
+.ws [data-ws-pane="list"][data-ws-after-rail] {
+  border-inline-start: 1px solid var(--kit-hairline);
+}
+/* Each pane is its own stacking context, so the sticky column heads and
+   the detail's source strip (z 1) rank only inside their pane and can
+   never climb over a menu, a tooltip or the key bar. */
+.ws [data-ws-pane] {
+  isolation: isolate;
+}
+
+/* ── The pane's foot: key bar or Undo note, one height ──────────── */
+
+/* Both are exactly --ws-foot-h above the home indicator, so swapping one
+   for the other never moves the panes: a fixed height, not a min, and the
+   key bar does not wrap (it clips its last hints instead of growing). */
+.ws .ws-foot {
+  box-sizing: content-box;
+  height: var(--ws-foot-h);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-inline: max(var(--spacing-kit-group, 20px), env(safe-area-inset-left, 0px))
+    max(var(--spacing-kit-group, 20px), env(safe-area-inset-right, 0px));
+}
+
+/* ── Tags: text ─────────────────────────────────────────────────── */
+
+/* The shape is a fact in a named column, so it is muted text, not a chip:
+   a ring or fill on 19 rows is 19 objects louder than the titles. */
+.ws [data-ws-tag] {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+  color: var(--kit-ink-muted);
+}
+
+/* ── Table state (control panel): rows or loading ───────────────── */
+
+.ws [data-ws-loading] {
+  display: none;
+}
+.ws[data-table="loading"] [data-ws-loading] {
+  display: flex;
+}
+.ws[data-table="loading"] [data-ws-rows] {
+  display: none;
+}
+
+/* ── Inline layout: the expanding row ───────────────────────────── */
+
+.ws-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--kit-duration-enter) var(--ease-kit-out);
+}
+.ws-expand[data-open] {
+  grid-template-rows: 1fr;
+}
+.ws-expand > * {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-expand {
+    transition: none;
+  }
+}
+
+/* Control labels in a toolbar: 13/18. Kit today: every label is body 14. */
+.ws .ws-control {
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.006em;
+}
+/* Unlayered, so it beats the utility; restate iOS's 16px floor for fields. */
+@media (pointer: coarse) {
+  .ws input.ws-control {
+    font-size: 16px;
+  }
+}
