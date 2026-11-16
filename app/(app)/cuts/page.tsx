@@ -18,11 +18,24 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function CutsPage() {
+export default async function CutsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ all?: string }>
+}) {
   const session = await getSession()
   if (!session) redirect("/login?next=/cuts")
 
-  const projects = await listProjects(session.user.id)
+  const [projects, { all }] = await Promise.all([
+    listProjects(session.user.id),
+    searchParams,
+  ])
+
+  // Cuts opens the room, not a list of rooms: with a cut in progress, the
+  // sidebar row lands in the editor on the most recently touched one
+  // (listProjects orders by updatedAt). The list and the upload stay one
+  // click away, behind the editor's "All cuts" (?all=1).
+  if (projects.length > 0 && !all) redirect(`/cuts/${projects[0].id}`)
 
   return (
     <KitPage

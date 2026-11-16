@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
+  ArrowLeft01Icon,
   Image01Icon,
   Layers01Icon,
   MusicNote01Icon,
@@ -154,6 +156,15 @@ export function StudioFrame({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-kit-hairline px-4">
+          {/* /cuts opens the latest cut straight in here; this is the way
+              back to every cut and to a new upload. */}
+          <Link
+            href="/cuts?all=1"
+            className="relative -ml-1.5 flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out after:absolute after:inset-x-0 after:top-1/2 after:h-11 after:-translate-y-1/2 hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus"
+          >
+            <HugeiconsIcon aria-hidden="true" icon={ArrowLeft01Icon} size={14} />
+            All cuts
+          </Link>
           <h1 className="truncate text-kit-body font-kit-strong text-kit-ink">
             {title}
           </h1>
