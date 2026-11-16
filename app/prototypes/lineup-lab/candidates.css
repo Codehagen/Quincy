@@ -10,137 +10,413 @@
    becomes a kit token (DECISION.md says which) and this file goes.
    ══════════════════════════════════════════════════════════════════ */
 
-/* ── 2 · Board ───────────────────────────────────────────────────── */
+/* ── 2 · Calendar (picked) ─────────────────────────────────────────
+   A Mon–Sun week, continuous time down. The blocks sit in one layer over
+   the day tracks, a size container, so a block's place is a `translate`
+   in container units: every move (a drag between snaps, a key, a drop, a
+   neighbour making room, a week change) animates transform and opacity
+   only, and a CSS transition retargets mid-move instead of restarting. */
 
-.ll-board {
+/* The surfaces pass (2026-11-16), settled:
+   - Lines that separate are borders, at the kit's density-aware hairline
+     (--border-hairline: 1px, 0.5px from 2x). Day columns and hours take
+     --kit-hairline; half hours the quieter --kit-grid-line; quarters none.
+   - What is raised is a shadow, never a border: a post that is still to go
+     out is the object (--shadow-kit-object: ring + two soft layers in
+     light, one white ring in dark); lifted, it is --shadow-kit-lifted
+     (ring + a long soft fall in light, a brighter white ring in dark) and
+     the scale carries the lift there.
+   - What has happened or is only a commitment is flat: sent is the inset
+     ring alone (--shadow-kit-inset) on no fill; an open slot is a dashed
+     ink-muted outline (5.2:1 light, 6.6:1+ dark: a meaningful graphic,
+     over 3:1); passed empty is the same dash at the quieter grid step,
+     decorative, because its words ("Passed empty") carry it.
+   - Radii: a block and a chip are --radius-kit-control-inner (8): they sit
+     on a grid, not in a rounded parent, so nothing nests; the focus ring
+     follows the corner. The feed column keeps the platform's square edge.
+   - Today is the one tinted column, the stage grey at half strength (a
+     recess in both themes). The weekend is not tinted: the person posts
+     most on a Sunday (22 of 99), so it is not an off day here. */
+.ll-week {
+  --ll-gutter: 56px;
+  /* The drop: a short spring with a little overshoot (ui-sdk's solver is
+     internal, so the curve is written out). */
+  --ll-spring: linear(0, 0.06 2.6%, 0.24 5.6%, 0.5 9.6%, 0.75 14.4%, 0.9 19.4%, 0.98 24.8%, 1.02 30.6%, 1.03 37%, 1.02 45%, 1.005 56%, 1 70%, 1);
+  /* Moves on screen: accelerate, then brake. */
+  --ll-move: cubic-bezier(0.32, 0.72, 0, 1);
+}
+.ll-week-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: grid;
-  border-bottom: 1px solid var(--kit-hairline);
-  border-right: 1px solid var(--kit-hairline);
+  grid-template-columns: 56px repeat(var(--ll-days, 7), minmax(0, 1fr));
+  padding-inline: var(--spacing-kit-group);
+  background: var(--kit-ground);
 }
-.ll-board-corner,
-.ll-board-day {
-  min-height: var(--spacing-kit-head);
-  border-left: 1px solid var(--kit-hairline);
-}
-.ll-board-corner {
-  border-left: 0;
-}
-.ll-board-day {
+.ll-week-dayhead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 8px 8px 6px;
+  min-height: var(--spacing-kit-head);
+  padding: 0 8px;
+  border-bottom: var(--border-hairline) solid var(--kit-hairline);
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  color: var(--kit-ink-muted);
 }
-.ll-board-time {
-  padding: 10px 8px 0 0;
-  border-top: 1px solid var(--kit-hairline);
+.ll-week-dayhead[data-today] {
+  color: var(--kit-ink);
+  font-weight: 560;
 }
-.ll-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  min-height: 84px;
-  padding: 4px;
-  border-top: 1px solid var(--kit-hairline);
-  border-left: 1px solid var(--kit-hairline);
+.ll-week-date {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  font-family: var(--font-kit-mono);
+  font-variant-numeric: tabular-nums;
 }
-/* Today is the one column that is a recess: the well grey, never a tint. */
-.ll-cell[data-today] {
-  background: color-mix(in oklch, var(--kit-stage) 60%, transparent);
+/* Today: the date on the ink fill, its label in the fill's own ink. */
+.ll-week-dayhead[data-today] .ll-week-date {
+  background: var(--kit-primary);
+  color: var(--kit-primary-on);
 }
-.ll-cell[data-drop] {
-  outline: 1px dashed var(--kit-ink-muted);
-  outline-offset: -3px;
+.ll-week-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--ll-gutter) minmax(0, 1fr);
+  margin: 0 var(--spacing-kit-group) var(--spacing-kit-group);
+}
+.ll-week-body[data-dir] {
+  animation: ll-week-in 240ms var(--ll-move);
+}
+.ll-week-body[data-dir="-1"] {
+  --ll-from: -16px;
+}
+@keyframes ll-week-in {
+  from {
+    opacity: 0;
+    translate: var(--ll-from, 16px) 0;
+  }
+}
+.ll-week-gutter {
+  position: relative;
+  grid-row: 1;
+}
+.ll-week-hour {
+  position: absolute;
+  right: 8px;
+  translate: 0 -50%;
+  font-family: var(--font-kit-mono);
+  font-size: var(--text-kit-mono-sm, 11px);
+  font-variant-numeric: tabular-nums;
+  color: var(--kit-ink-muted);
+}
+.ll-week-tracks {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--ll-days, 7), minmax(0, 1fr));
+}
+.ll-week-track {
+  position: relative;
+  border-left: var(--border-hairline) solid var(--kit-hairline);
+}
+.ll-week-track:last-child {
+  border-right: var(--border-hairline) solid var(--kit-hairline);
+}
+.ll-week-track[data-today] {
+  background: color-mix(in oklch, var(--kit-stage) 50%, transparent);
+}
+.ll-week-tracks {
+  border-bottom: var(--border-hairline) solid var(--kit-hairline);
+}
+.ll-week-cell {
+  display: block;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.ll-week-cell[data-hour] {
+  border-top: var(--border-hairline) solid var(--kit-hairline);
+}
+.ll-week-cell[data-half] {
+  border-top: var(--border-hairline) solid var(--kit-grid-line);
+}
+.ll-week-cell:hover {
+  background: var(--kit-row-hover);
+}
+.ll-week-cell:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: -2px;
+}
+.ll-week-layer {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  height: 100%;
+  container-type: size;
+  pointer-events: none;
 }
 
-/* A cell's card: a lifted object while it is still to happen; flat once it
-   has (sent), or while it is only a commitment (open, passed). The radius is
-   the control's inner step (cell padding 4). */
-.ll-card {
-  position: relative;
+/* A block: lifted while it is still to happen, flat once it is only a
+   commitment (open, passed). It never enters from nothing: it is on the
+   page from the first frame and only ever moves. */
+.ll-block {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: var(--radius-kit-control-inner);
+  background: var(--kit-object);
+  box-shadow: var(--shadow-kit-object);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  will-change: translate;
+  transition:
+    translate 380ms var(--ll-spring),
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out,
+    background-color 150ms ease-out;
+}
+/* Under the pointer: it glides between the 15-minute snaps, so it follows
+   without a jump and without lag. */
+.ll-block[data-dragging] {
+  cursor: grabbing;
+  transition:
+    translate 60ms linear,
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+/* Held by the keyboard: each arrow is a short move that retargets. */
+.ll-block[data-held] {
+  transition:
+    translate 160ms var(--ll-move),
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+.ll-block[data-lifted] {
+  z-index: 3;
+  scale: 1.03;
+  box-shadow: var(--shadow-kit-lifted);
+}
+.ll-block[data-kind="open"],
+.ll-block[data-kind="passed"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--kit-ink-muted);
+  outline-offset: -1px;
+  cursor: pointer;
+}
+.ll-block[data-kind="passed"] {
+  outline-color: color-mix(in oklch, var(--kit-ink-muted) 45%, transparent);
+  color: var(--kit-ink-muted);
+}
+/* Sent: it happened, so it is no longer raised. The inset ring keeps its edge. */
+.ll-block[data-state="published"] {
+  background: transparent;
+  box-shadow: var(--shadow-kit-inset);
+  cursor: pointer;
+}
+/* Sending, failed, sent: a pointer cannot move them. */
+.ll-block[data-state="sending"],
+.ll-block[data-state="failed"] {
+  cursor: pointer;
+}
+.ll-block[data-picked] {
+  background: var(--kit-selected);
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+.ll-block[data-picked][data-lifted] {
+  box-shadow:
+    inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink),
+    var(--shadow-kit-lifted);
+}
+.ll-week:focus-within .ll-block[data-focused] {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+.ll-block-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ll-block-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  font-weight: var(--text-kit-meta--font-weight);
+  color: var(--kit-ink);
+  overflow-wrap: anywhere;
+}
+.ll-block[data-kind="open"] .ll-block-text,
+.ll-block[data-kind="passed"] .ll-block-text {
+  color: var(--kit-ink-muted);
+}
+/* Where a drop or a proposal lands: a dashed ink outline, on the grid. */
+.ll-week-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-kit-control-inner);
+  outline: 1.5px dashed var(--kit-ink);
+  outline-offset: -1px;
+  background: color-mix(in oklch, var(--kit-selected) 70%, transparent);
+  transition: translate 120ms var(--ll-move);
+}
+/* Now: one ink line across today, the live dot at its start. */
+.ll-week-now {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  height: 0;
+  border-top: 1.5px solid var(--kit-ink);
+  transition: translate 300ms var(--ll-move), opacity 200ms ease-out;
+}
+.ll-week-now-dot {
+  position: absolute;
+  top: -4.5px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--kit-live);
+}
+.ll-week-loading {
+  margin: 0 var(--spacing-kit-group);
+  background: repeating-linear-gradient(to bottom, var(--kit-hairline) 0 1px, transparent 1px var(--ll-hour, 56px));
+}
+
+/* Approved, no time: chips above the grid, dragged onto it. */
+.ll-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--spacing-kit-related) var(--spacing-kit-group) var(--spacing-kit-related);
+}
+.ll-chip {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 100%;
-  min-width: 0;
+  max-width: 18rem;
   padding: 6px 8px 7px;
   border-radius: var(--radius-kit-control-inner);
   background: var(--kit-object);
   box-shadow: var(--shadow-kit-object);
   text-align: start;
-  cursor: pointer;
-  transition:
-    background-color var(--kit-duration-state) var(--ease-kit-out),
-    box-shadow var(--kit-duration-state) var(--ease-kit-out);
-}
-.ll-card[draggable="true"] {
   cursor: grab;
+  touch-action: none;
+  transition: background-color 150ms ease-out;
 }
-.ll-card[data-kind="published"],
-.ll-card[data-kind="open"],
-.ll-card[data-kind="passed"] {
-  background: transparent;
-  box-shadow: none;
-}
-.ll-card[data-kind="open"],
-.ll-card[data-kind="passed"] {
-  flex: 1;
-  outline: 1px dashed var(--kit-ink-muted);
-  outline-offset: -1px;
-}
-.ll-card[data-kind="passed"] {
-  outline-color: var(--kit-hairline);
-}
-.ll-card:hover {
+.ll-chip:hover {
   background: var(--kit-row-hover);
 }
-.ll-card[data-picked] {
+.ll-chip[data-picked] {
   background: var(--kit-selected);
   box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
 }
-.ll-card:focus-visible,
-.ll-empty:focus-visible,
-.ll-rail-btn:focus-visible {
+.ll-chip:focus-visible,
+.ll-rail-btn:focus-visible,
+.ll-daystrip button:focus-visible {
   outline: 2px solid var(--color-kit-focus);
   outline-offset: 1px;
 }
-.ll-card-tray {
-  width: auto;
-  max-width: 18rem;
+/* The copy that follows the pointer: lifted from its resting size, never from nothing. */
+[data-drag-preview][data-lifted] {
+  scale: 1.03;
+  box-shadow: var(--shadow-kit-lifted);
+  animation: ll-lift 150ms ease-out;
+}
+@keyframes ll-lift {
+  from {
+    scale: 1;
+    box-shadow: var(--shadow-kit-object);
+  }
 }
 .ll-card-text {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--ll-lines, 2);
+  -webkit-line-clamp: 2;
   font-size: var(--text-kit-meta);
   line-height: var(--text-kit-meta--line-height);
   font-weight: var(--text-kit-meta--font-weight);
   letter-spacing: var(--text-kit-meta--letter-spacing);
   overflow-wrap: anywhere;
 }
-.ll-card-skel {
-  display: block;
-  height: 52px;
-  background: var(--kit-skeleton);
-  box-shadow: none;
+
+/* One day: the week as a strip of seven over the column. */
+.ll-daystrip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 var(--spacing-kit-group) var(--spacing-kit-related);
 }
-/* An empty cell: nothing, until you point at it (then it offers to become a slot). */
-.ll-empty {
-  flex: 1;
-  width: 100%;
-  min-height: 28px;
+.ll-daystrip button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 10px;
   border-radius: var(--radius-kit-control-inner);
-  background: transparent;
-  transition: background-color var(--kit-duration-state) var(--ease-kit-out);
+  font-size: var(--text-kit-meta);
+  color: var(--kit-ink-muted);
+  transition: background-color 150ms ease-out;
 }
-.ll-empty:hover {
+.ll-daystrip button:hover {
   background: var(--kit-row-hover);
 }
-.ll-empty[data-picked] {
+.ll-daystrip button[aria-pressed="true"] {
   background: var(--kit-selected);
-  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+  color: var(--kit-ink);
+  font-weight: 560;
+}
+.ll-daystrip button[data-today] {
+  color: var(--kit-ink);
+}
+.ll-daystrip-dot {
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+}
+.ll-daystrip-dot[data-on] {
+  background: var(--kit-ink-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-block,
+  .ll-block[data-dragging],
+  .ll-block[data-held],
+  .ll-week-ghost,
+  .ll-week-now,
+  .ll-week-cell,
+  .ll-chip,
+  .ll-daystrip button {
+    transition: none;
+  }
+  .ll-block[data-lifted],
+  [data-drag-preview][data-lifted] {
+    scale: 1;
+    animation: none;
+  }
+  .ll-week-body[data-dir] {
+    animation: none;
+  }
 }
 
 /* ── 3 · Feed: a rail, the column, a margin ──────────────────────── */
@@ -343,9 +619,4 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ll-card,
-  .ll-empty {
-    transition: none;
-  }
-}
+

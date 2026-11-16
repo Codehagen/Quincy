@@ -156,6 +156,10 @@ function fixtures(): LabWeek {
   return {
     slots: SLOTS,
     posts: [
+      // Last week, sent: what the calendar shows behind ‹.
+      post("p-last-1", W.standup, "x", "2026-11-10", "08:00", "s-tue-x", "published", { url: "https://x.com/christer/status/3" }),
+      post("p-last-2", W.pricing, "x", "2026-11-12", "08:00", "s-thu-x", "published", { url: "https://x.com/christer/status/4" }),
+      post("p-last-3", W.hiring, "linkedin", "2026-11-12", "11:00", "s-thu-li", "published", { url: "https://www.linkedin.com/feed/" }),
       post("p-sent", W.docs, "x", "2026-11-16", "09:10", null, "published", { url: "https://x.com/christer/status/1" }),
       post("p-failed", W.invoice, "x", "2026-11-16", "12:30", null, "failed", {
         error: "You are not allowed to create a Tweet with duplicate content.",

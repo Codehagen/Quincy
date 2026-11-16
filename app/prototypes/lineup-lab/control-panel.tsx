@@ -82,8 +82,7 @@ export function ControlPanel({
     `layout: ${variant}`,
     `week: ${scenario}`,
     `feed column: ${opts.postX}`,
-    `board pane: ${opts.boardPane}`,
-    `cell lines: ${opts.cellLines}`,
+    `calendar hour: ${opts.hourPx}`,
     `rail: ${opts.rail}`,
     `margin: ${opts.margin}`,
     `order: ${opts.order}`,
@@ -121,8 +120,7 @@ export function ControlPanel({
       <SegRow label="State" value={phase} options={["live", "loading"] as const} set={setPhase} why="the filters can empty the list: Channel LinkedIn + Show still to go on the real week" />
       <SegRow label="Quincy's notes" value={opts.notes} options={["on", "off"] as const} set={(v) => set("notes", v)} why="proposed: facts about the week in the margin (two posts three hours apart, passed empty, quiet day)" />
       <Slider label="Feed column" value={opts.postX} min={520} max={640} step={2} unit="px" set={(v) => set("postX", v)} why="1 and 3. X's column is 598; 1 · Table's pane is this + 40" />
-      <Slider label="Board pane" value={opts.boardPane} min={320} max={480} step={10} unit="px" set={(v) => set("boardPane", v)} why="2. The open cell's post at phone width (X on a phone is ~390)" />
-      <SegRow label="Board cell lines" value={opts.cellLines} options={[1, 2, 3] as const} set={(v) => set("cellLines", v)} why="2. The opening line, clamped. The old calendar wrapped to three" />
+      <Slider label="Calendar hour" value={opts.hourPx} min={40} max={80} step={4} unit="px" set={(v) => set("hourPx", v)} why="2. The height of an hour; a post is drawn 45 minutes tall, the snap is 15" />
       <Slider label="Feed rail" value={opts.rail} min={88} max={160} step={4} unit="px" set={(v) => set("rail", v)} why="3. The day, the time and the state, left of the column" />
       <Slider label="Feed margin" value={opts.margin} min={200} max={320} step={8} unit="px" set={(v) => set("margin", v)} why="3. Quincy's notes, and the open post's verbs" />
       <SegRow label="Feed order" value={opts.order} options={["forward", "profile"] as const} set={(v) => set("order", v)} why="3. forward: today on top, the week read down; profile: newest on top, as your profile will show it" />

@@ -222,12 +222,12 @@ function OpenVerbs({ item, store, lineId }: { item: Extract<Item, { kind: "open"
       </p>
       <div className="flex flex-wrap items-center gap-kit-controls">
         {waiting.map((s, i) => (
-          <Button key={s.versionId} size="sm" variant={i === 0 ? "action" : "quiet"} aria-describedby={lineId} onClick={() => store.place(s.versionId, item.slot.id)}>
+          <Button key={s.versionId} size="sm" variant={i === 0 ? "action" : "quiet"} aria-describedby={lineId} onClick={() => store.placeAt(s.versionId, item.dayId, item.time)}>
             {`Put “${clip(openingOf(s.body))}” here`}
           </Button>
         ))}
         {later.map((p) => (
-          <Button key={p.id} size="sm" variant="quiet" aria-describedby={lineId} onClick={() => store.move(p.id, { kind: "slot", slotId: item.slot.id })}>
+          <Button key={p.id} size="sm" variant="quiet" aria-describedby={lineId} onClick={() => store.move(p.id, { kind: "slot", slotId: item.slot.id, dayId: item.dayId })}>
             {`Move the ${whenLabel(p.dayId, p.time)} post here`}
           </Button>
         ))}

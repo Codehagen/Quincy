@@ -45,7 +45,8 @@ import {
 
 export type Phase = "live" | "loading"
 
-export type Target = { kind: "slot"; slotId: string } | { kind: "day"; dayId: string; time: string }
+/** A slot target names the slot; `dayId` picks its occurrence in another week (the calendar), else this week's. */
+export type Target = { kind: "slot"; slotId: string; dayId?: string } | { kind: "day"; dayId: string; time: string }
 
 export type OpenSlot = { slot: LabSlot; day: Day; passed: boolean }
 
@@ -84,7 +85,12 @@ export function slotLabel(slot: LabSlot) {
 /** "Tue 08:00", or "Today 12:30" / "Tomorrow 08:00" while relative is shorter. */
 export function whenLabel(dayId: string, time: string) {
   const d = dayOf(dayId)
-  if (!d) return time
+  if (!d) {
+    const date = new Date(`${dayId}T12:00:00Z`)
+    if (Number.isNaN(date.getTime())) return time
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return `${WEEKDAY_SHORT[(date.getUTCDay() + 6) % 7]} ${date.getUTCDate()} ${months[date.getUTCMonth()]} ${time}`
+  }
   return `${d.label === "Today" || d.label === "Tomorrow" ? d.label : d.short} ${time}`
 }
 
@@ -111,7 +117,8 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
 
   const filledBy = React.useMemo(() => {
     const m = new Map<string, string>()
-    for (const p of posts) if (p.slotId) m.set(p.slotId, p.id)
+    // This week's occurrence only: a slot is weekly, so last week's post does not fill it.
+    for (const p of posts) if (p.slotId && dayOf(p.dayId)) m.set(p.slotId, p.id)
     return m
   }, [posts])
 
@@ -129,7 +136,7 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
 
   const allItems = React.useMemo<Item[]>(() => {
     const timed: Item[] = [
-      ...posts.map((p) => ({ kind: "post" as const, key: p.id, dayId: p.dayId, time: p.time, channel: p.channel, post: p })),
+      ...posts.filter((p) => dayOf(p.dayId)).map((p) => ({ kind: "post" as const, key: p.id, dayId: p.dayId, time: p.time, channel: p.channel, post: p })),
       ...openSlots.map((o) => ({ kind: "open" as const, key: `slot:${o.slot.id}`, dayId: o.day.id, time: o.slot.time, channel: o.slot.channel, slot: o.slot, passed: o.passed })),
     ].sort((a, b) => at(a.dayId, a.time).localeCompare(at(b.dayId, b.time)) || (a.kind === "post" ? -1 : 1))
     const waiting: Item[] = stranded.map((s) => ({ kind: "stranded" as const, key: `st:${s.versionId}`, dayId: "" as const, time: "" as const, channel: s.channel, s }))
@@ -207,9 +214,10 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
       const s = slots.find((x) => x.id === target.slotId)
       if (!s) return "That slot is gone. Nothing moved."
       if (s.channel !== p.channel) return `That is a ${CHANNEL_LABEL[s.channel]} slot. Nothing moved.`
-      const holder = filledBy.get(s.id)
-      if (holder && holder !== p.id) return "That slot is taken. Nothing moved."
-      if (isPast(slotDay(s).id, s.time)) return "That time has already passed. Pick a later one: a post moved there would go out straight away."
+      const day = target.dayId ?? slotDay(s).id
+      const holder = posts.find((x) => x.slotId === s.id && x.dayId === day)
+      if (holder && holder.id !== p.id) return "That slot is taken. Nothing moved."
+      if (isPast(day, s.time)) return "That time has already passed. Pick a later one: a post moved there would go out straight away."
     } else if (isPast(target.dayId, target.time)) {
       return "That time has already passed. Pick a later one: a post moved there would go out straight away."
     }
@@ -219,7 +227,7 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
   const resolve = (target: Target) => {
     if (target.kind === "slot") {
       const s = slots.find((x) => x.id === target.slotId)!
-      return { dayId: slotDay(s).id, time: s.time, slotId: s.id }
+      return { dayId: target.dayId ?? slotDay(s).id, time: s.time, slotId: s.id }
     }
     return { dayId: target.dayId, time: target.time, slotId: null }
   }
@@ -344,6 +352,30 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
     setSelectedKey(id)
   }
 
+  /**
+   * Proposed: an approved post with no time, dropped at a day and time of
+   * your choosing (the calendar's tray). The server has only the next free
+   * slot (`placeApprovedVersion`); this is that plus a `movePost`. It fills
+   * a slot when one of its channel stands open at exactly that time.
+   */
+  const placeAt = (versionId: string, dayId: string, time: string) => {
+    const s = stranded.find((x) => x.versionId === versionId)
+    if (!s) return false
+    if (isPast(dayId, time)) {
+      say("That time has already passed. Pick a later one: a post put there would go out straight away.")
+      return false
+    }
+    const weekday = new Date(`${dayId}T12:00:00Z`).getUTCDay() || 7
+    const slot = slots.find((x) => x.channel === s.channel && x.weekday === weekday && x.time === time && !posts.some((p) => p.slotId === x.id && p.dayId === dayId))
+    const id = `placed-${versionId}`
+    const newPost: LabPost = { id, versionId, idea: s.idea, channel: s.channel, body: s.body, dayId, time, slotId: slot?.id ?? null, state: "queued", url: null, error: null }
+    setWeek((w) => ({ ...w, posts: [...w.posts, newPost], stranded: w.stranded.filter((x) => x.versionId !== versionId) }))
+    setUndoable({ kind: "place", label: openingOf(s.body), postId: id, s })
+    say(`${quoted(openingOf(s.body))} goes out ${whenLabel(dayId, time)}${slot ? ", in your slot" : ""}.`, true)
+    setSelectedKey(id)
+    return true
+  }
+
   /** Post now: sending (the dot) at once, then the receipt. A failed post is sent again. */
   const postNow = (key: string) => {
     setConfirm(null)
@@ -439,8 +471,9 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
 
   /* ── The one sentence of numbers ──────────────────────────────────── */
 
-  const goingThisWeek = posts.filter((p) => p.state !== "failed").length
-  const failed = posts.filter((p) => p.state === "failed").length
+  const thisWeek = posts.filter((p) => dayOf(p.dayId))
+  const goingThisWeek = thisWeek.filter((p) => p.state !== "failed").length
+  const failed = thisWeek.filter((p) => p.state === "failed").length
   const openAhead = openSlots.filter((o) => !o.passed).length
 
   return {
@@ -470,6 +503,7 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
     selectGhost: () => setSelectedKey(""),
     unschedule,
     place,
+    placeAt,
     postNow,
     undo,
     canUndo: undoable != null,

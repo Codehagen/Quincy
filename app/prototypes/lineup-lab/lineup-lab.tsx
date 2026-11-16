@@ -7,7 +7,7 @@ import { Shell } from "../shell"
 import { ControlPanel } from "./control-panel"
 import type { Scenario } from "./data"
 import { DEFAULT_OPTIONS, LabOptionsContext, type LabOptions } from "./lab-options"
-import { BoardLayout } from "./layouts/board"
+import { CalendarLayout } from "./layouts/calendar"
 import { FeedLayout } from "./layouts/feed"
 import { TableLayout } from "./layouts/table"
 import { useLineup, type LineupStore, type Phase } from "./use-lineup"
@@ -43,10 +43,10 @@ const VARIANTS: Variant[] = [
     View: TableLayout,
   },
   {
-    name: "Board",
-    bet: "The rhythm as a grid: days across, the times you publish down, every cell a slot or nothing. Gaps and doubled days are visible before you read a word; ⇧H / ⇧L or a drag moves a post a day.",
-    givesUp: "Reading: a cell holds two lines of the opening. It is the calendar vision.md warns about, kept to the rows you chose. Under ~1100px it folds into Feed.",
-    View: BoardLayout,
+    name: "Calendar",
+    bet: "Picked (Board, then a calendar): a Mon–Sun week with every minute between, posts as blocks at their exact time, open slots dashed, the post as the feed beside it. Drag a block, or press Enter and the arrows; neighbours make room.",
+    givesUp: "Reading: a block holds a line or two of the opening. It is the calendar vision.md warns about, kept to a working surface with no counts. One day under ~1020px; the Feed under 860.",
+    View: CalendarLayout,
   },
   {
     name: "Feed",

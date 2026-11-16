@@ -15,6 +15,8 @@ export type LabOptions = {
   margin: number
   /** 3 · Feed: the week forward (today on top), or as a profile shows it (newest on top). */
   order: "forward" | "profile"
+  /** 2 · Calendar: the height of an hour; a post is drawn 45 minutes tall. */
+  hourPx: number
   /** Quincy's notes about the week (proposed): on, or none. */
   notes: "on" | "off"
 }
@@ -27,6 +29,7 @@ export const DEFAULT_OPTIONS: LabOptions = {
   margin: 248,
   order: "forward",
   notes: "on",
+  hourPx: 56,
 }
 
 export const LabOptionsContext = React.createContext<LabOptions>(DEFAULT_OPTIONS)
