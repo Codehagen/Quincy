@@ -1,0 +1,15 @@
+/* ── Numbers lab: what the layouts cannot say in kit utilities ──────
+   Little lives here on purpose: every colour, size and gap in the three
+   directions is a kit utility. This file only holds the lab's own frame.
+   ─────────────────────────────────────────────────────────────────── */
+
+/* The picker sits over the workspace's foot; keep the last row reachable. */
+.nl-lab [data-slot="kit-workspace"] {
+  scroll-padding-bottom: 72px;
+}
+
+/* A disabled control-panel segment (Data: yours, signed out). */
+.nl-panel button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
