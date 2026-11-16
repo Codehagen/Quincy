@@ -31,10 +31,20 @@ on the target, not the environment.
 All three must pass before you open a pull request:
 
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm test
+pnpm typecheck   # tsgo (TypeScript 7 native); pnpm typecheck:tsc is the TS 5 fallback
+pnpm lint        # oxlint, then ESLint for the React Compiler rules only
+pnpm test        # Vitest, files sharing a worker (isolate: false)
 ```
+
+Lint rules live in `.oxlintrc.json`. Add a rule to `eslint.config.mjs` only
+if oxlint cannot run it. Tests run without per-file isolation: a test that
+changes shared state (env, globals, timers, a module mock) must undo it, and
+`pnpm test --sequence.shuffle` is the quick way to catch one that does not.
+
+`pnpm install` also installs a pre-push hook (lefthook) that runs oxlint on
+the files you push and the typecheck, in a few seconds. Tests and the build
+are left to CI. If you must push past it in an emergency, use
+`git push --no-verify`, and fix what it caught in the next commit.
 
 The test suite runs without any environment variables — it is pure mocks, and
 it must stay that way. Never wire a test to a live service or database; that

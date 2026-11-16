@@ -44,6 +44,13 @@ the plan is answering the wrong question.
 plans/029) on Base UI, with ui-sdk for new behaviours · shadcn `base-nova` on
 pages not moved to the kit yet
 
+Checks: `pnpm typecheck` is `tsgo` (TypeScript 7 native; `pnpm typecheck:tsc`
+is the TypeScript 5 fallback), `pnpm lint` is oxlint and then ESLint for the
+React Compiler rules only (`.oxlintrc.json` holds every other rule, the
+showcase import ban included), `pnpm test` is Vitest with `isolate: false`.
+CI runs the three as parallel jobs; a lefthook pre-push hook runs oxlint and
+the typecheck.
+
 ## Non-negotiables
 
 **Icons are `hugeicons`, never `lucide`.** Import from `@hugeicons/react` +

@@ -1,0 +1,156 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Oxlint runs first and does most of the linting. Its rule set mirrors what
+  // eslint-config-next (core-web-vitals + typescript) turned on, plus the
+  // showcase import ban from eslint.config.mjs. ESLint still runs afterwards,
+  // and eslint-plugin-oxlint switches off every rule enabled here, so ESLint
+  // only runs what oxlint cannot: the React Compiler rules of
+  // eslint-plugin-react-hooks v7 (oxlint has ports of some, but they report
+  // findings the compiler does not, so the compiler stays the judge), and
+  // react/no-deprecated, which oxlint lacks.
+  //
+  // The `correctness` category is off so this file states the whole rule
+  // set. Turning it on adds a few hundred rules; measure before doing so.
+  "plugins": ["react", "nextjs", "jsx-a11y", "import", "typescript"],
+  "categories": {
+    "correctness": "off"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "settings": {
+    "jsx-a11y": {
+      "components": {
+        "Image": "img"
+      }
+    }
+  },
+  "rules": {
+    "react/display-name": "error",
+    "react/jsx-key": "error",
+    "react/jsx-no-comment-textnodes": "error",
+    "react/jsx-no-duplicate-props": "error",
+    "react/jsx-no-undef": "error",
+    "react/no-children-prop": "error",
+    "react/no-danger-with-children": "error",
+    "react/no-direct-mutation-state": "error",
+    "react/no-find-dom-node": "error",
+    "react/no-is-mounted": "error",
+    "react/no-render-return-value": "error",
+    "react/no-string-refs": "error",
+    "react/no-unescaped-entities": "error",
+    "react/require-render-return": "error",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+
+    "nextjs/google-font-display": "warn",
+    "nextjs/google-font-preconnect": "warn",
+    "nextjs/next-script-for-ga": "warn",
+    "nextjs/no-async-client-component": "warn",
+    "nextjs/no-before-interactive-script-outside-document": "warn",
+    "nextjs/no-css-tags": "warn",
+    "nextjs/no-head-element": "warn",
+    // Off on purpose. ESLint's version only knows a pages/ directory, which
+    // this repo does not have, so it never fires. Oxlint's port flags any
+    // internal <a>, including links to route handlers such as
+    // /changelog/rss.xml, where <Link> would be wrong.
+    "nextjs/no-html-link-for-pages": "off",
+    "nextjs/no-img-element": "warn",
+    "nextjs/no-page-custom-font": "warn",
+    "nextjs/no-styled-jsx-in-document": "warn",
+    "nextjs/no-sync-scripts": "error",
+    "nextjs/no-title-in-document-head": "warn",
+    "nextjs/no-typos": "warn",
+    "nextjs/no-unwanted-polyfillio": "warn",
+    "nextjs/inline-script-id": "error",
+    "nextjs/no-assign-module-variable": "error",
+    "nextjs/no-document-import-in-page": "error",
+    "nextjs/no-duplicate-head": "error",
+    "nextjs/no-head-import-in-document": "error",
+    "nextjs/no-script-component-in-head": "error",
+
+    "import/no-anonymous-default-export": "warn",
+
+    "jsx-a11y/alt-text": ["warn", { "elements": ["img"], "img": ["Image"] }],
+    "jsx-a11y/aria-props": "warn",
+    "jsx-a11y/aria-proptypes": "warn",
+    "jsx-a11y/aria-unsupported-elements": "warn",
+    "jsx-a11y/role-has-required-aria-props": "warn",
+    "jsx-a11y/role-supports-aria-props": "warn",
+
+    "no-var": "error",
+    "prefer-const": ["error", { "destructuring": "any", "ignoreReadBeforeAssign": false }],
+    "prefer-rest-params": "error",
+    "prefer-spread": "error",
+
+    "typescript/ban-ts-comment": "error",
+    "typescript/no-array-constructor": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-namespace": "error",
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-unused-expressions": [
+      "warn",
+      { "allowShortCircuit": false, "allowTaggedTemplates": false, "allowTernary": false }
+    ],
+    "typescript/no-unused-vars": "warn",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/prefer-as-const": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    "typescript/triple-slash-reference": "error",
+
+    // The showcase (components/showcase) draws pictures of Quincy for
+    // marketing and docs pages, and reuses the kit's names on purpose. An
+    // auto-import can pick the wrong one without a type error, so outside the
+    // pages that may use it the import is an error. The allowed paths are
+    // the override below. docs/design/showcase.md, "The one rule".
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "^@/components/showcase(/.*)?$",
+            "message": "Showcase is for marketing and docs pages only. In the app, import Stage, Window, Text, Button and Count from @/components/kit (docs/design/showcase.md)."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      // Keep in step with the `ignores` list in eslint.config.mjs.
+      "files": [
+        "app/(marketing)/**",
+        "app/prototypes/showcase/**",
+        "app/prototypes/kit/**",
+        "components/marketing/**",
+        "app/prototypes/landing/**",
+        "app/prototypes/video/**",
+        "app/prototypes/lab/landing/**",
+        "components/showcase/**"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    ".agents/**",
+    "app/.well-known/**",
+    ".claude/**"
+  ]
+}

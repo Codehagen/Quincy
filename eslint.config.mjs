@@ -1,46 +1,15 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import oxlint from "eslint-plugin-oxlint";
 
+// Oxlint runs first (`pnpm lint`) and owns every rule it can run, including
+// the showcase import ban: see .oxlintrc.json. The last entry below switches
+// those rules off here, so ESLint only runs the remainder — chiefly the React
+// Compiler rules of eslint-plugin-react-hooks v7, which oxlint cannot match.
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // The showcase (components/showcase) draws pictures of Quincy for marketing
-  // and docs pages, and reuses the kit's names (Stage, Window, Text, Button,
-  // Count, useReducedMotion) on purpose. An auto-import can pick the wrong
-  // one without a type error, so outside the pages that may use it the import
-  // is an error. docs/design/showcase.md, "The one rule".
-  {
-    files: ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"],
-    ignores: [
-      "app/\\(marketing\\)/**",
-      "app/prototypes/showcase/**",
-      "app/prototypes/kit/**",
-      // The homepage's parts (docs/design/marketing.md) draw with showcase pictures.
-      "components/marketing/**",
-      // The old landing route, now rendering the homepage, and the video
-      // page prototyped as a marketing sub-page of it.
-      "app/prototypes/landing/**",
-      "app/prototypes/video/**",
-      // The landing lab draws hero compositions from the same pictures.
-      "app/prototypes/lab/landing/**",
-      "components/showcase/**",
-    ],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              regex: "^@/components/showcase(/.*)?$",
-              message:
-                "Showcase is for marketing and docs pages only. In the app, import Stage, Window, Text, Button and Count from @/components/kit (docs/design/showcase.md).",
-            },
-          ],
-        },
-      ],
-    },
-  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -56,6 +25,15 @@ const eslintConfig = defineConfig([
     // Agent worktrees carry their own .next builds, untracked.
     ".claude/**",
   ]),
+  // Must stay last: it turns off what .oxlintrc.json already runs.
+  ...oxlint.buildFromOxlintConfigFile("./.oxlintrc.json"),
+  {
+    // Oxlint runs this one too; eslint-plugin-oxlint does not map it yet.
+    rules: { "react/require-render-return": "off" },
+    // An `eslint-disable` for a rule oxlint now owns looks unused from here,
+    // but oxlint reads the same comment, so it is not.
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+  },
 ]);
 
 export default eslintConfig;

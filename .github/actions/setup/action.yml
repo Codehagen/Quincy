@@ -1,0 +1,46 @@
+name: Setup
+description: >
+  Node and pnpm, and node_modules restored whole when the lockfile has not
+  changed. Only a miss runs `pnpm install`, from a cached pnpm store, and saves
+  node_modules straight away so the jobs running beside this one can use it.
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        # Vercel builds on 24.x. engines allows >=22.
+        node-version: 24
+        package-manager-cache: false
+
+    - id: modules
+      uses: actions/cache/restore@v6
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node24-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc') }}
+
+    - id: store
+      if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - if: steps.modules.outputs.cache-hit != 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
+
+    - if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    # Two jobs that miss together both try to save; the second one's save is
+    # refused with a warning, not a failure.
+    - if: steps.modules.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: node_modules
+        key: ${{ steps.modules.outputs.cache-primary-key }}
