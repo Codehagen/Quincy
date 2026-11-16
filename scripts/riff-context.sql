@@ -1,0 +1,71 @@
+-- `riff.source_item_id` and `riff.context`. See plans/026.
+--
+-- Run it with the script that reads this file, never by hand — the script
+-- asserts afterwards that both columns arrived, that `context` is `jsonb` and
+-- that neither is nullable, which is the half a paste into a SQL console does
+-- not do:
+--
+--   npx tsx --env-file=.env.local scripts/apply-riff-context.ts
+--
+-- **When: before the branch is deployed, not after.** Both columns are additive
+-- and defaulted, so the old code runs happily against the new table — a column
+-- it does not select is a column it cannot miss. The reverse is not true:
+-- `startShippedRiff` on the new code writes `source_item_id` and `context` in
+-- its INSERT, and against a table without them every merged pull request fails
+-- with an undefined-column error and leaves no riff. Applying it early is free
+-- and applying it late is an outage on the feature.
+--
+-- Two additive columns, both with a default, so no reader ever sees a column
+-- that is not there yet and no existing row has to be rewritten. ADD COLUMN IF
+-- NOT EXISTS makes a second run a no-op.
+--
+-- Why `source_item_id` when `source_id` already exists. They are different
+-- questions and the names are close enough that conflating them is easy.
+-- `source_id` holds the *kind* — 'github', '' for a riff somebody typed — and
+-- is what the card renders, and nothing can be joined on it. This is the row:
+-- the `source_item` a riff came out of, so a merge's own numbers can be found
+-- again from the riff rather than carried forward through every step that
+-- touches it.
+-- Empty for every riff created by hand, which have no row upstream.
+--
+-- No foreign key, deliberately. `source_item` is deleted by retention and the
+-- riff is the artifact somebody spent a thought on — a cascade would take the
+-- angles with it, and a RESTRICT would make retention fail on exactly the rows
+-- that mattered enough to riff on. An id that no longer resolves reads as "the
+-- delivery has been cleaned up", which is true.
+--
+-- Why `context` is a jsonb and not two text columns. It is prompt input for the
+-- writer — what the material is about, when the material does not say — and
+-- what belongs in it changes with the source. A merge stores { forUser, facts }
+-- and the next source will store something else, and a table with a column per
+-- integration is a union of every one ever attempted. The same argument
+-- `source_connection.meta` makes.
+--
+-- NOT NULL DEFAULT '{}' rather than nullable, so every read path gets an object
+-- and none of them spells the empty case twice. The default applies to existing
+-- rows for free — Postgres has stored a non-volatile column default in the
+-- catalogue rather than rewriting the table since 11.
+--
+-- **There is one database.** Running this from a laptop is the production
+-- migration, per AGENTS.md. Both statements are additive and neither rewrites
+-- an existing value, which is what makes that acceptable rather than merely
+-- survivable.
+--
+-- NOTE: never put a statement separator inside a comment. The apply script
+-- splits this file on that character, so one appearing in prose cuts a
+-- statement in half and Postgres answers with a syntax error pointing at a
+-- position that looks nothing like the mistake.
+--
+-- Written as a warning and then broken twice in the prose above it, which the
+-- review of 2026-08-25 caught by running the splitter over this file without a
+-- database attached. It produced three statements rather than two, and the
+-- first of them was the tail of a sentence — so the migration would have died
+-- on its first line, at a position pointing into a paragraph. Two semicolons
+-- became commas. If you edit the prose here, re-run that check before you run
+-- the script.
+
+ALTER TABLE "riff"
+  ADD COLUMN IF NOT EXISTS "source_item_id" text NOT NULL DEFAULT '';
+
+ALTER TABLE "riff"
+  ADD COLUMN IF NOT EXISTS "context" jsonb NOT NULL DEFAULT '{}'::jsonb;

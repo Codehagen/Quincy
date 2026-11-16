@@ -1,0 +1,117 @@
+/* After Stageshow (MIT, Copyright (c) 2026 Benji Taylor):
+   references/annotations.md. See components/showcase/NOTICE.md.
+   The marks a human editor leaves: Caveat, graphite or the blue pen. */
+
+@layer stageshow {
+  /* Quincy's handwriting, as the kit's MarginNote writes it: Caveat 21px
+     at 500, tilted 2°. It writes in (a short slide and a fade), and leaves
+     the same way. Transitions, so a reversed `show` retargets. */
+  .qs-note {
+    display: inline-block;
+    font-family: var(--kit-font-caveat), cursive;
+    font-size: 21px;
+    font-weight: 500;
+    line-height: 0.95;
+    white-space: nowrap;
+    color: var(--kit-ink-muted);
+    rotate: -2deg;
+    opacity: 0;
+    translate: -4px 0;
+    transition:
+      opacity var(--kit-duration-enter) var(--ease-kit-out, ease-out),
+      translate var(--kit-duration-enter) var(--ease-kit-out, ease-out);
+    transition-delay: var(--qs-delay, 0ms);
+  }
+
+  .qs-note[data-tone="pen"] {
+    color: var(--kit-pen);
+  }
+
+  .qs-note[data-show] {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  .qs-note--at {
+    position: absolute;
+    z-index: 22;
+    pointer-events: none;
+  }
+
+  .qs-note--at[data-align="end"] {
+    transform: translateX(-100%);
+    translate: 4px 0;
+  }
+
+  .qs-note--at[data-align="end"][data-show] {
+    translate: 0 0;
+  }
+
+  /* The leader: 1px graphite, a 4px dot, no rim, never the accent. */
+  .qs-leader .ss-connector__line {
+    stroke: var(--kit-ink-faint);
+    stroke-width: 1;
+  }
+
+  .qs-leader .ss-connector__dot {
+    fill: var(--kit-ink-muted);
+    stroke: none;
+    filter: none;
+    r: 2px;
+  }
+
+  /* A beat: its lines, and the bracket hung in the margin past them. */
+  .qs-beat {
+    position: relative;
+  }
+
+  .qs-beat__mark {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: calc(100% + var(--qs-margin, 20px));
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .qs-beat__bracket {
+    flex: none;
+    align-self: stretch;
+    width: 9px;
+    height: 100%;
+    overflow: visible;
+    opacity: 0;
+    transition: opacity var(--kit-duration-enter) var(--ease-kit-out, ease-out);
+    transition-delay: var(--qs-delay, 0ms);
+  }
+
+  .qs-beat__bracket path {
+    fill: none;
+    stroke: var(--kit-pen);
+    stroke-width: 1.3;
+    stroke-linecap: round;
+  }
+
+  .qs-beat[data-tone="graphite"] .qs-beat__bracket path {
+    stroke: var(--kit-ink-muted);
+  }
+
+  .qs-beat__mark[data-show] .qs-beat__bracket {
+    opacity: 1;
+  }
+
+  .qs-beat__mark .qs-note {
+    font-size: 19px;
+  }
+
+  /* No margin column on a compact stage: the words sit under the lines. */
+  .ss-stage[data-layout="compact"] .qs-beat__mark {
+    position: static;
+    margin-top: 6px;
+  }
+
+  .ss-stage[data-layout="compact"] .qs-beat__bracket {
+    display: none;
+  }
+}

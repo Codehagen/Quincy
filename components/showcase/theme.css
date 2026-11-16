@@ -1,0 +1,114 @@
+/* The showcase's look: Stageshow's --ss-* tokens pointed at the kit's
+   --kit-* tokens (app/globals.css, "The kit — plans/029"), so a faux screen
+   and the app it advertises share one ground, one ink, one blue and one
+   elevation. Not a palette of its own: every value here is a reference.
+
+   Dark mode needs nothing extra. The kit re-points its semantic tokens under
+   `.dark`, and these resolve through them.
+
+   Inside @layer stageshow so a demo's own (unlayered) CSS still wins, and at
+   `.ss-fit > .ss-stage` so it out-ranks stage.css's `.ss-stage` defaults
+   and its theme selectors, which load first. */
+
+@layer stageshow {
+  .ss-fit > .ss-stage {
+    /* Surfaces: the stage is the kit's grey recess, objects are white. */
+    --ss-canvas: var(--kit-stage);
+    --ss-well: var(--kit-stage);
+    --ss-surface: var(--kit-object);
+    --ss-chrome: var(--kit-object);
+    --ss-raised: var(--kit-object);
+
+    /* Placeholder ink, lightest to darkest, as alphas of the kit's ink so a
+       bar reads the same on object and stage. --ss-ink-3 is the kit's own
+       skeleton step. */
+    --ss-ink-1: color-mix(in oklch, var(--kit-ink) 4%, transparent);
+    --ss-ink-2: color-mix(in oklch, var(--kit-ink) 6%, transparent);
+    --ss-ink-3: var(--kit-skeleton);
+    --ss-ink-4: color-mix(in oklch, var(--kit-ink) 10%, transparent);
+    --ss-ink-5: color-mix(in oklch, var(--kit-ink) 15%, transparent);
+    --ss-fill: var(--kit-track);
+
+    --ss-line: var(--kit-hairline);
+    --ss-line-faint: var(--kit-hairline);
+
+    /* Text. The kit has no faint text step (2.4:1 fails AA), so Stageshow's
+       faint text takes muted. */
+    --ss-text: var(--kit-ink-muted);
+    --ss-text-strong: var(--kit-ink);
+    --ss-text-faint: var(--kit-ink-muted);
+    --ss-icon: var(--kit-ink-muted);
+    --ss-icon-faint: var(--kit-ink-faint);
+
+    /* One blue: the action. */
+    --ss-accent: var(--kit-action);
+    --ss-accent-2: var(--kit-action);
+    --ss-accent-soft: var(--kit-action-tint);
+    --ss-accent-text: var(--kit-action-ink);
+    --ss-success: var(--kit-success);
+    --ss-success-soft: color-mix(in oklch, var(--kit-success) 14%, transparent);
+    --ss-success-text: var(--kit-success);
+    --ss-danger: var(--kit-danger);
+
+    /* Depth: the kit's elevation stacks, each opening with its 1px ring. */
+    --ss-shadow-window: var(--kit-elevation-object);
+    --ss-shadow-hero: var(--kit-elevation-object);
+    --ss-shadow-ground: var(--kit-elevation-object);
+    --ss-shadow-card: var(--kit-elevation-inset);
+    --ss-shadow-satellite: var(--kit-elevation-lifted);
+    --ss-shadow-float: var(--kit-elevation-lifted);
+    --ss-shadow-lift: var(--kit-elevation-lifted);
+
+    /* Type: Inter from <KitRoot>, system mono for times and counts. */
+    --ss-font: var(--kit-font-inter), ui-sans-serif, system-ui, sans-serif;
+    --ss-mono: var(--font-kit-mono);
+
+    /* Shape, after the kit's radii. */
+    --ss-radius-sm: var(--radius-kit-control-inner);
+    --ss-radius-md: var(--radius-kit-control);
+    --ss-radius-lg: var(--radius-kit-control);
+    --ss-radius-window: var(--radius-kit-object);
+
+    color: var(--kit-ink);
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* The kit's chrome: three quiet dots and a bare mono address, never the
+     macOS colours. Chrome means "this is the product", not "this is a Mac". */
+  .ss-fit > .ss-stage .ss-window__dot {
+    background: var(--kit-chrome);
+    box-shadow: none;
+  }
+
+  .ss-fit > .ss-stage .ss-window__url {
+    margin-left: 6px;
+    padding: 0;
+    background: none;
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    color: var(--kit-ink-muted);
+  }
+
+  /* The kit's Button look on Stageshow's Button: the action is the kit's
+     blue with its hover mix, a quiet button is the white control surface. */
+  .ss-fit > .ss-stage .ss-button {
+    border-radius: var(--radius-kit-control-inner);
+    font-weight: 560;
+    box-shadow: var(--kit-elevation-control);
+    background: var(--kit-control);
+  }
+
+  .ss-fit > .ss-stage .ss-button[data-hover] {
+    background: var(--kit-control-hover);
+  }
+
+  .ss-fit > .ss-stage .ss-button[data-variant="primary"] {
+    background: var(--kit-action);
+    color: var(--kit-action-on);
+    box-shadow: none;
+  }
+
+  .ss-fit > .ss-stage .ss-button[data-variant="primary"][data-hover] {
+    background: var(--kit-action-hover);
+  }
+}

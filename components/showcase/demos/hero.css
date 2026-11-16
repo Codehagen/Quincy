@@ -1,0 +1,361 @@
+/* The landing hero. Layout after Stageshow's examples/hero-demo (MIT; see
+   ../NOTICE.md): a corner bleed, one gutter, the window running off the
+   right and the bottom. Everything nests under .qh. */
+
+.qh {
+  & .ss-stage {
+    --gutter: 32px;
+    overflow: hidden;
+    border-radius: var(--radius-kit-stage);
+    background: var(--kit-stage);
+  }
+
+  /* Corner bleed: a gutter in from the top and left, about a sixth past the
+     right edge and a gutter past the bottom. */
+  .qh-window {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    width: 1000px;
+    height: 560px;
+    background: var(--kit-ground);
+  }
+
+  .qh-body {
+    display: flex;
+    height: 100%;
+  }
+
+  /* ---- The conversation ---- */
+
+  .qh-chat {
+    flex: none;
+    width: 560px;
+    padding: 24px 32px;
+    border-right: 1px solid var(--kit-hairline);
+  }
+
+  .qh-who {
+    margin-bottom: 8px;
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qh-who--quincy {
+    margin-top: 20px;
+  }
+
+  /* The voice note and the draft are the two white objects in the scene;
+     everything else is ground. */
+  .qh-voice,
+  .qh-draft {
+    width: 380px;
+    padding: 14px 16px 16px;
+    border-radius: 14px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+    /* The beat marks hang past the object's edge, a gap past its padding */
+    --qs-margin: 28px;
+  }
+
+  .qh-voice__player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .qh-play {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--kit-ink);
+    color: var(--kit-object);
+  }
+
+  /* The play glyph centred on its ink, not its box: nudged toward its point. */
+  .qh-play .ss-icon {
+    translate: 1px 0;
+  }
+
+  .qh-wave {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 3px;
+    height: 24px;
+  }
+
+  .qh-wave > span {
+    flex: none;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--kit-ink-faint);
+  }
+
+  .qh-mono {
+    flex: none;
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    color: var(--kit-ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .qh-transcript {
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qh-transcript--angle {
+    margin-top: 4px;
+    color: var(--kit-ink);
+  }
+
+  /* ---- The draft: three beats, the number on its own line ---- */
+
+  .qh-draft {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .qh-line {
+    font-size: 13.5px;
+    line-height: 20px;
+    color: var(--kit-ink);
+  }
+
+  .qh-figure {
+    margin-top: 2px;
+    font-size: 18px;
+    line-height: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--kit-ink);
+  }
+
+  .qh-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--kit-hairline);
+  }
+
+  .qh-spacer {
+    flex: 1;
+  }
+
+  /* The slot Quincy proposes. It is the thing that flies, so the same chip
+     is drawn at both ends at one size. */
+  .qh-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px 0 8px;
+    border-radius: var(--radius-kit-control-inner);
+    background: var(--kit-well);
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--kit-ink);
+  }
+
+  .qh-chip .ss-icon {
+    color: var(--kit-ink-muted);
+  }
+
+  /* ---- The week ---- */
+
+  .qh-week {
+    flex: 1;
+    padding: 24px 24px;
+    overflow: hidden;
+  }
+
+  .qh-week__title {
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--kit-ink);
+  }
+
+  .qh-day {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .qh-day__name {
+    flex: none;
+    width: 30px;
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qh-slot {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    width: 300px;
+    height: 58px;
+    padding: 0 14px;
+    border-radius: 12px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-inset);
+  }
+
+  /* An open slot: a dashed edge drawn at its final size, which only fades
+     (motion.md: a dashed edge never changes size). */
+  .qh-slot--empty,
+  .qh-slot--open {
+    position: relative;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .qh-slot--empty::before,
+  .qh-slot--open::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px dashed var(--kit-ink-faint);
+    border-radius: inherit;
+    transition: opacity var(--kit-duration-state) ease-out;
+  }
+
+  .qh-slot--open {
+    align-items: flex-start;
+    gap: 6px;
+    height: 76px;
+    padding: 0 12px;
+    transition:
+      background-color var(--kit-duration-state) ease-out,
+      box-shadow var(--kit-duration-state) ease-out;
+  }
+
+  .qh-slot--open[data-landed] {
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qh-slot--open[data-landed]::before {
+    opacity: 0;
+  }
+
+  .qh-slot__title {
+    position: relative;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 560;
+    color: var(--kit-ink);
+    opacity: 0;
+    translate: 0 3px;
+    transition:
+      opacity var(--kit-duration-enter) ease-out 120ms,
+      translate var(--kit-duration-enter) ease-out 120ms;
+  }
+
+  .qh-slot__title[data-on] {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  /* ---- Compact: one column, the week as a strip over the conversation ---- */
+
+  & .ss-stage[data-layout="compact"] {
+    --gutter: 16px;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-window {
+    width: 400px;
+    height: 760px;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-chat {
+    width: 342px;
+    padding: 16px;
+    border-right: 0;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-voice,
+  & .ss-stage[data-layout="compact"] .qh-draft {
+    width: 100%;
+  }
+
+  /* No room for the chip beside two buttons: it takes its own line above
+     them, and the Collapse's track may not grow past the column. */
+  & .ss-stage[data-layout="compact"] .ss-collapse {
+    min-width: 0;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-actions {
+    flex-wrap: wrap;
+    row-gap: 0;
+    justify-content: flex-end;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-actions .qh-chip {
+    margin-right: auto;
+    margin-bottom: 12px;
+  }
+
+  & .ss-stage[data-layout="compact"] .qh-actions .qh-spacer {
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .qh-strip {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+
+  .qh-strip__day {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0 9px;
+    border-radius: 10px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-inset);
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qh-strip__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--kit-track);
+    transition: background-color var(--kit-duration-state) ease-out;
+  }
+
+  .qh-strip__day[data-busy] .qh-strip__dot,
+  .qh-strip__day[data-filled] .qh-strip__dot {
+    background: var(--kit-ink);
+  }
+
+  .qh-strip__day[data-filled] {
+    color: var(--kit-ink);
+  }
+}

@@ -1,0 +1,85 @@
+# The kit
+
+Quincy looks like a page someone has marked up, not a dashboard. The landing
+page (`/`) is the reference (2026-11-16): a white ground, one white object
+under a bold lead, Inter 14px with hierarchy by weight and grey, an **ink
+pill** for the one action, and plenty of air. Quincy is a human editor: it
+writes in the margin, highlights the one sentence that matters, and names
+the three beats in blue pen, the only blue in the app.
+
+Decided in `plans/029-the-kit.md` (read its 2026-11-16 revision). Tokens: the
+"The kit — plans/029" section of `app/globals.css`, which is the source when a
+doc and the code disagree. Components: `components/kit/` (`@/components/kit`)
+and `components/quincy/` (`@/components/quincy`). Live examples:
+`/prototypes/kit`.
+
+## Rules
+
+- **Kit utilities only**: `bg-kit-*`, `text-kit-*`, `shadow-kit-*`,
+  `rounded-kit-*`, `p-kit-*`, `duration-(--kit-duration-*)`, `ease-kit-*`.
+  Never a primitive (`--kit-gray-530`: dark mode re-points the semantic
+  token, not the primitive), never a raw value (hex, `oklch()`,
+  `text-[13px]`, `shadow-[…]`). A missing value is a kit gap: add the token.
+- **Never the old system in a kit page**: no `--primary`, `bg-background`,
+  `--brass-*`, `--sand-*`, `--signal*`, the role scale (`text-body` …),
+  Geist, or `components/ui/`. The old system is history
+  (history-brass-sand.md); it stays only on pages not moved yet.
+- **Never `--kit-action`** (the old blue) in new code. It remains only for
+  the showcase pictures until they are rebuilt (showcase.md).
+- **A page moves whole**: `<KitPage title="…">`, then Stages, inside the app
+  shell. Never half a page, never a hand-made page column (page.md).
+- **Behaviour**: existing kit components are on Base UI. A new component
+  whose behaviour Base UI does not cover well is on ui-sdk. One component
+  never mixes both (controls.md, "Behaviour libraries").
+- Icons are `hugeicons`, never `lucide`.
+
+## Never
+
+Dark stat tiles, bento splits in the app, windows waiting on a loop,
+strikethrough diffs, stand-alone control demos, the live-ritual pill, a
+borrowed character, a follower chart, a blue button. Reasons in decisions.md.
+
+## Index
+
+| File | Read it when |
+| --- | --- |
+| [colour.md](colour.md) | picking any colour: ink action, selected, highlight, pen, live, danger, contrast |
+| [type.md](type.md) | any text: `Text` (incl. `title`), `Muted`, `Lead`, `Mono`, `Code`, `Count`, `Tag` |
+| [surfaces.md](surfaces.md) | ground, object, recess, elevation, radii |
+| [spacing.md](spacing.md) | any gap or padding; `Well`, `Rule`, `Skeleton`, `Avatar` |
+| [layout.md](layout.md) | `Stage` (backdrops, no lead), stacking, `Card`, `Window` |
+| [page.md](page.md) | `KitPage`, `searchParams`, list and detail, `useRevealOnNarrow` |
+| [app-shell.md](app-shell.md) | `AppShell`, the sidebar, the bar, the phone sheet |
+| [buttons.md](buttons.md) | `Button`, `ButtonLink`, `TextLink`, `TextButton`; pending, toggles, the same button per item |
+| [actions.md](actions.md) | which button is the action: underway, open, standing; per item; a form's submit |
+| [removing.md](removing.md) | Undo, hold or plain; `danger`, `UndoBar`, `HoldButton` |
+| [controls.md](controls.md) | any choice: Segmented, Tabs, Switch, Stepper, Slider, Checklist; Base UI or ui-sdk |
+| [menus.md](menus.md) | Select vs Menu, menu rows, focus after a command, IconButton |
+| [lists.md](lists.md) | `List`, `ListHeading`, `ListRow`, `NavRow`, `GlyphTile`, `FileChip`, `SourceMark` |
+| [forms.md](forms.md) | `Field`, `Input`, `Textarea`, `SearchField`, validation |
+| [states.md](states.md) | working (LiveDot + words), empty, refused or failed |
+| [motion.md](motion.md) | `Arrive`, durations, curves, reduced motion |
+| [editor-marks.md](editor-marks.md) | `Highlight`, `MarginNote`, `Beats`, `BeatBracket` |
+| [quincy-drafts.md](quincy-drafts.md) | `DraftCard`, `ScheduledPost`, `SlotCell`, `PostResult`, `AgainstMedian` |
+| [quincy-riffs.md](quincy-riffs.md) | `RiffCard` + `AngleTabs` (shown as "ideas"), `ProvenanceMark` |
+| [quincy-chat.md](quincy-chat.md) | `QuincyReply`, `YourTurn`, `QuincyAsks`, `EmptyState`, kit markdown |
+| [marketing.md](marketing.md) | a public page: `MarketingShell`, `Section`, display type, `MarketingButton`, `WaitlistForm` |
+| [showcase.md](showcase.md) | marketing and docs pictures only; never in the app |
+| [showcase-demos.md](showcase-demos.md) | which picture tells which story; thread motion; the copy-leak rule |
+| [mascot.md](mascot.md) | the friend: `Friend`, `QuincyMark`, which state means what |
+| [mascot-timing.md](mascot-timing.md) | the beats both drawings share, per-state timing, reduced motion |
+| [mascot-iterating.md](mascot-iterating.md) | changing the friend: a frame, a new state, the favicon, exports |
+| [decisions.md](decisions.md) | before proposing a look: what was chosen, what was superseded; [visual](decisions-visual.md), [landing](decisions-landing.md) |
+| [history-brass-sand.md](history-brass-sand.md) | why the old app looked as it did (superseded 2026-11-16) |
+
+## Copy
+
+- First person, short lines, three beats: what I did / what happened / what
+  it meant. The number goes on its own line (`<Text variant="figure">`).
+- Every number is against the person's own baseline: "Your median is 6.",
+  never a bare total.
+- "Quincy drafts, you send." Nothing reads as if it already went out.
+- Nothing salesy: no exclamation marks, no "unlock", no "supercharge".
+- Never "riff" in visible copy. An angle is an **idea**; name the group by
+  its source ("3 ideas from your voice note"). The page is **Ideas**. Code
+  keeps `Riff` / `Angle` (plans/029, "Words").

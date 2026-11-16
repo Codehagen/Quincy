@@ -1,0 +1,69 @@
+/* Ported from Stageshow (MIT, Copyright (c) 2026 Benji Taylor):
+   examples/bento/bento.css. See components/showcase/NOTICE.md.
+   The frame every tile shares: one radius, one gap, copy at the top. The
+   variety lives inside the tiles. Restyled with the --kit-* tokens. */
+
+@layer stageshow {
+  .qs-bento {
+    --qs-pad: 28px;
+    --qs-gap: 14px;
+    container-type: inline-size;
+  }
+
+  .qs-bento__grid {
+    display: grid;
+    gap: var(--qs-gap);
+  }
+
+  .qs-tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-kit-stage);
+    background: var(--kit-stage);
+  }
+
+  /* Run-in copy at page size, never the UI's small type (bento.md rule 6). */
+  .qs-tile__copy {
+    position: relative;
+    z-index: 1;
+    max-width: 22rem;
+    padding: 24px var(--qs-pad) 0;
+    font-size: 17px;
+    line-height: 24px;
+    letter-spacing: -0.012em;
+    font-weight: 460;
+    color: var(--kit-ink-muted);
+    text-wrap: pretty;
+  }
+
+  .qs-tile__copy b {
+    font-weight: 600;
+    color: var(--kit-ink);
+  }
+
+  /* Pictures sit on the tile's bottom edge; the tile crops them. */
+  .qs-tile__picture {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  .qs-tile__picture[data-fit="center"] {
+    left: 50%;
+    width: var(--qs-picture-width, 360px);
+    margin-left: calc(var(--qs-picture-width, 360px) / -2);
+  }
+
+  /* A picture's stage has no ground of its own: the tile is the ground. */
+  .qs-tile__picture .ss-stage {
+    overflow: hidden;
+    background: transparent;
+  }
+
+  @container (max-width: 599px) {
+    .qs-bento {
+      --qs-pad: 24px;
+    }
+  }
+}

@@ -1,0 +1,143 @@
+/* "Every number is against your own median." Pinned bottom bleed after
+   Stageshow's examples/static-card (MIT; see ../NOTICE.md). */
+
+.qm {
+  & .ss-stage {
+    --gutter: 28px;
+  }
+
+  /* Inset a gutter from both sides (the tile's copy gutter) and from the
+     top; it runs past the bottom, where only filler rows are. */
+  .qm-panel {
+    position: absolute;
+    top: 4px;
+    left: var(--gutter);
+    right: var(--gutter);
+    height: 340px;
+    padding: 16px 18px;
+    border-radius: var(--radius-kit-object);
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qm-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .qm-title {
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--kit-ink);
+  }
+
+  .qm-mono {
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qm-chart {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding-bottom: 1px;
+    border-bottom: 1px solid var(--kit-hairline);
+  }
+
+  .qm-bar {
+    flex: 1;
+    min-width: 0;
+    border-radius: 2px 2px 0 0;
+    background: var(--kit-track);
+    transform-origin: 50% 100%;
+    scale: 1 0;
+    transition:
+      scale 520ms cubic-bezier(0.25, 0.8, 0.25, 1),
+      height 700ms cubic-bezier(0.25, 0.8, 0.25, 1),
+      background-color var(--kit-duration-state) ease-out;
+  }
+
+  .qm-bar[data-on] {
+    scale: 1 1;
+  }
+
+  /* The one post that cleared its median: the only bar in ink. */
+  .qm-bar[data-lead] {
+    background: var(--kit-ink);
+  }
+
+  /* The median: the only scale on the chart. Dashed, drawn at full width
+     from the start and only faded (a dashed edge never changes size). */
+  .qm-median {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    height: 0;
+    border-top: 1px dashed var(--kit-ink-muted);
+    opacity: 0;
+    transition: opacity var(--kit-duration-enter) ease-out 400ms;
+  }
+
+  .qm-median[data-on] {
+    opacity: 1;
+  }
+
+  .qm-median__label {
+    position: absolute;
+    right: 0;
+    bottom: 3px;
+    padding-left: 6px;
+    background: var(--kit-object);
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: 40px;
+    border-bottom: 1px solid var(--kit-hairline);
+  }
+
+  .qm-row[data-lead] {
+    margin-top: 6px;
+  }
+
+  .qm-post {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 560;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--kit-ink);
+  }
+
+  .qm-multiple {
+    display: inline-flex;
+    flex: none;
+    align-items: baseline;
+    font-size: 15px;
+    line-height: 18px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--kit-ink);
+  }
+
+  .qm-x {
+    margin-left: 1px;
+  }
+}

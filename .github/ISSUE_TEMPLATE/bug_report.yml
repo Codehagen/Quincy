@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security problems, do **not** file an issue — follow
+        [SECURITY.md](../../SECURITY.md) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+      placeholder: |
+        1. Went to /lineup
+        2. Clicked …
+        3. Expected …, but …
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Where you hit this.
+      placeholder: |
+        - Running: locally (pnpm dev) / self-hosted / hirequincy.com
+        - Browser / OS:
+        - Node / pnpm version (if local):
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Anything from the terminal, the browser console, or the screen. Redact tokens and connection strings.
+    validations:
+      required: false

@@ -1,0 +1,31 @@
+-- `source_connection.meta`. See plans/021.
+--
+-- One additive column on a table that has zero rows in production, so there is
+-- no backfill and no window in which a reader sees a column that is not there
+-- yet. ADD COLUMN IF NOT EXISTS makes a second run a no-op.
+--
+-- Why a jsonb rather than two columns. A GitHub App has one webhook URL for
+-- every installation, so identity arrives in the body as `installation.id`
+-- rather than in the path — and that id, plus the account login the app was
+-- installed on, has to live somewhere. Plan 019 argued against pre-building
+-- the OAuth columns for ten sources that do not exist yet, and the same
+-- argument applies to identity columns: the next provider will need a
+-- different pair, and a table with a column per integration is a union of
+-- every one ever attempted.
+--
+-- NOT NULL DEFAULT '{}' rather than nullable, so every read path gets an object
+-- and none of them has to spell the empty case twice. The default applies to
+-- existing rows for free — Postgres has stored a non-volatile column default in
+-- the catalogue rather than rewriting the table since 11, and there are no rows
+-- here to rewrite anyway.
+--
+-- **There is one database.** Running this from a laptop is the production
+-- migration, per AGENTS.md.
+--
+-- NOTE: never put a statement separator inside a comment. The apply script
+-- splits this file on that character, so one appearing in prose cuts a
+-- statement in half and Postgres answers with a syntax error pointing at a
+-- position that looks nothing like the mistake.
+
+ALTER TABLE "source_connection"
+  ADD COLUMN IF NOT EXISTS "meta" jsonb NOT NULL DEFAULT '{}'::jsonb;

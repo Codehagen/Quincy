@@ -1,0 +1,351 @@
+/* The landing grid. Hero and strip after Stageshow's examples/bento (MIT;
+   see ../NOTICE.md). The grid is the page's (container queries on .qb);
+   each picture is its own Stage, pinned to its tile's bottom. */
+
+.qb {
+  & .qs-bento__grid {
+    max-width: 984px;
+    margin: 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 420px 240px 300px 300px 320px;
+    grid-template-areas: "replies" "yes" "sources" "people" "walk";
+  }
+
+  @container (min-width: 600px) {
+    & .qs-bento__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: 400px 320px 320px;
+      grid-template-areas: "replies replies" "yes sources" "people walk";
+    }
+  }
+
+  @container (min-width: 900px) {
+    & .qs-bento__grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-rows: 400px 320px;
+      grid-template-areas: "replies replies yes" "sources people walk";
+    }
+  }
+
+  .qb-mono {
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qb-name {
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--kit-ink);
+  }
+
+  /* ---- Replies: the one window in the grid, a corner bleed ---- */
+
+  .qb-window {
+    position: absolute;
+    top: 8px;
+    left: var(--qs-pad);
+    width: max(720px, calc(100% + var(--qs-pad)));
+    height: 330px;
+    background: var(--kit-ground);
+  }
+
+  /* A narrow tile: the window still runs off the right, but the comment
+     and its draft end a gutter inside the tile's edge, so Send stays whole. */
+  .qb-window[data-compact] {
+    width: 100%;
+  }
+
+  .qb-window[data-compact] .qb-comment {
+    padding: 16px calc(var(--qs-pad) + 16px) 16px 16px;
+  }
+
+  .qb-replies {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .qb-comment {
+    display: flex;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--kit-hairline);
+  }
+
+  .qb-comment--filler {
+    align-items: center;
+    padding-block: 16px;
+  }
+
+  .qb-avatar,
+  .qb-disc {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--kit-well);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--kit-ink);
+  }
+
+  .qb-avatar {
+    text-box: trim-both cap alphabetic;
+  }
+
+  .qb-comment__text {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .qb-comment--filler .qb-comment__text {
+    gap: 7px;
+  }
+
+  .qb-comment__who {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .qb-said {
+    max-width: 420px;
+    font-size: 13.5px;
+    line-height: 20px;
+    color: var(--kit-ink);
+  }
+
+  /* The drafted answer: a white object under the comment, its actions a
+     12px step below its words. */
+  .qb-draft {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 440px;
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qb-draft__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  /* ---- Yes: a type tile, the number filling it ---- */
+
+  .qb-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    padding: 0 var(--qs-pad);
+  }
+
+  .qb-stat__lead {
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    color: var(--kit-ink);
+  }
+
+  .qb-stat__number {
+    font-size: 96px;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--kit-ink);
+  }
+
+  .qb-stat__label {
+    max-width: 18rem;
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--kit-ink-muted);
+  }
+
+  /* ---- Sources: a loose pile of paper, only the top one with words ---- */
+
+  .qb-pile {
+    position: absolute;
+    inset: 0;
+  }
+
+  .qb-paper {
+    position: absolute;
+    left: 50%;
+    top: 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 236px;
+    height: 132px;
+    margin-left: -118px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qb-paper[data-at="back"] { rotate: -6deg; translate: -14px 6px; }
+  .qb-paper[data-at="middle"] { rotate: 4deg; translate: 16px -2px; }
+
+  /* The top sheet is the straightest, and it is the one that settles. */
+  .qb-paper[data-at="top"] {
+    rotate: 1deg;
+    translate: 0 -10px;
+    box-shadow: var(--kit-elevation-lifted);
+    transition:
+      rotate var(--kit-duration-sweep) var(--ease-kit-out),
+      translate var(--kit-duration-sweep) var(--ease-kit-out),
+      box-shadow var(--kit-duration-sweep) var(--ease-kit-out);
+  }
+
+  .qb-paper[data-at="top"][data-on] {
+    rotate: -2deg;
+    translate: 2px 10px;
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qb-paper__icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background: var(--kit-well);
+    color: var(--kit-ink-muted);
+  }
+
+  .qb-paper__title {
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qb-paper__line {
+    font-size: 13.5px;
+    line-height: 19px;
+    font-weight: 560;
+    color: var(--kit-ink);
+  }
+
+  /* ---- People: rows of people, columns of posts ---- */
+
+  .qb-grid {
+    position: absolute;
+    top: 12px;
+    left: var(--qs-pad);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .qb-grid__row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .qb-grid__who {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    width: 88px;
+    height: 16px;
+  }
+
+  .qb-grid__row[data-regular] .qb-grid__who {
+    height: 32px;
+  }
+
+  .qb-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--kit-track);
+    transition: background-color var(--kit-duration-state) var(--ease-kit-out);
+  }
+
+  .qb-grid[data-on] .qb-dot[data-hit] {
+    background: var(--kit-ink-faint);
+  }
+
+  .qb-grid[data-on] .qb-grid__row[data-regular] .qb-dot[data-hit] {
+    background: var(--kit-ink);
+  }
+
+  /* ---- Walk: a phone pinned from the top, cropped by the tile ---- */
+
+  .qb-phone {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    margin-left: -125px;
+  }
+
+  /* Inside the phone's screen, 1pt is 1px (phone.tsx). */
+  .qb-rec {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-top: 40px;
+  }
+
+  /* The dot and its gap are the kit's LiveDot (8px, --kit-live). */
+  .qb-rec__state {
+    display: flex;
+    align-items: center;
+    font-size: 17px;
+    font-weight: 560;
+    color: var(--kit-ink-muted);
+  }
+
+  .qb-rec__time {
+    font-size: 76px;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--kit-ink);
+  }
+
+  .qb-rec__wave {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 56px;
+  }
+
+  .qb-rec__wave > span {
+    width: 6px;
+    border-radius: 3px;
+    background: var(--kit-ink);
+    scale: 1 0.15;
+    transition: scale var(--kit-duration-travel) var(--ease-kit-out);
+  }
+
+  .qb-rec__wave[data-on] > span {
+    scale: 1 1;
+  }
+}

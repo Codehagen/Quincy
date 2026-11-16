@@ -1,0 +1,1448 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Tailwind scans raw file text, so a class name written inside prose generates
+   that class for real. AGENTS.md documents the no-all-properties-transition
+   rule by naming the utility, which was enough to ship a dead rule for it.
+   Markdown is documentation, never a source of classes. */
+@source not "../**/*.md";
+/* Prose styling for rendered markdown — the Brain's prose kinds and the
+   agent's streaming replies. Generated at ui.shadcn.com/typeset. The presets
+   at the bottom of this file set its variables; do not edit typeset.css by
+   hand, regenerate it. */
+@import "./typeset.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════
+   Quincy — colour system
+
+   Two ramps, ONE hue (H 70). Lightness steps are evenly spaced so
+   every adjacent pair reads equally far apart; chroma is expressed
+   as a fraction of that step's own sRGB ceiling, computed per step,
+   so nothing leaves the gamut and no step drifts in hue.
+
+   --brass-*  the brand. H 70's sRGB ceiling peaks at L 0.78, which
+              is why absolute chroma crests at 300–400, not 500.
+   --sand-*   neutrals on the identical hue at a whisper of chroma.
+              Sharing H is the strictest form of "neutrals agree with
+              the brand hue" — and it makes drift impossible.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  --color-brass-50: oklch(0.97 0.006 70);
+  --color-brass-100: oklch(0.93 0.019 70);
+  --color-brass-200: oklch(0.86 0.057 70);
+  --color-brass-300: oklch(0.78 0.115 70);
+  --color-brass-400: oklch(0.7 0.124 70);
+  --color-brass-500: oklch(0.62 0.114 70);
+  --color-brass-600: oklch(0.545 0.094 70);
+  --color-brass-700: oklch(0.47 0.071 70);
+  --color-brass-800: oklch(0.395 0.05 70);
+  --color-brass-900: oklch(0.31 0.03 70);
+  --color-brass-950: oklch(0.235 0.017 70);
+
+  --color-sand-50: oklch(0.97 0.004 70);
+  --color-sand-100: oklch(0.93 0.012 70);
+  --color-sand-200: oklch(0.86 0.016 70);
+  --color-sand-300: oklch(0.78 0.017 70);
+  --color-sand-400: oklch(0.7 0.014 70);
+  --color-sand-500: oklch(0.62 0.011 70);
+  --color-sand-600: oklch(0.545 0.01 70);
+  --color-sand-700: oklch(0.47 0.009 70);
+  --color-sand-800: oklch(0.395 0.009 70);
+  --color-sand-900: oklch(0.31 0.008 70);
+  --color-sand-950: oklch(0.235 0.008 70);
+
+  /* Sibling accents: one lightness, each at 72% of its OWN ceiling.
+     Three different absolute chromas, one perceived intensity. */
+  --color-danger-500: oklch(0.545 0.16 27);
+  --color-danger-400: oklch(0.7 0.15 27);
+  --color-success-500: oklch(0.545 0.108 150);
+  --color-success-400: oklch(0.7 0.108 150);
+  --color-info-500: oklch(0.545 0.111 250);
+  --color-info-400: oklch(0.7 0.111 250);
+
+  /* Effects on the timeline. One hue, not one per kind.
+     Hue 300 because every other slot is spoken for and means something:
+     brass is action and live state, danger is loss, success is done, info is
+     the neutral note. An effect is none of those, and four raw palette hues —
+     one per effect type — would have said "these are four categories" when the
+     lane already packs chips into whichever row fits, so colour cannot carry
+     which kind it is. The icon and the label do that. */
+  --color-effect-100: oklch(0.88 0.045 300);
+  --color-effect-400: oklch(0.7 0.09 300);
+  --color-effect-700: oklch(0.4 0.1 300);
+  --color-effect-900: oklch(0.31 0.06 300);
+
+  /* Type scale — named by role, because a role name polices its own use. */
+  --text-eyebrow: 0.8125rem;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.06em;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-card-title: 0.9375rem;
+  --text-card-title--line-height: 1.35;
+  --text-card-title--font-weight: 600;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.55;
+  --text-section: 1.0625rem;
+  --text-section--line-height: 1.3;
+  --text-section--font-weight: 600;
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.015em;
+
+  /* Explicit radius scale. Nested radius = outer − padding, so a
+     16px card with 12px padding needs a 4px inner tile — hence xs. */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+  /* Typeset's defaults reference --font-heading. Kept as an alias so the
+     stylesheet resolves without editing it. */
+  --font-heading: var(--font-sans);
+}
+
+/* ── Semantic tokens ──────────────────────────────────────────────
+   These point at ramp steps, never at raw values. Every foreground/
+   background pair below was verified against WCAG AA before shipping.
+   ────────────────────────────────────────────────────────────── */
+
+:root {
+  --radius: 1rem;
+
+  --background: var(--color-sand-100);
+  --foreground: var(--color-sand-900);
+
+  /* Cards lift off the page rather than sitting flush with it. */
+  --card: var(--color-sand-50);
+  --card-foreground: var(--color-sand-900);
+  --popover: var(--color-sand-50);
+  --popover-foreground: var(--color-sand-900);
+
+  /* Ink, not brass. Decided against five palettes at a prototype since deleted; the
+     argument is in docs/colour.md.
+
+     Two facts settled it. Hue 70 at L 0.70 tops out at chroma 0.152 in sRGB and
+     brass-400 already spends 0.124 of it — 82% — so brass cannot be made to
+     feel like more without leaving the hue. And the primary fill is Approve, a
+     control pressed dozens of times a day; the loudest colour on the screen was
+     bolted to the most repeated action, which taxes attention on every pass.
+
+     Worse, --primary and --signal were the same value. The rule says brass
+     means live, but the largest brass object on any screen was a button, so
+     live signalled nothing. Neutralising the fill is what makes the rule true:
+     brass now appears only as a dot, a label, a mark or a selection, and is
+     never a surface you press. 15.29:1 either way round. */
+  --primary: var(--color-sand-950);
+  --primary-foreground: var(--color-sand-50);
+
+  /* The hover, expressed as a step toward the page rather than as alpha.
+     `bg-primary/80` was tuned against brass: it moved L by 0.052, a whisper.
+     Against a near-black fill the same alpha moves it 0.170 — three times as
+     far, and toward the page, so the button read as disabled rather than
+     hovered. Mixing toward --background instead is self-correcting, because
+     both operands flip with the theme: 7% lightens the near-black fill in light
+     mode and darkens the near-white one in dark mode, ~0.05 L in both. */
+  --primary-hover: color-mix(in oklch, var(--primary) 93%, var(--background));
+
+  --secondary: var(--color-sand-200);
+  --secondary-foreground: var(--color-sand-800);
+
+  --muted: var(--color-sand-200);
+  --muted-foreground: var(--color-sand-700);
+
+  /* Neutral, deliberately. Menu and list hovers must not glow brass —
+     brass is reserved for actions and live state. */
+  --accent: var(--color-sand-200);
+  --accent-foreground: var(--color-sand-900);
+
+  --destructive: var(--color-danger-500);
+  --destructive-foreground: var(--color-sand-50);
+
+  /* Alpha in light mode so the edge recedes into the surface;
+     a solid hairline reads as pasted on top of it. */
+  --border: color-mix(in oklch, var(--color-sand-950) 8%, transparent);
+  --input: color-mix(in oklch, var(--color-sand-950) 14%, transparent);
+  /* Neutral, not brass. A focus ring says "the keyboard is here", which every
+     control can be — brass says "live", which is a claim about state. When the
+     ring was brass the two were indistinguishable, and an autofocused composer
+     wore a brand-coloured frame for saying nothing at all.
+     Sand-700 rather than the like-for-like sand-500: dropping chroma drops
+     salience too, so the ring steps one shade further from the ground to stay
+     exactly as loud as the brass one was. */
+  --ring: var(--color-sand-700);
+
+  /* Live state. The one thing brass-as-surface is allowed to mean. */
+  --signal: var(--color-brass-400);
+  --signal-surface: var(--color-brass-100);
+  --signal-foreground: var(--color-brass-800);
+  --signal-border: color-mix(in oklch, var(--color-brass-500) 28%, transparent);
+  /* Text that sits ON a --signal fill. Its own slot rather than a borrowed
+     --primary-foreground: --signal is brass-400 in both modes and needs
+     near-black text in both, while --primary-foreground now flips. Sharing them
+     used to work by coincidence, and repointing --primary turned that
+     coincidence into white-on-brass at 3.73:1. 6.10:1. */
+  --signal-on: var(--color-sand-950);
+
+  /* An effect chip, and the same pair swapped when it is selected. Inversion
+     rather than a ring: the chip is 28px tall, and a 2px ring on every side is
+     a tenth of it — on a dense lane the rings of neighbouring chips visually
+     merge into one another. Swapping the fill changes nothing about the box.
+     6.61:1 either way round. */
+  --effect-surface: var(--color-effect-100);
+  --effect-foreground: var(--color-effect-700);
+
+  --chart-1: oklch(0.62 0.105 70);
+  --chart-2: oklch(0.62 0.137 250);
+  --chart-3: oklch(0.62 0.133 150);
+  --chart-4: oklch(0.62 0.232 320);
+  --chart-5: oklch(0.62 0.194 30);
+
+  /* Above or below your own median — the one job that wants a diverging pair,
+     because the data is a ratio around a baseline rather than a set of
+     categories. Marks borrow the chart tokens (warm H70 / cool H250): warm and
+     cool read as opposite poles, where two cool hues would not. Deliberately
+     NOT --signal; brass-as-surface means "this ritual is running", and a bar is
+     not a state claim.
+
+     The ink steps are separate slots because the marks sit at L 0.62 and lose
+     to body text on sand-50. Brass has a ramp to borrow from. The cool pole
+     does not, so --shortfall-ink is a raw value pinned to L 0.47 — brass-700
+     exactly — so neither pole reads louder than the other. */
+  --gain: var(--chart-1);
+  --gain-soft: color-mix(in oklch, var(--chart-1) 16%, transparent);
+  --gain-ink: var(--color-brass-700);
+
+  --shortfall: var(--chart-2);
+  --shortfall-soft: color-mix(in oklch, var(--chart-2) 14%, transparent);
+  --shortfall-ink: oklch(0.47 0.13 250);
+
+  /* Each stack opens with a 1px spread ring that stands in for a border,
+     then a tight layer and a wide ambient one. A translucent ring
+     composites over any background; a solid border is tuned to exactly
+     one. One big drop shadow reads as fake. */
+  --elevation-0: 0 0 0 1px oklch(0.235 0.008 70 / 0.04);
+  --elevation-1:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.05),
+    0 1px 2px oklch(0.235 0.008 70 / 0.05);
+  --elevation-2:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.06),
+    0 1px 3px oklch(0.235 0.008 70 / 0.05),
+    0 4px 10px -4px oklch(0.235 0.008 70 / 0.05);
+  --elevation-3:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.07),
+    0 2px 4px -1px oklch(0.235 0.008 70 / 0.06),
+    0 8px 18px -6px oklch(0.235 0.008 70 / 0.07);
+  --elevation-4:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.08),
+    0 4px 8px -2px oklch(0.235 0.008 70 / 0.07),
+    0 16px 32px -8px oklch(0.235 0.008 70 / 0.08);
+  --elevation-5:
+    0 0 0 1px oklch(0.235 0.008 70 / 0.09),
+    0 8px 16px -4px oklch(0.235 0.008 70 / 0.08),
+    0 28px 56px -12px oklch(0.235 0.008 70 / 0.1);
+
+  /* Dividers stay crisp on retina. */
+  --border-hairline: 1px;
+}
+
+@media only screen and (min-resolution: 192dpi) {
+  :root {
+    --border-hairline: 0.5px;
+  }
+}
+
+.dark {
+  --background: var(--color-sand-950);
+  --foreground: var(--color-sand-50);
+
+  /* Cards stay the LIGHTER surface. Dark mode mirrors the layering,
+     it does not invert it — the topmost surface remains the brightest. */
+  --card: var(--color-sand-900);
+  --card-foreground: var(--color-sand-50);
+  --popover: var(--color-sand-900);
+  --popover-foreground: var(--color-sand-50);
+
+  /* Mirrored, not repeated: the near-black fill becomes the near-white one and
+     the text flips with it. --primary-hover needs no dark override — it mixes
+     --primary toward --background, and both of those have already flipped. */
+  --primary: var(--color-sand-50);
+  --primary-foreground: var(--color-sand-950);
+
+  --secondary: var(--color-sand-800);
+  --secondary-foreground: var(--color-sand-100);
+
+  --muted: var(--color-sand-800);
+  --muted-foreground: var(--color-sand-400);
+
+  --accent: var(--color-sand-800);
+  --accent-foreground: var(--color-sand-50);
+
+  --destructive: var(--color-danger-400);
+  --destructive-foreground: var(--color-sand-950);
+
+  /* Solid in dark mode. An alpha-white hairline glows against a dark
+     surface; a solid one sits quietly. Exactly the reverse of light. */
+  --border: var(--color-sand-800);
+  --input: var(--color-sand-700);
+  /* Same swap as light, mirrored: brass-400 sat at L 0.70, sand-300 at L 0.78.
+     One step lighter, because the ground here is dark and the chroma that
+     carried the old ring is gone. */
+  --ring: var(--color-sand-300);
+
+  --signal: var(--color-brass-400);
+  --signal-surface: var(--color-brass-900);
+  --signal-foreground: var(--color-brass-200);
+  --signal-border: color-mix(in oklch, var(--color-brass-400) 34%, transparent);
+
+  /* Mirrored, not inverted: the chip stays the lighter surface against a dark
+     lane, the same way cards do. 6.99:1. */
+  --effect-surface: oklch(0.42 0.06 300);
+  --effect-foreground: oklch(0.93 0.03 300);
+
+  --chart-1: oklch(0.7 0.11 70);
+  --chart-2: oklch(0.7 0.14 250);
+  --chart-3: oklch(0.7 0.14 150);
+  --chart-4: oklch(0.7 0.2 320);
+  --chart-5: oklch(0.7 0.16 30);
+
+  /* Selected, not flipped. The marks step up with the chart tokens above; the
+     ink slots collapse onto them, because against sand-950 the L 0.47 steps
+     that carried on paper go muddy. */
+  --gain-ink: var(--color-brass-300);
+  --shortfall-ink: oklch(0.78 0.12 250);
+
+  /* Stacked depth shadows are invisible against a dark ground. Collapse
+     every stack to a single low-opacity white ring — that is what reads
+     as elevation in dark mode. */
+  --elevation-0: 0 0 0 1px oklch(1 0 0 / 0.06);
+  --elevation-1: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --elevation-2: 0 0 0 1px oklch(1 0 0 / 0.09);
+  --elevation-3: 0 0 0 1px oklch(1 0 0 / 0.11);
+  --elevation-4: 0 0 0 1px oklch(1 0 0 / 0.13);
+  --elevation-5: 0 0 0 1px oklch(1 0 0 / 0.16);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-signal: var(--signal);
+  --color-signal-surface: var(--signal-surface);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-signal-border: var(--signal-border);
+  --color-signal-on: var(--signal-on);
+
+  --color-effect-surface: var(--effect-surface);
+  --color-effect-foreground: var(--effect-foreground);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-gain: var(--gain);
+  --color-gain-soft: var(--gain-soft);
+  --color-gain-ink: var(--gain-ink);
+  --color-shortfall: var(--shortfall);
+  --color-shortfall-soft: var(--shortfall-soft);
+  --color-shortfall-ink: var(--shortfall-ink);
+
+  --shadow-2xs: var(--elevation-0);
+  --shadow-xs: var(--elevation-1);
+  --shadow-sm: var(--elevation-2);
+  --shadow-md: var(--elevation-3);
+  --shadow-lg: var(--elevation-4);
+  --shadow-xl: var(--elevation-5);
+}
+
+/* Wide-gamut screens get richer brass; sRGB keeps the safe base above.
+   Chroma raised to the same fraction of the P3 ceiling — +15% to +25%. */
+@media (color-gamut: p3) {
+  @supports (color: oklch(1 0 0)) {
+    :root,
+    .dark {
+      --color-brass-200: oklch(0.86 0.071 70);
+      --color-brass-300: oklch(0.78 0.132 70);
+      --color-brass-400: oklch(0.7 0.143 70);
+      --color-brass-500: oklch(0.62 0.131 70);
+      --color-brass-600: oklch(0.545 0.108 70);
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   The kit — plans/029-the-kit.md
+
+   Built BESIDE the system above, under --kit-* names, so no page changes
+   until it moves to the kit on purpose (a whole page at a time). Nothing in
+   this section reads a brass/sand token, and nothing above reads a kit one.
+   Components live in components/kit/ and use only the utilities exposed in
+   the `@theme` blocks at the end of this section.
+
+   Primitives are named by their OKLCH lightness ×1000, so a step's name is
+   its measurement: --kit-gray-530 is L 0.53. Neutrals share Stageshow's
+   ground hue (H 106) at one whisper of chroma (0.0013), so the greys agree
+   with the ground they sit on. Dark mode re-points the semantic tokens at
+   other steps of the same primitives; it never introduces a colour.
+
+   Contrast figures are WCAG 2 ratios against the surface the text actually
+   paints on, with APCA Lc in brackets. Computed, not eyeballed.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Neutral primitives (H 106, C 0.0013) ── */
+  --kit-gray-1000: oklch(1 0 0);
+  --kit-gray-994: oklch(0.994 0.0013 106); /* #FDFDFC, Stageshow's ground */
+  /* Between ground and stage: a row's hover, one step short of selected. */
+  --kit-gray-975: oklch(0.975 0.0013 106);
+  --kit-gray-961: oklch(0.961 0.0013 106); /* #F2F2F1, the lab's stage */
+  --kit-gray-910: oklch(0.91 0.0013 106);
+  --kit-gray-720: oklch(0.72 0.0013 106);
+  --kit-gray-530: oklch(0.53 0.0013 106);
+  --kit-gray-450: oklch(0.45 0.0013 106);
+  --kit-gray-320: oklch(0.32 0.0013 106);
+  --kit-gray-300: oklch(0.3 0.0013 106);
+  --kit-gray-235: oklch(0.235 0.0013 106);
+  --kit-gray-178: oklch(0.178 0.0013 106); /* #111110, the lab's ink */
+  --kit-gray-155: oklch(0.155 0.0013 106);
+
+  /* ── Role primitives: one hue per job ──
+     Each light step is the lab's value with L moved for contrast; each dark
+     step keeps the hue and moves L the other way, chroma clamped to the sRGB
+     ceiling at that L (fraction noted). */
+  /* Blue is Stageshow's friendly mid blue, #4F80EE = oklch(0.621 0.174 264).
+     White on it is only 3.71:1, and button labels are 14px, so the FILL keeps
+     its hue and chroma and moves L to 0.54 (#3866D2, 5.22:1). */
+  --kit-blue-540: oklch(0.54 0.174 264);
+  --kit-blue-720: oklch(0.72 0.13 264); /* 89% of ceiling */
+  /* The selected-fill tint, Stageshow's #E8F0FD. */
+  --kit-blue-953: oklch(0.953 0.019 264);
+  --kit-blue-300: oklch(0.3 0.06 264);
+  --kit-yellow-910: oklch(0.91 0.165 99); /* 93% of ceiling */
+  --kit-yellow-400: oklch(0.4 0.08 99); /* 96% of ceiling */
+  /* Stageshow's check green (#5BC466, L 0.736) is 2.3:1 on white: a check
+     circle is a meaningful graphic and needs 3:1, so L moves to 0.64. */
+  --kit-green-640: oklch(0.64 0.17 146);
+  --kit-green-720: oklch(0.72 0.16 146);
+  --kit-red-550: oklch(0.55 0.209 25.3);
+  --kit-red-700: oklch(0.7 0.17 25.3);
+  /* HoldButton's fill: the danger hue at its quietest. Danger ink on it
+     4.71:1 light; the dark step 0.3 carries the dark danger at 4.85:1. */
+  --kit-red-955: oklch(0.955 0.02 25.3);
+  --kit-red-300: oklch(0.3 0.06 25.3);
+
+  /* ── Surfaces. Light order by L: object 1.0 > ground .994 > stage .961.
+     The stage is a recess in the ground; the object is the one white thing
+     on it and lifts by its elevation, not by a border. ── */
+  --kit-ground: var(--kit-gray-994);
+  --kit-stage: var(--kit-gray-961);
+  --kit-object: var(--kit-gray-1000);
+  /* A recess inside the object (a booked slot): the stage showing through. */
+  --kit-well: var(--kit-gray-961);
+
+  /* ── Ink ── */
+  /* 18.6:1 on ground, 16.9:1 on stage, 18.9:1 on object. */
+  --kit-ink: var(--kit-gray-178);
+  /* The grey continuation. The lab's 0.48 alpha was 3.3:1; L moved to 0.53
+     only. 5.19:1 (Lc 75) ground · 4.71:1 (Lc 69) stage · 5.28:1 object. */
+  --kit-ink-muted: var(--kit-gray-530);
+  /* NON-TEXT ONLY: ticks, chrome dots, a dot beside a label. 2.4:1, which is
+     why no text component accepts it. If a mark carries meaning on its own,
+     it needs muted (≥3:1), not faint. Utilities: bg-/border-/stroke-/
+     fill-kit-mark only (see the @utility block below); no text- utility. */
+  --kit-ink-faint: var(--kit-gray-720);
+  /* Dividers and the window chrome rule. An alpha of ink, so one value reads
+     the same on object and in a well. */
+  --kit-hairline: color-mix(in oklch, var(--kit-gray-178) 6%, transparent);
+  /* Skeleton bars, and the window's three dots. Alpha for the same reason. */
+  --kit-skeleton: color-mix(in oklch, var(--kit-gray-178) 7.5%, transparent);
+  --kit-chrome: color-mix(in oklch, var(--kit-gray-178) 12%, transparent);
+  /* Behind a modal (the app sidebar on a phone, Sheet, Dialog,
+     AlertDialog): the ground dimmed, so the modal reads as lifted off the
+     page. Never behind a Popover, Menu, Tooltip or Toast. */
+  --kit-scrim: color-mix(in oklch, var(--kit-gray-178) 28%, transparent);
+  /* A keycap inside the ink Tooltip: the ground at a low alpha over the ink,
+     so it reads in both modes (the ground flips, so this needs no dark twin). */
+  --kit-kbd-on-ink: color-mix(in oklch, var(--kit-ground) 16%, transparent);
+  /* Keyboard focus. Ink, so it reads on every surface without a new colour. */
+  --kit-focus: var(--kit-gray-178);
+  /* The marketing call to action (components/marketing): ink on the ground,
+     in both modes. Hover and disabled mix toward the ground, never an alpha,
+     so they flip with the ground in dark mode. */
+  --kit-ink-hover: color-mix(in oklab, var(--kit-ink), var(--kit-ground) 14%);
+  --kit-ink-disabled: color-mix(in oklab, var(--kit-ink), var(--kit-ground) 30%);
+  /* The primary fill: the one action on a view (Approve, Send, Draft it).
+     Ink, as the landing's call to action (2026-11-16: the landing is the
+     reference and the app follows it). A neutral extreme, so it flips with
+     the mode, and the label on it is the ground: 18.6:1 light, 16.9:1 dark.
+     Hover and disabled are the marketing mixes toward the ground above. */
+  --kit-primary: var(--kit-ink);
+  --kit-primary-hover: var(--kit-ink-hover);
+  --kit-primary-disabled: var(--kit-ink-disabled);
+  --kit-primary-on: var(--kit-ground);
+  /* A picked row, segment or nav item: the well's grey with ink on it, as
+     the landing's picked idea and the desk's current page. Never blue. */
+  --kit-selected: var(--kit-well);
+  /* Hover on a ListRow or NavRow that is not selected. One step lighter
+     than selected (1.07:1 vs 1.12:1 against white), so a hovered row never
+     reads as the picked one. A selected row keeps selected on hover. */
+  --kit-row-hover: var(--kit-gray-975);
+
+  /* ── Roles ── */
+  /* The blue the landing's PICTURES paint Approve with (showcase/theme.css,
+     the faux screens). Since 2026-11-16 no kit control reads it: the app's
+     action is --kit-primary (ink). Kept so the pictures do not move; when
+     the pictures follow the app, this and its hover/on go. White on it: 5.22:1. */
+  --kit-action: var(--kit-blue-540);
+  /* Mixed toward the ground, never an alpha: an alpha would let a dark
+     ground through and read as disabled. 6% keeps white text at 4.63:1.
+     Mixed in oklab, not oklch: the ground's hue (106) would drag the blue's
+     hue ~10° toward green on the way. */
+  --kit-action-hover: color-mix(in oklab, var(--kit-action), var(--kit-ground) 6%);
+  --kit-action-on: var(--kit-gray-1000);
+  /* Selected state: a segmented item, a picked menu row. Tint fill with
+     action-ink text on it, never a white thumb on grey. 4.55:1. */
+  --kit-action-tint: var(--kit-blue-953);
+  --kit-action-ink: var(--kit-blue-540);
+  /* The highlighter's material, never a surface you press. Ink on it 14.5:1. */
+  --kit-highlight: var(--kit-yellow-910);
+  /* The beat brackets. Same step as action, so a light page has one blue.
+     As Caveat text on the stage: 4.66:1 stage · 5.14:1 ground. */
+  --kit-pen: var(--kit-blue-540);
+  /* "This is running." A dot only. 3.09:1 against the ground. */
+  --kit-live: var(--kit-green-640);
+  /* Done: a filled check circle (checklists). Same green as live — both
+     mean "this is fine, it is happening" — with a white check on it 3.14:1. */
+  --kit-success: var(--kit-green-640);
+  --kit-success-on: var(--kit-gray-1000);
+  /* Destructive only, as text. 5.31:1 ground · 4.83:1 stage · 5.41:1 object. */
+  --kit-danger: var(--kit-red-550);
+  /* The fill that sweeps across a HoldButton while it is held. Never a
+     surface at rest. Danger on it 4.71:1. */
+  --kit-danger-tint: var(--kit-red-955);
+
+  /* ── The mascot (components/mascot, docs/design/mascot.md). Neither is
+     re-pointed in .dark: the sash is the mark's yellow on both grounds, and
+     keep-ink is the pen on that yellow, which stays ink so it reads on it.
+     The body itself is currentColor. ── */
+  --kit-mascot-sash: var(--kit-yellow-910);
+  --kit-mascot-keep: var(--kit-gray-178);
+
+  /* ── Links (TextLink). The underline is the text's own colour at 40%, so a
+     link inside muted copy and one inside ink both read as links without a
+     new hue; hover takes it to the full colour. ── */
+  --kit-link-line: color-mix(in oklch, currentColor 40%, transparent);
+  --kit-link-offset: 3px;
+
+  /* ── Elevation. Every stack opens with a 1px ring (AGENTS.md). ── */
+  --kit-elevation-object:
+    0 0 0 1px color-mix(in oklch, var(--kit-gray-178) 6%, transparent),
+    0 1px 2px color-mix(in oklch, var(--kit-gray-178) 4%, transparent),
+    0 10px 28px -10px color-mix(in oklch, var(--kit-gray-178) 12%, transparent);
+  /* An object in the hand (mid-drag). */
+  --kit-elevation-lifted:
+    0 0 0 1px color-mix(in oklch, var(--kit-gray-178) 8%, transparent),
+    0 12px 28px -8px color-mix(in oklch, var(--kit-gray-178) 28%, transparent);
+  /* A secondary object inside the main one. Ring only. */
+  --kit-elevation-inset: 0 0 0 1px
+    color-mix(in oklch, var(--kit-gray-178) 8%, transparent);
+
+  /* ── Controls: the shared surface for Button and every step-2 control
+     (segmented, stepper, search, select, menu, round icon button). A white
+     object of its own: hairline ring + a soft, short fall. Chunky and tactile,
+     after Stageshow's control collage. ── */
+  --kit-control: var(--kit-gray-1000);
+  /* Hover on a white control and the menu's hover row: a grey step, never
+     an alpha. */
+  --kit-control-hover: var(--kit-gray-961);
+  --kit-elevation-control:
+    0 0 0 1px color-mix(in oklch, var(--kit-gray-178) 7%, transparent),
+    0 1px 2px color-mix(in oklch, var(--kit-gray-178) 5%, transparent),
+    0 4px 12px -4px color-mix(in oklch, var(--kit-gray-178) 10%, transparent);
+  /* The knob itself (switch off, slider): white in BOTH modes, as on iOS.
+     Not --kit-control, which goes dark in dark mode and would vanish into
+     the dark off-track; not --kit-action-on, which names text on the action. */
+  --kit-knob: var(--kit-gray-1000);
+  /* The knob on an ON switch, which sits on the primary (ink) track. Light:
+     white on ink, 18.9:1. Dark: the track flips to light ink, so a white
+     knob would vanish (L 1.0 on 0.961); the knob takes the dark ground
+     instead, 16.9:1. */
+  --kit-knob-on: var(--kit-gray-1000);
+  /* The white knob on a switch or slider. */
+  --kit-elevation-knob:
+    0 0 0 0.5px color-mix(in oklch, var(--kit-gray-178) 8%, transparent),
+    0 2px 6px color-mix(in oklch, var(--kit-gray-178) 18%, transparent);
+  /* The slider's knob, which sits at the end of the primary fill. Light is
+     the knob's own elevation (white on ink needs nothing more). Dark adds a
+     ring of the dark ground, so the white knob separates from the light fill
+     (16.9:1 ring vs fill). */
+  --kit-elevation-knob-on-fill: var(--kit-elevation-knob);
+  /* Off track of a switch, empty part of a slider. 1.31:1 against white:
+     the knob's shadow and position carry the state, as on iOS. Pair state
+     with position or a label, never with this alone. Not the check ring:
+     an empty check circle is its own state and needs 3:1 (--kit-check-ring). */
+  --kit-track: var(--kit-gray-910);
+  /* The empty Checklist circle. A meaningful graphic (WCAG 1.4.11), so it
+     takes the muted ink: 5.28:1 object · 5.19:1 ground · 4.71:1 stage. */
+  --kit-check-ring: var(--kit-ink-muted);
+  /* The stage's graph-paper backdrop (Stage backdrop="grid"). */
+  --kit-grid-line: color-mix(in oklch, var(--kit-gray-178) 5%, transparent);
+
+  /* ── Motion. Durations live here; curves are in @theme below. ── */
+  --kit-duration-press: 140ms;
+  --kit-duration-state: 200ms;
+  --kit-duration-enter: 320ms;
+  --kit-duration-travel: 520ms;
+  --kit-duration-sweep: 700ms;
+  /* A margin note waits for the sweep beneath it, then writes in. */
+  --kit-delay-note: 620ms;
+  /* The press: every control under the finger scales to this, in
+     --kit-duration-press. One value, so a Button, an IconButton and the
+     marketing pill press alike: `active:scale-(--kit-press-scale)`. */
+  --kit-press-scale: 0.96;
+  /* The lift: an object picked up (a Reorderable row mid-move) grows to
+     this with shadow-kit-lifted. Small, so the row beside it never shifts. */
+  --kit-lift-scale: 1.01;
+  /* The shift: a Reorderable row sliding to its new slot (a neighbour moving
+     aside, an arrow-key step, Escape, a drop settling). Shorter than travel:
+     it is a few rows of distance, and an arrow pressed fast retargets it,
+     so a long one would trail the keys. Paired with ease-kit-out. */
+  --kit-duration-shift: 220ms;
+}
+
+/* Dark: a remap, not a repaint. The object stays the BRIGHTEST surface
+   (object .235 > ground .178 > stage .155), mirroring light's order, and the
+   light ink becomes the dark ground. Muted and faint swap steps: light's faint
+   (.72) is dark's muted, so the ladder keeps its spacing. */
+.dark {
+  --kit-ground: var(--kit-gray-178);
+  --kit-stage: var(--kit-gray-155);
+  --kit-object: var(--kit-gray-235);
+  --kit-well: var(--kit-gray-155);
+
+  /* 16.9:1 ground · 17.5:1 stage · 14.9:1 object. */
+  --kit-ink: var(--kit-gray-961);
+  /* 7.61:1 ground · 7.88:1 stage · 6.72:1 object (Lc 51–53). The 4.5:1 step
+     (L .64) measured only Lc 40 light-on-dark, so dark muted sits higher. */
+  --kit-ink-muted: var(--kit-gray-720);
+  /* Non-text only, as in light. */
+  --kit-ink-faint: var(--kit-gray-450);
+  /* Solid, not alpha: an alpha-white hairline glows on a dark surface. */
+  --kit-hairline: var(--kit-gray-300);
+  --kit-skeleton: color-mix(in oklch, var(--kit-gray-961) 8%, transparent);
+  --kit-chrome: color-mix(in oklch, var(--kit-gray-961) 14%, transparent);
+  --kit-scrim: color-mix(in oklch, var(--kit-gray-155) 72%, transparent);
+  /* Restated so it resolves against the dark ground where .dark is set. */
+  --kit-kbd-on-ink: color-mix(in oklch, var(--kit-ground) 16%, transparent);
+  --kit-focus: var(--kit-gray-961);
+
+  /* The fill keeps its light step: white on it is still 5.22:1. The hover
+     needs no override — it mixes toward a ground that has already flipped,
+     which darkens it here instead (5.71:1). */
+  --kit-action: var(--kit-blue-540);
+  /* Light ink on the deep tint 5.47:1; the tint is still a step above the
+     object (1.22:1) so a selected item reads as filled. */
+  --kit-action-tint: var(--kit-blue-300);
+  --kit-action-ink: var(--kit-blue-720);
+  /* A bright yellow under the light dark-mode ink fails, so the highlighter
+     goes deep instead: Highlight inherits the text colour, and the dark-mode
+     ink (--kit-gray-961, a light grey) on this yellow is 8.19:1. */
+  --kit-highlight: var(--kit-yellow-400);
+  /* The pen is text on the stage, so it steps up: 7.81:1 stage · 6.66:1
+     object. Same hue as action; the page still has one blue. */
+  --kit-pen: var(--kit-blue-720);
+  --kit-live: var(--kit-green-720);
+  /* 7.14:1 on the dark object. White on L 0.72 fails, so the check flips to
+     the dark ink: 8.08:1. */
+  --kit-success: var(--kit-green-720);
+  --kit-success-on: var(--kit-gray-178);
+
+  /* The control is the object step, lifted by its ring like the object. */
+  --kit-control: var(--kit-gray-235);
+  --kit-control-hover: var(--kit-gray-320);
+  --kit-elevation-control: 0 0 0 1px oklch(1 0 0 / 0.1);
+  --kit-elevation-knob: 0 0 0 1px oklch(1 0 0 / 0.14);
+  /* The on track is light ink here: a dark knob on it, 16.9:1. */
+  --kit-knob-on: var(--kit-gray-178);
+  /* A gap ring of the dark ground between the white knob and the light
+     fill, then the knob's own white ring outside it. */
+  --kit-elevation-knob-on-fill:
+    0 0 0 2px var(--kit-gray-178), 0 0 0 3px oklch(1 0 0 / 0.14);
+  --kit-track: var(--kit-gray-320);
+  /* Restated so they resolve where .dark is set. Row hover goes up (1.31:1
+     vs the object) while selected goes down into the well (1.17:1): the two
+     never meet. Check ring 6.72:1 object · 7.61:1 ground · 7.88:1 stage. */
+  --kit-row-hover: var(--kit-control-hover);
+  --kit-selected: var(--kit-well);
+  --kit-check-ring: var(--kit-ink-muted);
+  --kit-grid-line: color-mix(in oklch, var(--kit-gray-961) 5%, transparent);
+  /* 6.78:1 stage · 5.79:1 object. */
+  --kit-danger: var(--kit-red-700);
+  /* Dark danger on it 4.85:1. */
+  --kit-danger-tint: var(--kit-red-300);
+
+  /* Stacked shadows vanish on a dark ground: one white ring each. */
+  --kit-elevation-object: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --kit-elevation-lifted: 0 0 0 1px oklch(1 0 0 / 0.14);
+  --kit-elevation-inset: 0 0 0 1px oklch(1 0 0 / 0.08);
+}
+
+/* Utilities. `inline` so each utility carries the var() itself and resolves
+   where it is used: the font variables are set by <KitRoot> on its own
+   element (components/kit/fonts.ts), not on :root. */
+@theme inline {
+  --color-kit-ground: var(--kit-ground);
+  --color-kit-stage: var(--kit-stage);
+  --color-kit-object: var(--kit-object);
+  --color-kit-well: var(--kit-well);
+  --color-kit-ink: var(--kit-ink);
+  --color-kit-ink-muted: var(--kit-ink-muted);
+  --color-kit-hairline: var(--kit-hairline);
+  --color-kit-skeleton: var(--kit-skeleton);
+  --color-kit-chrome: var(--kit-chrome);
+  --color-kit-focus: var(--kit-focus);
+  --color-kit-ink-hover: var(--kit-ink-hover);
+  --color-kit-ink-disabled: var(--kit-ink-disabled);
+  --color-kit-primary: var(--kit-primary);
+  --color-kit-primary-hover: var(--kit-primary-hover);
+  --color-kit-primary-disabled: var(--kit-primary-disabled);
+  --color-kit-primary-on: var(--kit-primary-on);
+  --color-kit-selected: var(--kit-selected);
+  --color-kit-row-hover: var(--kit-row-hover);
+  --color-kit-action: var(--kit-action);
+  --color-kit-action-hover: var(--kit-action-hover);
+  --color-kit-action-on: var(--kit-action-on);
+  --color-kit-action-tint: var(--kit-action-tint);
+  --color-kit-action-ink: var(--kit-action-ink);
+  --color-kit-success: var(--kit-success);
+  --color-kit-success-on: var(--kit-success-on);
+  --color-kit-control: var(--kit-control);
+  --color-kit-control-hover: var(--kit-control-hover);
+  --color-kit-track: var(--kit-track);
+  --color-kit-knob: var(--kit-knob);
+  --color-kit-knob-on: var(--kit-knob-on);
+  --color-kit-grid-line: var(--kit-grid-line);
+  --color-kit-highlight: var(--kit-highlight);
+  --color-kit-pen: var(--kit-pen);
+  --color-kit-live: var(--kit-live);
+  --color-kit-danger: var(--kit-danger);
+  --color-kit-danger-tint: var(--kit-danger-tint);
+  --color-kit-link-line: var(--kit-link-line);
+  --color-kit-scrim: var(--kit-scrim);
+  --color-kit-kbd-on-ink: var(--kit-kbd-on-ink);
+
+  --shadow-kit-object: var(--kit-elevation-object);
+  --shadow-kit-lifted: var(--kit-elevation-lifted);
+  --shadow-kit-inset: var(--kit-elevation-inset);
+  --shadow-kit-control: var(--kit-elevation-control);
+  --shadow-kit-knob: var(--kit-elevation-knob);
+  --shadow-kit-knob-on-fill: var(--kit-elevation-knob-on-fill);
+  /* A field or Select the server or validation refused: a danger ring in
+     place of the control's elevation. Inline, so --kit-danger resolves where
+     it is used and flips with dark mode. */
+  --shadow-kit-invalid: 0 0 0 1.5px var(--kit-danger);
+  /* An empty Checklist circle: a check ring (≥3:1) drawn inside the box. */
+  --shadow-kit-unchecked: inset 0 0 0 1.5px var(--kit-check-ring);
+
+  --font-kit-sans: var(--kit-font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Margin notes only. A pen, not a typeface. */
+  --font-kit-hand: var(--kit-font-caveat), cursive;
+}
+
+/* `static` so every value is emitted on :root even when no utility names it:
+   the components reference --spacing-kit-* inside calc(), which Tailwind's
+   unused-variable pruning cannot see. */
+@theme static {
+  /* Times, file names, counts. System mono: it is a tag, not a voice. */
+  --font-kit-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type. Hierarchy is weight (460 / 560 / 600) and grey, almost never size. */
+  --text-kit-body: 0.875rem;
+  --text-kit-body--line-height: 1.25rem;
+  --text-kit-body--letter-spacing: -0.006em;
+  --text-kit-body--font-weight: 460;
+  /* Dense rows and grids. */
+  --text-kit-small: 0.78125rem;
+  --text-kit-small--line-height: 1.125rem;
+  --text-kit-small--letter-spacing: -0.006em;
+  /* The number on its own line. Tabular is set by the component. */
+  --text-kit-figure: 1.125rem;
+  --text-kit-figure--line-height: 1.375rem;
+  --text-kit-figure--letter-spacing: -0.02em;
+  --text-kit-figure--font-weight: 600;
+  /* The app page's one h1 (KitPage). The landing's display-md (a split h2)
+     at its 360px floor, fixed rather than fluid: an app title is read at
+     arm's length on every screen, not from across the room. */
+  --text-kit-title: 1.75rem;
+  --text-kit-title--line-height: 1.1;
+  --text-kit-title--letter-spacing: -0.04em;
+  --text-kit-title--font-weight: 600;
+  --text-kit-mono: 0.75rem;
+  --text-kit-mono--line-height: 1.125rem;
+  --text-kit-mono--letter-spacing: 0;
+  /* A keycap's letter (Kbd): 11/1, centred in its 20px cap. */
+  --text-kit-kbd: 0.6875rem;
+  --text-kit-kbd--line-height: 1;
+  /* Caveat at 21px goes thin in grey at 400, hence 500. */
+  --text-kit-hand: 1.3125rem;
+  --text-kit-hand--line-height: 0.95;
+  --text-kit-hand--letter-spacing: 0;
+  --text-kit-hand--font-weight: 500;
+  /* The wordmark beside the friend at md (QuincyMark). sm uses kit-body. */
+  --text-kit-wordmark: 1.75rem;
+  --text-kit-wordmark--line-height: 1;
+  --text-kit-wordmark--letter-spacing: -0.02em;
+
+  /* Display type: the marketing pages only (components/marketing,
+     docs/design/marketing.md). The app's scale stays closed at body size;
+     these exist because a stranger reads a landing page from across the
+     room. Fluid from a 360 phone to a 1440 laptop. Never in an app page. */
+  --text-kit-display-xl: clamp(2.5rem, 1.7rem + 3.6vw, 4.75rem); /* 40 → 76, the one h1 */
+  --text-kit-display-xl--line-height: 1.02;
+  --text-kit-display-xl--letter-spacing: -0.05em;
+  --text-kit-display-xl--font-weight: 600;
+  --text-kit-display-lg: clamp(2rem, 1.55rem + 2vw, 3.25rem); /* 32 → 52, a section h2 */
+  --text-kit-display-lg--line-height: 1.05;
+  --text-kit-display-lg--letter-spacing: -0.045em;
+  --text-kit-display-lg--font-weight: 600;
+  --text-kit-display-md: clamp(1.75rem, 1.45rem + 1.3vw, 2.5rem); /* 28 → 40, a split h2, a figure */
+  --text-kit-display-md--line-height: 1.1;
+  --text-kit-display-md--letter-spacing: -0.04em;
+  --text-kit-display-md--font-weight: 600;
+  --text-kit-display-price: clamp(3rem, 2.2rem + 3.4vw, 4.5rem); /* 48 → 72, the price */
+  --text-kit-display-price--line-height: 1;
+  --text-kit-display-price--letter-spacing: -0.055em;
+  --text-kit-display-price--font-weight: 600;
+  /* The line under the h1. */
+  --text-kit-display-lede: clamp(1rem, 0.93rem + 0.3vw, 1.125rem);
+  --text-kit-display-lede--line-height: 1.5;
+  --text-kit-display-lede--letter-spacing: -0.011em;
+  /* The line under a section h2, and marketing prose. */
+  --text-kit-display-body: clamp(1rem, 0.96rem + 0.15vw, 1.0625rem);
+  --text-kit-display-body--line-height: 1.6;
+  --text-kit-display-body--letter-spacing: -0.011em;
+  /* The marketing call to action's label (MarketingButton size lg). */
+  --text-kit-display-cta: 0.9375rem;
+  --text-kit-display-cta--letter-spacing: -0.01em;
+  --font-weight-kit-regular: 460;
+  --font-weight-kit-strong: 560;
+
+  /* Radii, after Stageshow's controls: visibly rounder and softer than the
+     shadcn set. control ≈ a third of the md height (12 on 36). Nested radii
+     derive: inner = outer − padding, so a segmented item inside a 4px-padded
+     control is 8 (control-inner), and a menu row inside a 6px-padded object
+     is 12 (= control). Round icon buttons are rounded-full, not a token.
+     Stage 24 with a 30 gutter does not nest the object concentrically on
+     purpose: the object sits under the lead, never in the stage's corner. */
+  --radius-kit-stage: 1.5rem;
+  --radius-kit-object: 1.125rem;
+  --radius-kit-control: 0.75rem;
+  --radius-kit-control-inner: 0.5rem;
+  --radius-kit-chip: 0.375rem;
+
+  /* Control heights. md is the app default; lg is a hero action ("Live");
+     Every size keeps a 44px hit area on coarse pointers. (An sm step had no
+     consumer and was removed; dense rows use ListRow, which is 44px.) */
+  --spacing-kit-control-md: 2.25rem;
+  --spacing-kit-control-lg: 2.75rem;
+  /* The stage's graph-paper square. */
+  --spacing-kit-grid: 1.5rem;
+
+  /* Space. Real px now — the lab's 560-wide design-pixel unit is gone. */
+  --spacing-kit-gutter: 1.875rem; /* stage edge to lead (30) */
+  --spacing-kit-lead-gap: 1.75rem; /* lead to object (28) */
+  --spacing-kit-pad: 1.125rem; /* inside the object on a phone (18) */
+  /* Inside the object from 40rem: the landing's held draft and idea sheet
+     (Sheet, HeldPicture: sm:px-7 sm:pt-6). Card reads these only where a
+     page opts in (KitPage sets them), so the landing's own Card does not move. */
+  --spacing-kit-pad-x: 1.75rem; /* 28 */
+  --spacing-kit-pad-y: 1.5rem; /* 24 */
+  --spacing-kit-stack: 0.875rem; /* between stacked objects (14) */
+  --spacing-kit-bleed: 2.5rem; /* how far a cropped object runs past the edge (40) */
+  --spacing-kit-margin-gap: 0.625rem; /* object edge to its margin note (10) */
+  --spacing-kit-margin: 10.625rem; /* the margin-note column (170) */
+  /* An object's edge to its rows (List, a Menu or Select panel). 6, so the
+     12px row radius nests in the 18px object: inner = outer − padding. */
+  --spacing-kit-row-inset: 0.375rem;
+  /* A row's own inset (ListRow, NavRow, ListHeading): 16 at the sides, 10
+     top and bottom when it takes a second line. */
+  --spacing-kit-row-x: 1rem;
+  --spacing-kit-row-y: 0.625rem;
+  --container-kit-lead: 21.25rem; /* lead measure (340) */
+  --container-kit-doc: 34.375rem; /* a column of reading prose (550), after Stageshow */
+
+  /* The marketing shell (components/marketing). Spacing names never repeat
+     a container name: `max-w-*` reads --spacing-* too, so a shared name
+     makes max-w-kit-x resolve to the gap. */
+  --container-kit-marketing: 71rem; /* header, footer and every Section */
+  --container-kit-picture-sm: 45rem; /* a thread at reading size */
+  --container-kit-picture-md: 60rem; /* one object on a stage */
+  --container-kit-picture-lg: 67rem; /* the hero, two objects side by side */
+  --container-kit-subline: 52ch; /* the line under a headline */
+  --container-kit-lede: 50ch; /* the line under the h1 */
+  --spacing-kit-section: clamp(6rem, 4.5rem + 4vw, 9rem); /* section to section: 96 → 144 */
+  --spacing-kit-section-top: clamp(3rem, 1.5rem + 4vw, 5rem); /* header to the h1 */
+  --spacing-kit-section-end: clamp(6rem, 5.5rem + 1vw, 7rem); /* the last section to the footer */
+  --spacing-kit-to-subline: 1rem; /* headline to its line (16) */
+  --spacing-kit-to-lede: 1.5rem; /* the h1 to its lede (24) */
+  --spacing-kit-to-actions: 2.25rem; /* a line to the actions under it (36) */
+  --spacing-kit-under-mark: 2rem; /* the friend over a headline (32) */
+  --spacing-kit-to-picture: clamp(3rem, 2.75rem + 0.6vw, 3.5rem); /* a line to its picture: 48 → 56 */
+  --spacing-kit-to-picture-lg: clamp(3.5rem, 2.75rem + 2vw, 5rem); /* the hero's and a whole object's: 56 → 80 */
+  --spacing-kit-header: 5rem; /* the marketing header's height (80) */
+  --spacing-kit-cta-lg: 1.375rem; /* the ink pill's side padding at lg (22) */
+  --spacing-kit-cta-md: 1rem; /* and at md (16) */
+  /* The icon side of a pill with a leading icon: 2px less, so the glyph's
+     own side bearing does not make that side look wider (optical). */
+  --spacing-kit-cta-lg-icon: 1.25rem; /* 20 */
+  --spacing-kit-cta-md-icon: 0.875rem; /* 14 */
+  /* The Checklist circle (22). */
+  --spacing-kit-check: 1.375rem;
+  /* A Stage under 28rem (a phone) pads by this instead of the gutter. */
+  --spacing-kit-gutter-sm: 1.125rem; /* 18 */
+
+  /* The page shell (KitPage). The side gutter is responsive, so it is a
+     plain variable below, not a theme value. */
+  --container-kit-page: 45rem; /* page measure (720): a with-margin Card still has 416 */
+  --spacing-kit-page-top: 4rem; /* 64, was 40: the landing's air */
+  --spacing-kit-page-bottom: 6rem; /* 96 */
+  /* Title to first stage, stage to stage: 56, was 40. The landing's line-to-
+     picture gap (kit-to-picture) at its widest, so a page breathes like it. */
+  --spacing-kit-page-gap: 3.5rem;
+
+  /* The app frame (AppShell, docs/design/app-shell.md). */
+  --spacing-kit-sidebar: 13rem; /* the sidebar, desktop and sheet (208: Desk, shell lab 2026-11-16) */
+  --spacing-kit-shell-bar: 3.25rem; /* the bar over the page: a 36px IconButton + 8 each side (52) */
+  --spacing-kit-shell-pad: 0.5rem; /* the sidebar's own inset; rows then add their 16 (8) */
+  --spacing-kit-shell-mark: 1.5rem; /* the friend's inset: shell-pad + a row's 16, so it sits on the icons' column (24) */
+
+  /* Inside an object. Four steps; nothing else goes between kit content. */
+  --spacing-kit-tight: 0.25rem; /* a title and its meta line (4) */
+  /* Friend to wordmark in QuincyMark, the lab lockup's 6 and 10. */
+  --spacing-kit-wordmark-sm: 0.375rem;
+  --spacing-kit-wordmark-md: 0.625rem;
+  --spacing-kit-controls: 0.375rem; /* buttons side by side (6) */
+  --spacing-kit-related: 0.75rem; /* blocks of one item: text and its actions (12) */
+  --spacing-kit-group: 1.25rem; /* groups in one object: header to body, field to field (20) */
+  --spacing-kit-recess: 0.75rem; /* inside a Well (12) */
+  --spacing-kit-recess-y: 0.625rem; /* inside a Well, top and bottom (10) */
+  --spacing-kit-tip-x: 0.625rem; /* inside the ink Tooltip, the sides (10) */
+  --spacing-kit-tip-y: 0.375rem; /* and top and bottom (6) */
+  /* A Skeleton bar's height, and the gap between bars in SkeletonLines (7). */
+  --spacing-kit-skeleton: 0.4375rem;
+
+  /* Curves. Settle: enters, sweeps, presses. Move: slow start, soft landing. */
+  --ease-kit-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-kit-move: cubic-bezier(0.45, 0, 0.2, 1);
+
+  /* LiveDot's optional pulse: a ring leaves the dot and fades. The one loop
+     in the kit, because "running" is a state that lasts. Reduced motion
+     drops it (motion-reduce:animate-none in live-dot.tsx). */
+  --animate-kit-live-pulse: kit-live-pulse 1.8s var(--ease-kit-out) infinite;
+  @keyframes kit-live-pulse {
+    0% {
+      scale: 1;
+      opacity: 0.55;
+    }
+    70%,
+    100% {
+      scale: 2.6;
+      opacity: 0;
+    }
+  }
+
+  /* Progress with no value yet: a third of the bar slides across and back
+     in, for as long as the work has no count. The second loop in the kit,
+     for the same reason as the pulse. Reduced motion parks it in the middle
+     (motion-reduce:animate-none in progress.tsx). */
+  --animate-kit-progress-slide: kit-progress-slide 1.4s var(--ease-kit-move) infinite;
+  @keyframes kit-progress-slide {
+    0% {
+      translate: -100% 0;
+    }
+    100% {
+      translate: 300% 0;
+    }
+  }
+}
+
+/* The page's side gutter: 16px on a phone (AGENTS.md), 32px from 40rem. */
+:root {
+  --kit-page-gutter: 1rem;
+}
+@media (width >= 40rem) {
+  :root {
+    --kit-page-gutter: 2rem;
+  }
+}
+@theme inline {
+  --spacing-kit-page-gutter: var(--kit-page-gutter);
+}
+
+/* --kit-ink-faint is 2.4:1: marks only, never words. It has no --color-*
+   theme entry on purpose, so `text-kit-ink-faint` does not exist; these are
+   the only utilities that reach it. */
+@utility bg-kit-mark {
+  background-color: var(--kit-ink-faint);
+}
+@utility border-kit-mark {
+  border-color: var(--kit-ink-faint);
+}
+@utility stroke-kit-mark {
+  stroke: var(--kit-ink-faint);
+}
+@utility fill-kit-mark {
+  fill: var(--kit-ink-faint);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    /* A missing weight should surface as an obvious regression,
+       not as a quietly fabricated bold. */
+    font-synthesis: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Digits that tick must not shove their neighbours around. */
+  [data-slot="metric"],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-brass-200);
+    color: var(--color-sand-950);
+  }
+
+  a:not([class]) {
+    text-decoration-line: underline;
+    text-decoration-thickness: from-font;
+    text-underline-position: from-font;
+    text-decoration-skip-ink: auto;
+  }
+
+  /* Anything user-supplied can carry a URL or token that would
+     otherwise punch straight out of its container. */
+  [data-slot="user-content"] {
+    overflow-wrap: break-word;
+  }
+
+  /* Press feedback. A transition (not a keyframe) so releasing mid-press
+     returns smoothly instead of restarting. The timing lives on the
+     component's own utility class — a rule here sits in @layer base and
+     would be overridden by it. */
+  [data-slot="button"]:active:not(:disabled) {
+    scale: 0.96;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Prose presets — inert until ./typeset.css is imported above.
+
+   The boundary that keeps the two type systems from fighting:
+
+     chrome  →  the role scale in @theme (text-body, text-caption,
+                text-card-title). Cards, rows, buttons, sidebar, forms.
+     prose   →  .typeset + a preset. Rendered markdown only.
+
+   Never set text-* utilities inside a .typeset container: two rhythm
+   systems would compete for the same paragraph.
+
+   Font names are mapped here rather than in the generated file, so
+   typeset.css can be replaced wholesale without losing the wiring.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --typeset-size is stated, not inherited. Left unset it resolves to 1em,
+   which meant the chat prose picked up whatever the chrome scale had set on
+   the bubble above it — the transcript rendered at text-sm, 14px, for the one
+   surface in the product people actually read. Naming it here is also what
+   keeps the two type systems from meeting: a text-* utility on an ancestor can
+   no longer reach in and set the rhythm of a paragraph.
+
+   Same 15px as the wiki preset. The app has one prose size; chat is denser
+   than an essay only in its flow, not in its type. */
+.typeset-chat {
+  --typeset-font-body: var(--font-sans);
+  --typeset-font-heading: var(--font-sans);
+  --typeset-font-mono: var(--font-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.6;
+  --typeset-flow: 1em;
+}
+
+.typeset-wiki {
+  --typeset-font-body: var(--font-sans);
+  --typeset-font-heading: var(--font-sans);
+  --typeset-font-mono: var(--font-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.75;
+  --typeset-flow: 1.5em;
+}
+
+/* Dark surfaces read tighter than light ones at the same leading. */
+.dark .typeset {
+  --typeset-leading: 1.85;
+}
+
+/* The kit preset (plans/029, plans/030 #3): Quincy's reply in a kit page.
+   Rendered markdown in the kit's own type, so a reply reads like the page
+   around it: Inter 14/20 at 460, hierarchy by weight (560) and grey, never by
+   size; mono for code; the paragraph gap is kit-related (12px).
+
+   Everything here re-points what typeset.css already reads (its colour and
+   radius fallbacks) or overrides a size, so typeset.css stays generated and
+   replaceable. Typeset's rules sit in @layer components; these are unlayered,
+   so they win without !important. `.typeset.typeset-kit` is two classes so it
+   also beats `.dark .typeset` above, which would loosen the leading.
+
+   Append-stable, like the file it rides on: no :last-child, no :has(), no
+   rule that restyles an earlier block when a new one streams in. */
+.typeset.typeset-kit {
+  --typeset-font-mono: var(--font-kit-mono);
+  --typeset-size: var(--text-kit-body);
+  --typeset-leading: calc(var(--text-kit-body--line-height) / var(--text-kit-body));
+  --typeset-flow: var(--spacing-kit-related);
+  /* What typeset.css reads for its colours, borders and code fills. */
+  --color-foreground: var(--kit-ink);
+  --color-muted-foreground: var(--kit-ink-muted);
+  --color-border: var(--kit-hairline);
+  --color-muted: var(--kit-well);
+  --color-ring: var(--kit-focus);
+  --color-primary: var(--kit-action);
+  --radius: var(--radius-kit-control);
+  /* Typeset grows the size by 1.125 under 48rem; the kit is 14px everywhere
+     (the 16px floor is for inputs, not prose). */
+  font-size: var(--text-kit-body);
+  letter-spacing: var(--text-kit-body--letter-spacing);
+  /* Inter comes from <KitRoot>, which sets it on its own element (the font
+     variable lives there, not on :root), so the prose inherits it. */
+  font-family: inherit;
+}
+/* Headings: the kit's hierarchy is weight, so a heading is body text at 560. */
+.typeset-kit :is(h1, h2, h3, h4, h5, h6) {
+  font-family: inherit;
+  font-size: 1em;
+  line-height: inherit;
+  font-weight: var(--font-weight-kit-strong);
+  letter-spacing: inherit;
+  text-transform: none;
+  color: var(--kit-ink);
+}
+.typeset-kit :is(strong, b, dt, thead th, summary) {
+  font-weight: var(--font-weight-kit-strong);
+}
+/* Links read like TextLink: the text's own colour, a 40% underline. */
+.typeset-kit a {
+  font-weight: inherit;
+  text-decoration-color: var(--kit-link-line);
+  text-underline-offset: var(--kit-link-offset);
+  border-radius: var(--radius-kit-chip);
+}
+.typeset-kit a:hover {
+  text-decoration-color: currentColor;
+}
+/* Code is a tag face (Mono): 12px, never a second voice. */
+.typeset-kit :is(code, pre, kbd) {
+  font-size: var(--text-kit-mono);
+  line-height: var(--text-kit-mono--line-height);
+}
+.typeset-kit pre code {
+  font-size: inherit;
+}
+
+/* A heading that leaves one word alone on its last line is the most visible
+   kind of ragged type, and long-form prose is where multi-line headings
+   actually happen — /why runs 208 lines of them. `balance` rather than
+   `pretty`: browsers cap balancing at a handful of lines, which is exactly the
+   range a heading occupies, while `pretty` is tuned for paragraphs.
+
+   Lives here rather than in typeset.css because that file is generated at
+   ui.shadcn.com/typeset and gets replaced wholesale. */
+.typeset :is(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+/* ── Touch defaults ───────────────────────────────────────────────
+   Unlayered on purpose: these must win over utility classes.
+   ────────────────────────────────────────────────────────────── */
+
+/* Kills the 300ms tap delay and double-tap-to-zoom on controls. Without
+   it every button on the page feels a beat behind on mobile.
+   Base UI renders Switch, Radio, Checkbox (and a Segmented item) as a span
+   with a role, so the roles are named here: a tag list alone leaves the kit's
+   switches and checks at `auto`. */
+button,
+a,
+input,
+textarea,
+select,
+label,
+[role="button"],
+[role="switch"],
+[role="radio"],
+[role="checkbox"],
+[role="tab"],
+[data-slot="switch"] {
+  touch-action: manipulation;
+}
+
+/* Safety net for the iOS zoom-on-focus rule. shadcn's Input and Textarea
+   already ship `text-base md:text-sm`; this catches anything hand-rolled
+   later, and native <select>, which nothing has covered. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* The composer's icon buttons render at 28×28. They are the attach and send
+   controls on the primary surface, and send is the one action the whole page
+   exists for — 28px is a miss on a phone. Same treatment as the switch below:
+   the pseudo-element grows to 44×44, the visual size does not move, and the
+   two never collide because they sit at opposite ends of the addon row. */
+@media (pointer: coarse) {
+  [data-slot="input-group-addon"] [data-slot="button"] {
+    position: relative;
+  }
+
+  [data-slot="input-group-addon"] [data-slot="button"]::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* Every other button. The default size is h-8 — 32px, well under the 44px
+   floor — and every other size variant is smaller still, down to 24px for
+   `xs`. This was previously worked around per page, which meant the floor held
+   wherever someone remembered it.
+
+   Height-agnostic on purpose: a fixed 44px box centred on the button covers
+   every size variant with one rule, instead of four rules keyed on utility
+   classes that a size variant could rename out from under them.
+
+   Vertical only. Buttons sit side by side in groups and toolbars far more
+   often than they stack, so growing the width is what would make two hit
+   areas overlap — and an overlapping target is a different bug, not a fix.
+   The width already matches what the eye aims at.
+
+   The addon buttons above keep their own rule: it grows them on both axes,
+   and taking that away to apply this one would be a regression. */
+@media (pointer: coarse) {
+  [data-slot="button"]:not(:where([data-slot="input-group-addon"] *))::after,
+  /* HoldToConfirm is a button that is not `data-slot="button"` — it renders its
+     own element so the progress fill and the charging state have somewhere to
+     live. It was therefore the one control the rule above missed, which is the
+     worst possible one to miss: it is the pattern AGENTS.md mandates for every
+     destructive action, so the floor failed exactly where the mistake is least
+     recoverable. Listed explicitly rather than renamed to `button`, because the
+     slot name is what the fill and `data-charging` key off. */
+  [data-slot="hold-to-confirm"]::after,
+  /* A disclosure summary is a control even though it is not a button. Where one
+     gates a destructive action, its caption-sized line is the only way to reach
+     that action on touch. */
+  [data-slot="disclosure-summary"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 0;
+    left: 0;
+    height: 44px;
+    translate: 0 -50%;
+  }
+}
+
+/* The small switch is 24×14px with a 48×30px hit area — under the 44px
+   floor on the axis that matters. Visual size stays put; only the
+   pseudo-element grows, so nothing reflows. */
+@media (pointer: coarse) {
+  [data-slot="switch"]::after {
+    inset: -15px -12px;
+  }
+}
+
+/* Every animation gets a reduced-motion path — including opacity fades. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* `*` matches elements, not `::details-content` — and `transition-duration`
+     does not inherit, so the universal rule above cannot reach the disclosure
+     panel. Without this the chevron (a real element, so flattened) snaps while
+     the panel it points at still animates its height for 200ms, which is the
+     mismatched pair the animation was added to prevent, delivered only to the
+     people who asked for less motion. */
+  [data-slot="disclosure"]::details-content {
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Killing the transition alone would leave the press *snapping* into place
+     instead of easing there — still motion, just abrupt. Remove the
+     displacement itself; the button keeps its colour and ring feedback.
+
+     Both properties are named because the press is two displacements, not
+     one: `scale: 0.96` above, plus `translate-y-px` on the button's own
+     utility class. Only the scale was neutralised here, so the 1px drop
+     survived reduced motion — and survived it silently, since nothing looks
+     wrong until the setting is actually on. */
+  [data-slot="button"]:active:not(:disabled) {
+    scale: 1;
+    translate: none;
+  }
+}
+
+/* View transitions.
+
+   Used by components/drafts/drafts-list.tsx for approve, discard and reopen —
+   the three changes that move a version card in ways CSS cannot reach: a 450px
+   editor becoming a 75px receipt in place, and a discarded column letting its
+   neighbours slide 355px sideways into the vacated slots.
+
+   The browser's default is 250ms `ease`, which is both slower than this UI's
+   budget and a weaker curve than anything else here uses. 200ms on the group
+   (position and size) with the same curve the buttons use, and a shorter
+   cross-fade on the image pair so the two states are not both half-visible for
+   the whole transition.
+
+   `prefers-reduced-motion` is handled in JS rather than here: the reduce block
+   above flattens durations, but a view transition with a near-zero duration
+   still snapshots and repaints the document. `withViewTransition` skips
+   `startViewTransition` entirely instead, so reduced motion gets a plain
+   synchronous state change. */
+/* Disclosures open, they do not appear.
+ *
+ * A native `<details>` toggles its content between `display: none` and laid
+ * out, so the body snaps into place in a single frame. That is fine on its own;
+ * it stops being fine the moment the summary's chevron rotates beside it, which
+ * is what this is for. One element takes 200ms and the other teleports, and the
+ * eye reads the pair as broken rather than reading the faster one as fast.
+ *
+ * `::details-content` plus `interpolate-size: allow-keywords` is what makes
+ * `height: auto` an interpolatable value, so the panel can grow to its natural
+ * height without anybody measuring it in JavaScript. `interpolate-size` is
+ * inherited, so it is scoped to the element rather than set on `:root` — this
+ * should not quietly enable auto-height interpolation everywhere.
+ *
+ * `transition-behavior: allow-discrete` is load-bearing: `content-visibility`
+ * flips discretely, and without it the content stays hidden for the whole
+ * transition and then pops.
+ *
+ * Height is normally the wrong thing to animate — it is layout, not compositing.
+ * It is the right thing here: the panel has to push the content below it down,
+ * and a transform would slide it over that content instead. The tradeoff is
+ * accepted knowingly, on a small panel that opens on demand rather than on a
+ * list that reflows.
+ *
+ * Browsers without `::details-content` support get today's behaviour, which is
+ * the instant open. Nothing is broken by the absence.
+ *
+ * Reduced motion needs its own rule up in the reduce block, and this is the
+ * trap: the universal selector there matches elements, not `::details-content`,
+ * and `transition-duration` does not inherit — so the global flattening does
+ * not reach this transition. An earlier version of this comment claimed it did.
+ * The visible symptom was the chevron snapping while the panel kept animating,
+ * for exactly the users who had asked for neither. */
+[data-slot="disclosure"] {
+  interpolate-size: allow-keywords;
+}
+
+[data-slot="disclosure"]::details-content {
+  height: 0;
+  overflow: hidden;
+  transition:
+    height 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    content-visibility 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition-behavior: allow-discrete;
+}
+
+[data-slot="disclosure"][open]::details-content {
+  height: auto;
+}
+
+/* The root must not cross-fade.
+
+   By default the browser lays a snapshot of the whole old page over the whole
+   new one and dissolves between them. Anything that moved is then visible in
+   both places at once: approving a version on one piece made the piece below
+   it drift, half-transparent, across the row that had taken its place. It read
+   as a rendering fault, which is worse than the jump it was meant to smooth.
+
+   Disabling the pair here means only named elements animate, and everything
+   else swaps in one frame. `isolation: auto` on the image pair is part of the
+   recipe — without it the two layers still blend. */
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(root) {
+  animation: none;
+  opacity: 1;
+}
+
+::view-transition-group(*) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 140ms;
+}

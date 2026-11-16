@@ -1,0 +1,156 @@
+"use client"
+
+import * as React from "react"
+import { useRouter } from "next/navigation"
+
+import { Progress, Text } from "@/components/kit"
+import { uploadAndOpen, type UploadProgress } from "@/lib/editor/upload-client"
+
+/**
+ * Drop a recording here and end up in the editor.
+ *
+ * The phases are named out loud rather than collapsed into one spinner, because
+ * they take genuinely different amounts of time and mean different things: a
+ * long hash is the disk, a long upload is the network, a long processing step
+ * is ffmpeg. A single bar for all three tells someone nothing about whether to
+ * wait or to worry.
+ */
+
+const PHASE_LABEL: Record<UploadProgress["phase"], string> = {
+  hashing: "Reading the file",
+  requesting: "Getting somewhere to put it",
+  uploading: "Uploading",
+  processing: "Transcoding, reading the audio, transcribing",
+  opening: "Opening the editor",
+  done: "Ready",
+}
+
+export function UploadDrop({
+  onFileChosen,
+}: {
+  /**
+   * Handed the File before the upload starts, so the editor can play the local
+   * bytes while the proxy is still being built.
+   */
+  onFileChosen?: (file: File) => void
+}) {
+  const router = useRouter()
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
+
+  const [progress, setProgress] = React.useState<UploadProgress | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [dragging, setDragging] = React.useState(false)
+
+  const busy = progress !== null && progress.phase !== "done"
+
+  const start = React.useCallback(
+    async (file: File) => {
+      setError(null)
+      onFileChosen?.(file)
+
+      try {
+        const result = await uploadAndOpen(file, setProgress)
+
+        if (result.warnings.length > 0) {
+          // Not an error — the asset is editable. Worth saying because the
+          // missing piece is almost always the transcript, and captions being
+          // unavailable is otherwise a mystery inside the editor.
+          console.warn("[ingest]", result.warnings.join("; "))
+        }
+
+        router.push(`/cuts/${result.projectId}`)
+      } catch (failure) {
+        setProgress(null)
+        setError(
+          failure instanceof Error ? failure.message : "The upload failed."
+        )
+      }
+    },
+    [onFileChosen, router]
+  )
+
+  return (
+    <div
+      onDragOver={(event) => {
+        event.preventDefault()
+        if (!busy) setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        if (busy) return
+
+        const file = event.dataTransfer.files[0]
+        if (file) void start(file)
+      }}
+      // A dashed recess inside the Card, so the drop target reads as a place
+      // to put something rather than another object. Nested radius: the
+      // Card's pad leaves the chip radius.
+      className={`rounded-kit-chip border border-dashed p-kit-pad text-center transition-colors duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none ${
+        dragging ? "border-kit-ink-muted bg-kit-well" : "border-kit-hairline"
+      }`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*,audio/*"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void start(file)
+          // Cleared so choosing the same file twice fires a change event the
+          // second time — otherwise a retry after a failure does nothing.
+          event.target.value = ""
+        }}
+      />
+
+      {busy && progress ? (
+        <div className="mx-auto flex max-w-80 flex-col gap-kit-related text-left">
+          {/* An indeterminate phase is a bar that only says "working": the
+              step is real work with no measurable fraction, and a bar that
+              resets between phases reads as progress lost. */}
+          <Progress
+            label={PHASE_LABEL[progress.phase]}
+            value={
+              progress.fraction === null
+                ? null
+                : Math.round(progress.fraction * 100)
+            }
+          />
+
+          {progress.deduped ? (
+            <Text variant="small" tone="muted">
+              Already in your library. Nothing to upload.
+            </Text>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-kit-related">
+          <Text>
+            Drop a recording, or{" "}
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
+            >
+              choose a file
+            </button>
+          </Text>
+          <Text variant="small" tone="muted">
+            Anything ffmpeg reads. It is transcoded to an editing copy on the
+            way in, so phone footage works.
+          </Text>
+        </div>
+      )}
+
+      {error ? (
+        <div className="mt-kit-related">
+          <Text variant="small" role="alert">
+            {error}
+          </Text>
+        </div>
+      ) : null}
+    </div>
+  )
+}

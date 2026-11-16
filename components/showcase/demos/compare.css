@@ -1,0 +1,156 @@
+/* The comparison stills. The pile after Stageshow's examples/tilted-stack
+   (MIT; see ../NOTICE.md); the calm draft after ./hero.css. Both sit on a
+   tile that is their ground, so the stage has none of its own. */
+
+.qx {
+  & .ss-stage {
+    --gutter: 28px;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  /* ---- On your own: a loose pile ---- */
+
+  .qx-paper {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(236px, 52%);
+    padding: 12px 14px 14px;
+    border-radius: 12px;
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  /* The reminder sits on top of the pile and is lifted off it. */
+  .qx-paper[data-top] {
+    width: min(260px, 62%);
+    box-shadow: var(--kit-elevation-lifted);
+  }
+
+  .qx-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--kit-ink-muted);
+    white-space: nowrap;
+  }
+
+  .qx-title {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 560;
+    color: var(--kit-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .qx-title--top {
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 600;
+  }
+
+  .qx-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  /* ---- With Quincy: one draft, cut by the bottom edge ---- */
+
+  .qx-draft {
+    position: absolute;
+    top: 28px;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: -40px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: var(--radius-kit-object);
+    background: var(--kit-object);
+    box-shadow: var(--kit-elevation-object);
+  }
+
+  .qx-draft[data-narrow] {
+    top: 20px;
+    left: 16px;
+    right: 16px;
+    padding: 14px;
+  }
+
+  .qx-who {
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--kit-ink-muted);
+  }
+
+  .qx-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .qx-line {
+    font-size: 13.5px;
+    line-height: 20px;
+    color: var(--kit-ink);
+    text-wrap: pretty;
+  }
+
+  .qx-figure {
+    font-size: 18px;
+    line-height: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--kit-ink);
+  }
+
+  .qx-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--kit-hairline);
+  }
+
+  .qx-spacer {
+    flex: 1;
+  }
+
+  .qx-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px 0 8px;
+    border-radius: var(--radius-kit-control-inner);
+    background: var(--kit-well);
+    font-family: var(--ss-mono);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--kit-ink);
+  }
+
+  .qx-chip .ss-icon {
+    color: var(--kit-ink-muted);
+  }
+
+  .qx-week {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--kit-hairline);
+  }
+}
