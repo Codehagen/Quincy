@@ -162,7 +162,11 @@ export function useLineup({ scenario, phase }: { scenario: Scenario; phase: Phas
   const byDay = React.useMemo(() => DAYS.map((day) => ({ day, items: timeline.filter((i) => i.dayId === day.id) })), [timeline])
 
   const firstQueued = items.find((i) => i.kind === "post" && i.post.state === "queued")?.key ?? items[0]?.key ?? null
-  const selected = items.find((i) => i.key === selectedKey) ?? null
+  // A post outside this week (the calendar's other weeks) is still a post the keys act on.
+  const outside = selectedKey ? posts.find((p) => p.id === selectedKey && !dayOf(p.dayId)) : undefined
+  const selected: Item | null =
+    items.find((i) => i.key === selectedKey) ??
+    (outside ? { kind: "post", key: outside.id, dayId: outside.dayId, time: outside.time, channel: outside.channel, post: outside } : null)
 
   /* ── Quincy's notes (proposed): facts about the week, never a verdict ── */
 

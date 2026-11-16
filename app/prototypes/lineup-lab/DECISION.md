@@ -71,11 +71,11 @@ with nowhere to go; `first-run` has no slots.
   number on the page is the baseline, said against the person ("7 posts
   this week; you usually post 3"). A gap is drawn as an open slot or an
   empty quarter hour that offers what could fill it.
-- **What it is** (layouts/calendar.tsx, parts/week-grid.tsx):
+- **What it is** (layouts/calendar.tsx, parts/week-calendar.tsx):
   - A Mon–Sun week, days as columns with the date in the head (today's
-    date on the ink fill, its column the stage grey), and continuous time
+    date in ink, its column the stage grey), and continuous time
     down the left, 00:00 to 24:00, labelled every hour, 15-minute snap.
-    It opens scrolled to 07:00. A "now" line (ink, the live dot) runs
+    It opens scrolled to 07:00. A "now" line (ink, a still tick, no dot) runs
     across today.
   - Posts are blocks at their exact minute, drawn 45 minutes tall (a
     visual length, not a duration). Open slots are dashed blocks at their
@@ -130,15 +130,15 @@ with nowhere to go; `first-run` has no slots.
     `--kit-grid-line`; quarter hours none (the snap is felt, not drawn).
     The grid closes with a hairline at 24:00 and on the last column.
   - **Today:** the one tinted column, `--kit-stage` at 50% (a recess in both
-    themes: lighter grey in light, below the ground in dark). The date sits
-    on the ink fill in `--kit-primary-on`. **The weekend is not tinted:** the
+    themes: lighter grey in light, below the ground in dark). The date is in
+    ink at 560 (no pill, since the generic-look pass). **The weekend is not tinted:** the
     person posts most on a Sunday (22 of his 99 posts), so it is not an off
     day here.
   - **A queued post** (and sending, failed): `--kit-object` on
     `--shadow-kit-object` (light: a 1px ring and two soft layers; dark: one
     white ring at 8%). **Failed** keeps the same surface: the alert mark
     and the platform's words in the pane say it, never red (nothing was
-    destroyed). **Sending** is the same surface with the live dot.
+    destroyed). **Sending** is the same surface with a still sent-arrow glyph.
   - **Sent:** flat. No fill, the inset ring alone (`--shadow-kit-inset`),
     the time muted: it happened, so it is no longer raised, and it stays.
   - **Lifted** (dragged, or held by Enter): `--shadow-kit-lifted` (light: a
@@ -162,13 +162,53 @@ with nowhere to go; `first-run` has no slots.
     square edge, 20px inside the pane (no nesting either).
   - **Dark:** every stack collapses to its single white ring, as AGENTS.md
     asks; nothing in the calendar sets a `dark:` class, the tokens flip.
+- **No green, no blink** (owner, 2026-11-16: "fjern den grønne blinken").
+  On the calendar only: the now line is one still ink line with a short
+  ink tick at its start and the time ("14:20") in ink in the gutter, where
+  the hour label would be; Sending is a still glyph (the sent arrow) and
+  the word, like Sent and Didn't go. No pulsing dot and no green anywhere
+  on the calendar. LiveDot is unchanged everywhere else in the product
+  (3 · Feed, the calendar's phone fold, still uses it for "Now").
+- **A generic-look pass** (2026-11-16):
+  - Removed: today's date on an ink pill (the default calendar badge;
+    today is now said by ink weight and the column's recess); the tint
+    inside the drop and proposal outline (the dashed ink edge says it
+    alone); the clock and "No time" on every tray chip (the tray's heading
+    already says it); the hover strip on every 14px quarter hour (noise
+    under a moving pointer; the cursor still says it is pressable); the
+    green now dot and the pulsing Sending dot (above).
+  - Added, the product's own voice: Quincy's notes written on the grid in
+    graphite handwriting (the kit's `Hand`, the margin-note hand), a few
+    lower-case words and never a number of anything: "quiet day" on a day
+    ahead with nothing in it, "next open slot" under the first open slot,
+    "close behind 09:00" under a post that follows another on its channel
+    the same morning (on the notes control, proposed). The now line is ink,
+    the editor's colour; blue stays the pen's (beat brackets), and the
+    calendar has none.
+- **A UI review** (2026-11-16), and what changed because of it:
+  - Blocking, fixed: a block held by Enter outlived focus (Tab or a click
+    away left it drawn at an unsaved time). Leaving the grid now puts it
+    back and says so (now WeekCalendar.Grid's `onBlur`, parts/week-calendar.tsx).
+  - Should fix, fixed: (1) 672 quarter-hour buttons with no structure for a
+    screen reader: the grid is now `role="application"` with a name that
+    says its keys, so the arrows pass through and each cell keeps its label;
+    (2) a proposal on an empty cell stayed open in the pane after a week
+    switch, for a day no longer on screen: a week switch now clears it;
+    (3) a post picked in another week did not answer P, B or M (the store
+    held this week's items only): the store now selects any post; (4) on a
+    touch screen a quarter hour is 14px, under 44: a coarse pointer gets
+    3 · Feed, the touch layout; (5) the "three hours after…" note was cut
+    off in a 100px column: it is now "close behind 09:00" and may wrap.
+  - Nits taken: the quarter-hour hover strip removed; the day heads now
+    slide with the body on a week switch. Not taken: letter keys still run
+    while a block is held (Enter or Escape first is the expected order).
 - **Widths:** a week from ~1020px of workspace (the pane is 380 from
   1200, 320 under it, so 1280 is a week); 860–1020 one day with a day strip
   over the column; under 860, and at 390, 3 · Feed.
 - **States kept:** loading (the hour lines, no shimmer, a polite status),
   first run (the Friend, centred, the starter rhythm), slots full (the
   tray, and every slot drawn filled), failed (the alert mark, the
-  platform's words in the pane), sending (the live dot), sent (the tick,
+  platform's words in the pane), sending (a still glyph and the word), sent (the tick,
   muted time), passed empty (the quiet dashed block), approved with no
   time (the tray).
 - Still on the control panel: the hour height (default 56), Quincy's
@@ -181,6 +221,63 @@ with nowhere to go; `first-run` has no slots.
   hour** (`createSlot`, real, offered from the grid); 13. the week
   switcher shows past weeks (the post rows exist; `getLineup` reads seven
   days from today only, so other weeks need a read with a range).
+
+## API (a component API pass, 2026-11-16)
+
+The calendar, shaped as the product's API before the move. The code stays
+in the lab (parts/week-calendar.tsx, layouts/calendar.tsx) until /lineup
+moves. Behaviour and look are unchanged: pixel diffs before and after are
+empty at 1440 light, mid-drag and with a block held by the keyboard (the
+only changed pixels are the dev overlay in the corner).
+
+Rules every part follows: compound parts share state through context, not
+props passed down; the ui-sdk wiring (spans, grid focus, the drag, the held
+keyboard mode) lives in the root, never in the page. Every part spreads the
+rest of its props onto its element and takes `className`; refs pass through
+as a prop (React 19). State is data on the element (`data-variant`,
+`data-state`, `data-picked`, `data-held`, `data-lifted`, `data-today`), never
+a boolean prop. Children, not configuration objects. One component never
+mixes ui-sdk and Base UI: every WeekCalendar part is ui-sdk or plain
+elements; the kit's Base UI controls (the week switcher, the pane's
+buttons) sit around it.
+
+**Into `components/kit/` as `WeekCalendar`** (knows nothing of posts or
+Lineup):
+
+| Part | Props | What it is |
+| --- | --- | --- |
+| `WeekCalendar` | `week` / `defaultWeek` / `onWeekChange` (the Monday, `YYYY-MM-DD`), `view` "week" \| "day", `day` (the day view's day), `today`, `value` / `defaultValue` / `onValueChange` (the picked block, or null), `onMove(value, day, minute) → boolean` (false puts it back), `onPropose(day, minute)`, `snapMinutes` (15), `hourHeight` (56), `startMinute` (07:00, the tab stop before the grid is entered), `onAnnounce(text)`, `describe(day, minute)` ("Tue 08:15"), `children` | the root: no element of its own; holds the ui-sdk primitive (`createSpans`, `createGridFocus`), the held block, the active cell and the blocks' registry, and gives them to the parts |
+| `WeekCalendar.Header` | `ref`, `className`, rest; `children` (default: one `DayHead` per day) | the sticky day heads; slides with the week |
+| `WeekCalendar.DayHead` | `day`, `children` (default "Mon 16"), rest | one day's head; `data-today`, `data-past` |
+| `WeekCalendar.Grid` | `axis` (a slot: the `TimeAxis`), `children` (what stands on the time), `className`, rest | the focus grid (ui-sdk root): the day tracks, the quarter-hour cells, one layer for the blocks; the keys (arrows, Enter / Escape on a held block, ⇧ for an hour), the blur that puts a held block back |
+| `WeekCalendar.Day` | `day` (`{ id, today }`), `children` | one day's track (a drop target); rendered by Grid |
+| `WeekCalendar.TimeAxis` | `now` (minutes, or null), `className`, rest | the hours down the left; `now` said in ink where the hour label would be |
+| `WeekCalendar.Block` | `value`, `day`, `start`, `end` (minutes), `variant` "post" \| "slot" \| "passed", `state` (free data, written as `data-state`), `disabled`, `label` (its accessible name), `children` (or a function of `{ start, focused, picked, lifted }`), `className`, `style`, rest | a block on the time: registers itself, picks itself on a press, drags when it is a movable post; placed by `translate` so every move animates |
+| `WeekCalendar.NowLine` | `day`, `minute`, rest | now: one still ink line across its day, a short tick at its start |
+| `WeekCalendar.Note` | `day`, `minute`, `children`, rest | a note written on the time (the page puts the handwriting in it) |
+| `WeekCalendar.Proposal` | `day`, `minute`, `length` (45), rest | a dashed ink outline where something would go (a proposal, a drop) |
+| `WeekCalendar.Tray` | `label` (shown over its items), `children`, rest | things with no time yet, over the grid |
+| `WeekCalendar.TrayItem` | `value` (a press picks it), `onPlace(day, minute)`, `type` ("button"), `onClick`, `onPointerDown`, rest | one of them: drags a copy that follows the pointer (`bindDrag` + `bindDragPreview`), the snapped place drawn as a Proposal, Escape cancels. `onPlace`, not `onDrop`: `onDrop` is the browser's own drag and drop, which this does not use |
+| `useWeekCalendar()` | | `{ days, value, setValue, snap, hourHeight }`, for a part written by hand |
+| `describePlace(day, minute)`, `hhmm(minutes)` | | how a place and a time are said, by default |
+
+**Into `components/lineup/`** (Lineup's reading of the week, on the parts
+above):
+
+| Part | Props | What it is |
+| --- | --- | --- |
+| `LineupCalendar` | the store (posts, slots, approved with no time, filters), the hour height, the notes control | builds the blocks (a post at its minute, a slot's occurrence that nothing fills, a passed one), maps a drop to `movePost` (into a slot of its channel at exactly that time, else a one-off), the proposal pane, the week switcher, the day strip in the one-day view. Today layouts/calendar.tsx `CalendarSurface` |
+| `PostBlockBody` | `block`, `start`, `focused` | a block's inside: the channel mark, the time in mono, the state mark, the opening line. Today `BlockBody` |
+| `ScheduleMark` | `item`, `hideWord` | the state as a still glyph and a word (Sending, Sent, Didn't go); no LiveDot here. Today `CalMark` |
+| `WeekNotes` | the blocks, the store's notes | Quincy's handwritten notes on the grid (quiet day, next open slot, close behind 09:00), each in a `WeekCalendar.Note` with the kit's `Hand`. Today `gridNotes` |
+| `ProposalPane` | `day`, `minute`, the store | what an empty quarter hour offers: make it a slot (`createSlot`), put an approved post there (proposed), approve a draft. Today `GhostPane` |
+
+What changed in the pass (no behaviour): `WeekGrid` (one component with 20
+props, the day heads and the tray in the page, the notes as a config array)
+became the parts above; the blocks are children and register themselves,
+so the page no longer hands the root a span list; the tray's drag moved
+from the page into `TrayItem`; the week's slide direction is the root's,
+from the week it is given. The old file (parts/week-grid.tsx) is gone.
 
 ## On the table
 

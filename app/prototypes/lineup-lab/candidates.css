@@ -78,10 +78,9 @@
   font-family: var(--font-kit-mono);
   font-variant-numeric: tabular-nums;
 }
-/* Today: the date on the ink fill, its label in the fill's own ink. */
+/* Today: said by weight and ink, and by the column's recess. No pill. */
 .ll-week-dayhead[data-today] .ll-week-date {
-  background: var(--kit-primary);
-  color: var(--kit-primary-on);
+  color: var(--kit-ink);
 }
 .ll-week-body {
   position: relative;
@@ -89,10 +88,12 @@
   grid-template-columns: var(--ll-gutter) minmax(0, 1fr);
   margin: 0 var(--spacing-kit-group) var(--spacing-kit-group);
 }
-.ll-week-body[data-dir] {
+.ll-week-body[data-dir],
+.ll-week-head[data-dir] {
   animation: ll-week-in 240ms var(--ll-move);
 }
-.ll-week-body[data-dir="-1"] {
+.ll-week-body[data-dir="-1"],
+.ll-week-head[data-dir="-1"] {
   --ll-from: -16px;
 }
 @keyframes ll-week-in {
@@ -113,6 +114,20 @@
   font-size: var(--text-kit-mono-sm, 11px);
   font-variant-numeric: tabular-nums;
   color: var(--kit-ink-muted);
+}
+.ll-week-hour[data-hidden] {
+  visibility: hidden;
+}
+/* Now, in the gutter: the time in ink, where the hour label would be. */
+.ll-week-now-time {
+  position: absolute;
+  right: 8px;
+  translate: 0 -50%;
+  font-family: var(--font-kit-mono);
+  font-size: var(--text-kit-mono-sm, 11px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  color: var(--kit-ink);
 }
 .ll-week-tracks {
   grid-column: 2;
@@ -144,9 +159,6 @@
 }
 .ll-week-cell[data-half] {
   border-top: var(--border-hairline) solid var(--kit-grid-line);
-}
-.ll-week-cell:hover {
-  background: var(--kit-row-hover);
 }
 .ll-week-cell:focus-visible {
   position: relative;
@@ -272,10 +284,10 @@
   border-radius: var(--radius-kit-control-inner);
   outline: 1.5px dashed var(--kit-ink);
   outline-offset: -1px;
-  background: color-mix(in oklch, var(--kit-selected) 70%, transparent);
   transition: translate 120ms var(--ll-move);
 }
-/* Now: one ink line across today, the live dot at its start. */
+/* Now: one still ink line across today, with a short ink tick at its
+   start (the owner, 2026-11-16: no green, no blinking here). */
 .ll-week-now {
   position: absolute;
   top: 0;
@@ -285,14 +297,25 @@
   border-top: 1.5px solid var(--kit-ink);
   transition: translate 300ms var(--ll-move), opacity 200ms ease-out;
 }
-.ll-week-now-dot {
+.ll-week-now::before {
+  content: "";
   position: absolute;
   top: -4.5px;
-  left: -4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 9999px;
-  background: var(--kit-live);
+  left: 0;
+  width: 2px;
+  height: 8px;
+  background: var(--kit-ink);
+}
+/* Quincy's notes on the grid: graphite handwriting, never over a block's words. */
+.ll-week-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  line-height: 1.1;
+  pointer-events: none;
 }
 .ll-week-loading {
   margin: 0 var(--spacing-kit-group);
@@ -414,7 +437,8 @@
     scale: 1;
     animation: none;
   }
-  .ll-week-body[data-dir] {
+  .ll-week-body[data-dir],
+  .ll-week-head[data-dir] {
     animation: none;
   }
 }
