@@ -1,0 +1,43 @@
+/* ══════════════════════════════════════════════════════════════════
+   CANDIDATES — lab-local, not kit tokens.
+
+   Only the post's reading type is new here. Colours, shadows, radii and
+   every workspace height come from the kit (--kit-*, the promoted
+   Toolbar / DataList / Panel / KeyBar). When a value is picked it becomes
+   a kit token (DECISION.md says which) and this file goes with the lab.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* The post as prose. The kit's body is 14/20, set for chrome; a post is
+   read, so it gets the reading leading Marked up uses (14/24). Paragraph
+   gaps come from the parent's gap-kit-related, never from margins. */
+.dl-prose {
+  font-size: var(--text-kit-body);
+  line-height: 1.5rem;
+  letter-spacing: var(--text-kit-body--letter-spacing);
+  font-weight: var(--text-kit-body--font-weight);
+  color: var(--kit-ink);
+  text-wrap: pretty;
+}
+.dl-prose p {
+  margin: 0;
+}
+/* Behind the feed's cut: still yours to read, quieter than what shows. */
+.dl-prose.dl-behind {
+  color: var(--kit-ink-muted);
+}
+
+/* Desk reads one draft like a proof: 15/26 by default, on the panel. */
+[data-desk-type="15"] .dl-desk .dl-prose {
+  font-size: 0.9375rem;
+  line-height: 1.625rem;
+}
+[data-desk-type="16"] .dl-desk .dl-prose {
+  font-size: 1rem;
+  line-height: 1.75rem;
+}
+/* The idea over the post, one step up with it. */
+[data-desk-type="15"] .dl-desk article > h2:first-child,
+[data-desk-type="16"] .dl-desk article > h2:first-child {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}

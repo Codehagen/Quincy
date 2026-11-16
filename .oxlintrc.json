@@ -141,6 +141,8 @@
         "app/prototypes/ideas-lab/**",
         // Judges the workspace layouts for /ideas against the same picture.
         "app/prototypes/workspace-lab/**",
+        // The Drafts working-surface lab, judged against the same pictures.
+        "app/prototypes/drafts-lab/**",
         // Judges the app's personality against the landing's pictures, by import.
         "app/prototypes/personality-lab/**",
         "components/showcase/**"
