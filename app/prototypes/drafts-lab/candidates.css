@@ -396,8 +396,26 @@
   display: flex;
   flex-direction: column;
 }
+/* Behind the cut: the platform's secondary text colour, which passes contrast
+   (#536471 on white, #71767b on black), not a half-opacity ink, which did not. */
 .feed-behind {
-  opacity: 0.5;
+  color: var(--xf-dim, var(--lf-dim));
+}
+.lf .feed-behind {
+  color: var(--lf-dim);
+}
+/* On a phone the global floor sets every field to 16px (no zoom on focus),
+   so the read text matches it there, or E would make the post jump. */
+@media (max-width: 767px) {
+  .xf .feed-text,
+  .lf .feed-text {
+    font-size: 16px;
+    line-height: 21px;
+  }
+  .xf .feed-paras,
+  .lf .feed-paras {
+    gap: 21px;
+  }
 }
 .feed-fold {
   display: flex;
@@ -420,8 +438,10 @@
 .feed-field {
   display: block;
   width: 100%;
-  min-height: 60px;
   padding: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   border: 0;
   resize: none;
   background: transparent;
@@ -440,9 +460,48 @@
   outline: 2px solid var(--color-kit-focus);
   outline-offset: -2px;
 }
+/* The platform's chrome is a picture of itself here: nothing in it can be
+   pressed, selected or hovered, so it never steals a click or reads as a
+   control we did not build. */
+.xf-tabs,
+.xf-actions,
+.xf-more,
+.xf-avatar,
+.xf-skel,
+.lf-actions,
+.lf-avatar,
+.lf-skel {
+  pointer-events: none;
+  user-select: none;
+}
+/* The account line truncates the name and handle, never "now" or the dots. */
+.xf-head > * {
+  flex: none;
+}
+.xf-head > .xf-name,
+.xf-head > .xf-handle {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.lf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Optical: X's icons sit on the row's centre line, the last two as a pair at the end;
+   the "more" dots line up with the name's cap height, not its baseline. */
+.xf-actions svg,
+.lf-action svg {
+  display: block;
+  flex: none;
+}
+.xf-more {
+  margin-top: -2px;
+}
 @media (prefers-reduced-motion: reduce) {
   .xf *,
   .lf * {
     transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

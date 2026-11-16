@@ -53,7 +53,8 @@ export function useDraftKeys(
       j: () => move(1),
       k: () => move(-1),
       "/": () => searchRef.current?.focus(),
-      a: { once: true, run: () => (open && firstWriting ? store.approve(open, firstWriting.id) : undefined) },
+      // Not while a field is open: Approve would send the saved text and drop what was typed. Save first.
+      a: { once: true, run: () => (open && firstWriting && !store.editingId ? store.approve(open, firstWriting.id) : undefined) },
       e: { once: true, run: () => (firstWriting ? store.setEditing(firstWriting.id) : undefined) },
       p: preview ? { once: true, run: () => (open ? store.togglePreview(open) : undefined) } : undefined,
       u: () => {

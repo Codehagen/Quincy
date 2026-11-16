@@ -56,9 +56,10 @@ export function FeedPane({ row, store, isAction = true }: { row: Row; store: Dra
         <Head draft={d} />
         <Provenance draft={d} />
       </div>
-      {d.versions.map((v) => (
+      {d.versions.map((v, i) => (
         <VersionFeed
           key={v.id}
+          first={i === 0}
           draft={d}
           row={row}
           v={v}
@@ -82,11 +83,14 @@ function VersionFeed({
   approveIsAction,
   placeIsAction,
   postIsAction,
+  first,
 }: {
   draft: LabDraft
   row: Row
   v: LabVersion
   store: DraftsStore
+  /** The first channel version: the one the pane brings into view when the draft opens. */
+  first: boolean
   twin?: string
   approveIsAction: boolean
   placeIsAction: boolean
@@ -101,6 +105,14 @@ function VersionFeed({
   const going = goingOutOfVersion(v, store.session(v))
   const line = goingOutLine(going, v.label)
   const linkedin = v.channel === "linkedin"
+
+  // The open post in view: on opening a draft, and when E puts the caret in it.
+  const postRef = React.useRef<HTMLDivElement>(null)
+  // Each version would scroll the pane on open, and the last one would win and
+  // hide the first: only the first version reveals on open; E reveals its own.
+  React.useEffect(() => {
+    if (editing || first) revealInPane(postRef.current)
+  }, [row.id, editing, first])
 
   // Entering edit starts from the text as it stands; leaving it puts focus back on Edit.
   const editRef = React.useRef<HTMLButtonElement>(null)
@@ -139,7 +151,7 @@ function VersionFeed({
     <section aria-labelledby={titleId}>
       <span id={titleId} className="sr-only">{`Draft for ${v.label}`}</span>
       <div className="dl-room @container/kit-stage" data-channel={v.channel}>
-        <div className="flex flex-col gap-kit-related">
+        <div ref={postRef} className="flex flex-col gap-kit-related">
           {linkedin ? (
             <LinkedInFeed v={v} posts={shown} writing={writing} field={field} onStartEdit={startEdit} />
           ) : (
@@ -220,6 +232,25 @@ function VersionFeed({
       </div>
     </section>
   )
+}
+
+/**
+ * Scroll the pane (never the page) the least that shows the post and its
+ * verbs: past the strip and the skeleton above it, but no further. Taller
+ * than the pane, its top goes to the top. Instant, so reduced motion has
+ * nothing to reduce.
+ */
+function revealInPane(el: HTMLElement | null) {
+  const pane = el?.closest<HTMLElement>('[data-slot="kit-panel-body"]')
+  if (!el || !pane) return
+  const r = el.getBoundingClientRect()
+  const p = pane.getBoundingClientRect()
+  const pad = 16
+  if (r.bottom > p.bottom - pad) {
+    pane.scrollTop += Math.min(r.top - p.top - pad, r.bottom - p.bottom + pad)
+  } else if (r.top < p.top + pad) {
+    pane.scrollTop -= p.top + pad - r.top
+  }
 }
 
 function split(text: string) {
@@ -473,7 +504,7 @@ function FeedField({
   React.useEffect(() => {
     const el = ref.current
     if (!autoFocus || !el) return
-    el.focus()
+    el.focus({ preventScroll: true })
     el.setSelectionRange(el.value.length, el.value.length)
   }, [autoFocus])
   return <textarea ref={ref} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} className="feed-text feed-field" />
@@ -579,7 +610,11 @@ function FeedText({
       )
   }
   return (
-    <div className={`feed-text ${onStartEdit ? "cursor-text" : ""}`} onClick={onStartEdit}>
+    <div
+      className={`feed-text ${onStartEdit ? "cursor-text" : ""}`}
+      // Only a click on the words opens the field: not one on a bracket, a note or the gap between paragraphs.
+      onClick={onStartEdit ? (e) => ((e.target as HTMLElement).closest("p") ? onStartEdit() : undefined) : undefined}
+    >
       {body}
     </div>
   )

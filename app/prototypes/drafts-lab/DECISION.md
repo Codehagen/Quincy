@@ -152,6 +152,51 @@ keeps Table's left side as picked and replaces only the right pane. Round 1
 - **390:** Lineup, the column at full width, the marks under their lines.
 - Rounds 1 and 2 (A and B) stay in the lab until /drafts moves.
 
+- **Owner, 2026-11-16: "Bra med feed".** Then a polish pass and a UI
+  review on C · Feed. The values they settled:
+  - **No jump on E.** The field is the post's text: the same font, size,
+    line height, 2px top and pre-wrap wrapping, with no minimum height, so
+    a one-line post does not grow. Measured: the text top and height are
+    the same before and after E. On a phone the global 16px field floor
+    applies, so the read text is 16/21 under 768px too.
+  - **Behind the cut** is the platform's secondary colour (X #536471 /
+    #71767b, LinkedIn's 60% ink), not 50% opacity, which fell under 4.5:1.
+  - **The platform chrome is inert**: tabs, action rows, the "more" dots,
+    avatars and the skeleton posts take no pointer and no selection.
+  - **Truncation:** the name and handle shrink with an ellipsis; "now" and
+    the dots never do. LinkedIn's name truncates on one line.
+  - **Optical:** action icons are block-level on the row's centre line, the
+    last two as a pair at the end; the dots sit 2px up, on the name's cap
+    height. The brackets span their paragraph's own lines (20px leading) and
+    stand 10px past the column's outer edge (the text's 16 + the hairline,
+    as `--kit-card-pad: 17px`).
+  - **Scroll:** opening a draft scrolls the pane, never the page, the least
+    that shows the first version's post and its verbs. E does the same for
+    the version being edited. The field focuses with `preventScroll` and
+    puts the caret at the end. Scrolling is instant, so reduced motion has
+    nothing to reduce.
+  - **Safe areas at 390:** the foot hides on touch, so the Lineup list pads
+    itself by the home indicator and the side insets.
+  - **Hit areas:** every control in the pane is a kit Button or HoldButton
+    (44px on a coarse pointer). The post's words are the edit target, and
+    only the words: a click on a bracket, a note or a gap does nothing.
+  - **Counter:** mono 11 tabular, while editing only.
+- **The UI review's findings, all fixed:**
+  1. A, pressed while a field was open, approved the saved text and
+     dropped the typed words. A now does nothing while editing; Save comes
+     first.
+  2. On a phone the field went to 16px (the global no-zoom floor) under
+     15px read text, so E made the post jump. The read text is now 16/21
+     under 768px.
+  3. The text behind the cut was 50% opacity ink, about 3.4:1. It is now
+     the platform's secondary colour.
+  4. Every channel version scrolled the pane on open, and the last one
+     (LinkedIn) won, which hid the X post. Only the first version reveals on
+     open; E reveals the one being edited.
+  5. A click on a bracket or a margin note opened the field, because the
+     marks sit inside the clickable words. Only a click on a line of text
+     opens it now.
+
 Proposed with the pick: **14. The feed rendering** of a draft (X and
 LinkedIn), read-only around an editable body, with the account's real name,
 handle and headline from the connected channel (the lab uses fixture

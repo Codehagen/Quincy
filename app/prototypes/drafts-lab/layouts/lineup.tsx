@@ -100,7 +100,11 @@ export function LineupSurface({
             </PanelBody>
           ) : (
             <PanelBody>
-              <div onKeyDown={onListKey} className="mx-auto flex w-full max-w-[60rem] flex-col gap-kit-related px-2 py-kit-related @[40rem]/kit-workspace:px-kit-group">
+              {/* On a phone the foot (keys) is hidden, so the list itself clears the home indicator and the side insets. */}
+            <div
+              onKeyDown={onListKey}
+              className="mx-auto flex w-full max-w-[60rem] flex-col gap-kit-related ps-[max(0.5rem,env(safe-area-inset-left))] pe-[max(0.5rem,env(safe-area-inset-right))] pt-kit-related pb-[calc(var(--spacing-kit-related)+env(safe-area-inset-bottom))] @[40rem]/kit-workspace:px-kit-group"
+            >
                 {store.phase === "loading" ? (
                   <div role="status" aria-label="Loading drafts" className="flex flex-col gap-3 px-3 pt-kit-related">
                     {Array.from({ length: 8 }, (_, i) => (
