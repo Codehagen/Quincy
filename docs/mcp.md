@@ -267,7 +267,7 @@ Per AGENTS.md, "Money": every path that spends gets a ceiling.
 | Requests per minute, per account | 60 | In process, `lib/mcp.ts` |
 | Drafts per day, per account | 20 | `usage_event`, trailing 24 hours |
 | Spend per day, per account | `CHAT_DAILY_CEILING_MICROS` | `ceilingVerdict`, the same call `/api/chat` makes |
-| One capture or draft at a time | 15s cooldown | `ADAPT_SPEND`, shared with the `/riffs` buttons |
+| One capture or draft at a time | 15s cooldown | `ADAPT_SPEND`, shared with the `/ideas` buttons |
 | Registered agents, per account | 20 | `atAgentLimit`, counted on `oauth_client` |
 
 The day's spend is the chat's ceiling, not a second one: the route reads
@@ -276,7 +276,7 @@ The day's spend is the chat's ceiling, not a second one: the route reads
 route because a wallet does not care which surface emptied it.
 
 The cooldown is the same fifteen seconds and the same `usage_event` tag the
-three adapt buttons on `/riffs` hold, and `draft_angle` both reads it and
+three adapt buttons on `/ideas` hold, and `draft_angle` both reads it and
 writes it. A cooldown that only read it would see the other buttons' rows and
 let two drafts through back to back.
 
@@ -391,13 +391,13 @@ but that is the only thing that works without the tables.
 ## How the writes reach the same code the app uses
 
 `capture_riff` and `draft_angle` call `captureToRiffFor` and `draftAngleFor` in
-`lib/riff-writes.ts` — the same two functions the `/riffs` server actions call,
+`lib/riff-writes.ts` — the same two functions the `/ideas` server actions call,
 and the same ones the Studio chat calls. They own the entitlement check, the
 cooldown, the ownership proof on the angle id, the idempotency guard and the
 metering, and a second copy of any of that is the copy that goes wrong.
 
 They take a **user id** as their first argument. That is what lets one write
-path serve three callers that authenticate differently: the `/riffs` action
+path serve three callers that authenticate differently: the `/ideas` action
 resolves a cookie session and passes `session.user.id`, `/api/chat` does the
 same, and `/api/mcp` verifies a bearer token against the JWKS and passes the id
 from the row it read. Nothing on the MCP path resolves a session at all.

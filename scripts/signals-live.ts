@@ -170,7 +170,7 @@ async function select() {
 
   console.log(
     "Nothing was written. In a real run each of these would be read in full\n" +
-      "— the discussion or the README — and turned into a riff on /riffs."
+      "— the discussion or the README — and turned into a riff on /ideas."
   )
 }
 

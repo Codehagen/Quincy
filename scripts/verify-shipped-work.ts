@@ -128,7 +128,7 @@ function shippedPayload(nodeId: string, overrides: Record<string, unknown> = {})
       number: 23,
       title: "Say it out loud and come back to angles",
       body: [
-        "Voice notes become riffs. `/riffs` has listed \"Voice notes — what you said out loud\" since before anything could produce one.",
+        "Voice notes become riffs. `/ideas` has listed \"Voice notes — what you said out loud\" since before anything could produce one.",
         "The first background job in the product that is not a cron. A cron is the wrong shape for a voice note twice over: it fires on a clock rather than on a person pressing stop, and it has no per-run state, so a card would have nothing to read while the work was in flight.",
         "`after()` was the cheaper option and does not survive the comparison. It is not durable — a crashed function loses the work with no retry and no row that knows it was running — and the pipeline here is two failure-prone external calls back to back, with nobody watching.",
         "Measured from the live run: 128 characters of transcript for 8.1 seconds of Norwegian, so about 16 characters a second. At the old 6,000 ceiling that silently discarded 37% of what somebody said.",
@@ -713,7 +713,7 @@ async function main() {
          * silence.
          *
          * Every assertion above this one passed on 2026-08-21 against a real
-         * install, and /sources still said "the riff will be on /riffs in a
+         * install, and /sources still said "the riff will be on /ideas in a
          * moment" forever — because the verdict existed only as a line in
          * Vercel's log, which is not a place a product can speak from. No riff
          * is right. No *answer* was the bug.

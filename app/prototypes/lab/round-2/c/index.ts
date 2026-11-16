@@ -11,7 +11,7 @@ export const pieces: Piece[] = [
   {
     n: 31,
     title: "Riffs, recorder first",
-    take: "Kept 17's record pill and its caused motion, and put it at the top of the real /riffs queue: stopping a take slides the new riff in at the head and counts the waiting number up.",
+    take: "Kept 17's record pill and its caused motion, and put it at the top of the real /ideas queue: stopping a take slides the new riff in at the head and counts the waiting number up.",
     Component: RiffsRecorder,
   },
   {

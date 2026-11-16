@@ -4,7 +4,7 @@
  *   npx tsx --env-file=.env.local scripts/verify-angle-shapes.ts
  *   npx tsx --env-file=.env.local scripts/verify-angle-shapes.ts --rounds 2
  *
- * /riffs showed "Short post · One idea, no setup · Goes to X and LinkedIn"
+ * /ideas showed "Short post · One idea, no setup · Goes to X and LinkedIn"
  * under nearly every angle, and the copy is static — so the sameness was the
  * shape, not the sentence. 16 of 23 angles in production on 2026-08-09 were
  * `Short post`, `Carousel` had never once been chosen, and the rule said
@@ -175,7 +175,7 @@ async function main() {
       .orderBy(desc(riff.createdAt))
       .limit(5)
   )
-    // The riff whose scrap is a paste of the /riffs screen itself. Real, and
+    // The riff whose scrap is a paste of the /ideas screen itself. Real, and
     // useless here: its "material" is the UI copy this script is about.
     .filter((r) => !r.scrap.startsWith("Quincy found"))
 

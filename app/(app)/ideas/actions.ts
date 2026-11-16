@@ -268,7 +268,7 @@ export async function askForChannelAngle(input: {
     position: owned.angles.length,
   })
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
 
   return { ok: true, found: true, angleId: id, hook: angle.hook }
 }
@@ -279,10 +279,10 @@ export async function askForChannelAngle(input: {
  * The free-text twin of `askForChannelAngle`, and the other half of a control
  * the product decided on and never finished. `Steer` in
  * components/riffs/riff-parts.tsx has rendered a labelled field and an Ask
- * button since /riffs shipped, with `onSubmit={(e) => e.preventDefault()}` as
+ * button since /ideas shipped, with `onSubmit={(e) => e.preventDefault()}` as
  * the entire handler — `name="steer"` appeared exactly once in the codebase
  * and nothing read it. `app/(app)/drafts/page.tsx` states the rule the form
- * was drawn for: steering belongs upstream on /riffs, because Riffs is where
+ * was drawn for: steering belongs upstream on /ideas, because Riffs is where
  * you judge and Drafts is where you write.
  *
  * Why it is worth the model call, when a riff already comes with several
@@ -309,7 +309,7 @@ export type AskAngleResult =
 
 /** Long enough to be a direction, short enough that nobody is drafting in it.
  *  The field is one line and this is the sentence it can hold; anything past
- *  it is somebody using the steer as an editor, which is the thing /riffs
+ *  it is somebody using the steer as an editor, which is the thing /ideas
  *  exists to keep out. */
 const MAX_STEER_CHARS = 280
 
@@ -440,7 +440,7 @@ export async function askForAngle(input: {
     position: owned.angles.length,
   })
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
 
   return { ok: true, found: true, angleId: id, hook: angle.hook }
 }
@@ -549,7 +549,7 @@ export async function adaptPostToRiff(input: {
     return { ok: false, message: result.message }
   }
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
 
   return {
     ok: true,
@@ -564,7 +564,7 @@ export async function adaptPostToRiff(input: {
  * Discarding, which is the other half of judging.
  *
  * **Both of these shipped as dead buttons.** The card has carried a "Discard"
- * on every angle and a "Nothing here" under the riff since /riffs was built,
+ * on every angle and a "Nothing here" under the riff since /ideas was built,
  * and neither had a click handler or an action behind it — the exact thing
  * /channels and /sources exist not to ship. A triage surface where you can only
  * say yes is not a triage surface; it is a queue that grows.
@@ -598,12 +598,12 @@ export async function discardAngle(input: {
     // Already gone is the outcome the press was asking for. Saying "no such
     // angle" to somebody who double-pressed would report a failure that is
     // indistinguishable from success.
-    revalidatePath("/riffs")
+    revalidatePath("/ideas")
     return { ok: true }
   }
 
   await db.delete(riffAngle).where(eq(riffAngle.id, input.angleId))
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
   return { ok: true }
 }
 
@@ -629,6 +629,6 @@ export async function archiveRiff(input: {
     return { ok: false, message: "No such riff." }
   }
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
   return { ok: true }
 }

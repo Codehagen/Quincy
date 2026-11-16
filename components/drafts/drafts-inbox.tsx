@@ -432,7 +432,7 @@ export function DraftsInbox({
             bold="Nothing written yet."
             rest="Drafts start in Ideas. Pick one worth writing and I'll write a version for each channel you post to."
           >
-            <ButtonLink href="/riffs" variant="action">
+            <ButtonLink href="/ideas" variant="action">
               Go to Ideas
             </ButtonLink>
           </EmptyState>

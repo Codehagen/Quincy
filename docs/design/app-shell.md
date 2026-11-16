@@ -98,8 +98,8 @@ setup pages in the account menu, the conversation history in Studio.
   resolves it with the URL parser and refuses anything off-origin.
 - **Skip link first.** "Skip to the page" is the first Tab stop and moves
   focus into `<main>`.
-- **Labels follow plans/029 "Words"**: the row is **Ideas**, the route stays
-  `/riffs` until the rename. No Cuts row until `/cuts` is finished.
+- **Labels follow plans/029 "Words"**: the row is **Ideas** and the route is
+  `/ideas` (it was `/riffs`, which redirects). No Cuts row until `/cuts` is finished.
 - **Rows only go places.** Deleting a conversation is a HoldButton on the
   thread, never a row in the sidebar or the history menu (removing.md).
 

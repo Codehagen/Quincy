@@ -198,7 +198,7 @@ export function GithubSourceRow({
       if (isSettled(outcome)) {
         setSaid(sayOutcome(outcome))
         setAwaiting(null)
-        // An idea may now exist, and /riffs is one click away: its cache
+        // An idea may now exist, and /ideas is one click away: its cache
         // should not be a step behind.
         router.refresh()
         return

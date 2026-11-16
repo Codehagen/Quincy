@@ -99,7 +99,7 @@ export async function sendWelcomeEmail({
       `3. Set the cadence: ${APP_URL}/rhythm`,
       "   It briefs you before the noise and recaps performance after.",
       "",
-      `4. Work a half-thought: ${APP_URL}/riffs`,
+      `4. Work a half-thought: ${APP_URL}/ideas`,
       "   Scraps in, several directions out, before anything reaches Drafts.",
       "",
       `5. Or just talk to it: ${APP_URL}/studio`,

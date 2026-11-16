@@ -32,7 +32,14 @@ type StageProps = Omit<
   children: React.ReactNode
 }
 
-const STACK =
+/**
+ * How a Stage stacks its objects: 14 apart, left-aligned, and an Arrive (an
+ * UndoBar) that takes its gap inside its own clip. Exported for a column
+ * inside a Stage that stacks the same way (the list column of a wide list
+ * and detail, docs/design/page.md), so the fold of a closed UndoBar is the
+ * Stage's own and not a copy of it.
+ */
+export const STAGE_STACK =
   "flex flex-col items-start gap-kit-stack [&>[data-slot=kit-arrive]]:self-stretch " +
   "[&>*+[data-slot=kit-arrive]]:mt-[calc(-1*var(--spacing-kit-stack))] " +
   "[&>*+[data-slot=kit-arrive]>div>[data-slot=kit-arrive-body]]:pt-kit-stack"
@@ -96,7 +103,7 @@ export function Stage({
             from the flex gap, so a closed one (an UndoBar waiting, a
             dismissed detail) leaves no 14px behind, and the gap folds with
             the motion. */}
-        <div className={STACK}>
+        <div className={STAGE_STACK}>
           {children}
         </div>
       </div>

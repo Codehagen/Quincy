@@ -19,7 +19,7 @@ import { constructMetadata } from "@/lib/metadata"
  * read. The count on the rail is a fraction for the same reason.
  *
  * **The page has no editing beyond the text.** No reordering, no adding a
- * channel, no rewrite prompt. Steering belongs upstream on /riffs where the
+ * channel, no rewrite prompt. Steering belongs upstream on /ideas where the
  * decision is still open; by the time a piece is written, the question is whether
  * these words go out, and a page that asks two questions answers neither.
  *
@@ -33,7 +33,7 @@ import { constructMetadata } from "@/lib/metadata"
  * **The paste box is not here, and that was a mistake worth recording.** It
  * shipped on this page in plans/016 — a control that creates a draft, on the page
  * whose own rule two paragraphs up is that it asks one question. plans/017 moved
- * it to /riffs, where the decision it needs is still open. Everything that
+ * it to /ideas, where the decision it needs is still open. Everything that
  * arrives here has already been decided on; this page only asks whether the words
  * go out.
  */

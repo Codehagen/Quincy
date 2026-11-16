@@ -20,7 +20,7 @@ import { DRAFTING_REASONING } from "./model-options"
  * produces every channel version at once (docs/vision.md's "adapt per
  * channel, never cross-post" is a rule about the output, not about how many
  * requests produce it), and every version is a single post: this plan does
- * not add a threaded or multi-part body format. See `app/(app)/riffs/actions.ts`
+ * not add a threaded or multi-part body format. See `app/(app)/ideas/actions.ts`
  * for the orchestration — entitlement, idempotency, fallback and metering all
  * live there, the same split `lib/voice.ts` and `app/(app)/sources/actions.ts`
  * already draw.
@@ -185,7 +185,7 @@ export function targetsFor(
 /**
  * How many drafts "Draft this" will actually write, per shape.
  *
- * /riffs states this on every angle, and the number has to be the one that
+ * /ideas states this on every angle, and the number has to be the one that
  * happens rather than the one the shape table implies. `CHANNELS_FOR_SHAPE`
  * says a short post reaches X and LinkedIn; whether *this* account gets two
  * posts, one, or a refusal depends on what it has connected. So this is
@@ -568,11 +568,11 @@ function buildSchema(targets: DraftTarget[]) {
 /**
  * The default generator. Exported (rather than kept private the way
  * `lib/voice.ts`'s `modelExtractor` is) because the orchestration that would
- * otherwise wrap it lives in `app/(app)/riffs/actions.ts`, not in this file —
+ * otherwise wrap it lives in `app/(app)/ideas/actions.ts`, not in this file —
  * there is no `compileVoice`-shaped function here to hide it behind.
  *
  * It carries the two defences from lib/structured-output.ts, added after this
- * call site took /riffs down in production on 2026-08-08.
+ * call site took /riffs (now /ideas) down in production on 2026-08-08.
  *
  * `buildSchema` above already documents the Gateway mangling that puts a
  * string where `versions` belongs, and banning `minItems`/`maxItems` removed
@@ -662,7 +662,7 @@ export const generateDraft: DraftGenerator = async (input) => {
  * tried first: the gateway held the JSON until it was valid, so the UI
  * saw a skeleton and then the whole body at once.
  *
- * /riffs still uses `generateDraft`. A page load has nowhere to put a token.
+ * /ideas still uses `generateDraft`. A page load has nowhere to put a token.
  */
 export async function* streamDraft(
   input: Parameters<DraftGenerator>[0]

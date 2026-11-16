@@ -8,7 +8,7 @@ import { isSettled, sayOutcome } from "./shipped-outcome"
  * Worth its own file because the bug this module was written for was not a
  * crash — every path succeeded, and the page said the wrong thing. A GitHub
  * connection read a real merge, the model declined it, and the row went on
- * showing "the riff will be on /riffs in a moment" forever. So what is asserted
+ * showing "the riff will be on /ideas in a moment" forever. So what is asserted
  * here is mostly *which* sentence, and one thing about timing: whether the
  * poller is allowed to stop.
  */
@@ -22,7 +22,7 @@ describe("isSettled", () => {
     /**
      * The one that is easy to get wrong. A riff in `working` is still being
      * written, but "there was a post in it" is already settled and the card is
-     * already on /riffs — waiting out the angle generation would leave somebody
+     * already on /ideas — waiting out the angle generation would leave somebody
      * staring at a spinner for a fact that was true twenty seconds ago.
      */
     expect(isSettled({ state: "writing", riffId: "rif_gh_si-1" })).toBe(true)
@@ -83,7 +83,7 @@ describe("sayOutcome", () => {
   it("never names the route or the word riff to a person", () => {
     for (const state of ["ready", "writing"] as const) {
       const said = sayOutcome({ state, riffId: "rif_gh_si-1" })
-      expect(said).not.toContain("/riffs")
+      expect(said).not.toContain("/ideas")
       expect(said.toLowerCase()).not.toContain("riff")
     }
   })

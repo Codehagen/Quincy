@@ -15,7 +15,7 @@ import { runVoiceRiffWorkflow } from "@/workflows/run-voice-riff"
 /**
  * A recording lands; a riff starts working. See plans/018.
  *
- * **A route rather than a server action**, unlike everything else on /riffs.
+ * **A route rather than a server action**, unlike everything else on /ideas.
  * A server action serialises its arguments as JSON, so a megabyte of audio
  * would travel base64-encoded — a third larger, and built into a string in
  * memory on both ends. A route takes the blob as a body.

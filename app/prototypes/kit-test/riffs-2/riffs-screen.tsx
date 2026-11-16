@@ -391,7 +391,7 @@ export function RiffsScreen({ initialRiffs }: { initialRiffs: Riff[] }) {
                 </Arrive>
               ))}
               {overflow > 0 ? (
-                <NavRow href="/riffs" count={visible.length}>
+                <NavRow href="/ideas" count={visible.length}>
                   All riffs
                 </NavRow>
               ) : null}

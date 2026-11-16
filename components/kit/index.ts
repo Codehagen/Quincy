@@ -4,7 +4,7 @@
  */
 export { KitRoot } from "./root"
 export { KitPage, type KitPageProps } from "./page"
-export { Stage, type StageBackdrop } from "./stage"
+export { Stage, STAGE_STACK, type StageBackdrop } from "./stage"
 export { Card, type CardProps, type CardWidth, type Crop } from "./card"
 export { List, ListHeading, type ListProps, type ListHeadingProps } from "./list"
 export { Window } from "./window"

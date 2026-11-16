@@ -170,14 +170,14 @@ export function Wiring({
   /**
    * First run ends with a draft that exists, not with a promise of one.
    *
-   * The button used to set `onboardedAt` and push to /riffs, which handed
+   * The button used to set `onboardedAt` and push to /ideas, which handed
    * somebody a list of angles and asked them to start working. Everything
    * before it on this screen — the read, the portrait, the suggestions — is
    * Quincy demonstrating that it understands you, and then the last thing it
    * did was give you homework.
    *
    * So it writes first and leaves second. `draftAngle` is the same action
-   * /riffs uses, unchanged: it carries the entitlement gate, it reads the hook
+   * /ideas uses, unchanged: it carries the entitlement gate, it reads the hook
    * from the row rather than trusting the client, and it is idempotent on the
    * hook — a second press after a slow response returns the existing draft
    * instead of paying twice.
@@ -216,9 +216,9 @@ export function Wiring({
       }
 
       // No angles — the model call behind question four failed, and there is
-      // nothing to write. Ideas (/riffs) is where the material still is.
+      // nothing to write. Ideas (/ideas) is where the material still is.
       await actions.finishFirstRun()
-      router.push("/riffs")
+      router.push("/ideas")
     } catch {
       setRefusal("That did not reach Quincy. Try again.")
       setLeaving(null)

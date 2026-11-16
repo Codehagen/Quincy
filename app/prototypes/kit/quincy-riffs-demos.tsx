@@ -391,7 +391,7 @@ export function EmptyStartersDemo() {
 export function EmptyLinkDemo() {
   return (
     <EmptyState bold="Nothing is waiting on you." rest="Say a half-thought on the walk and I'll find the ideas in it.">
-      <ButtonLink href="/riffs">Record a thought</ButtonLink>
+      <ButtonLink href="/ideas">Record a thought</ButtonLink>
     </EmptyState>
   )
 }

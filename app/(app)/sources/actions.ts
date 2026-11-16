@@ -427,7 +427,7 @@ export async function disconnectGithub(): Promise<
  * The ceilings, in order of what they protect:
  *
  * - **One pull request.** `findLastMergedPull` returns the newest merge and
- *   stops. A history import would spend a model call per merge and bury /riffs.
+ *   stops. A history import would spend a model call per merge and bury /ideas.
  * - **`onConflictDoNothing` on the node id.** A merge already read — by a press
  *   or by the webhook — produces no second riff and no second bill.
  * - **A ten-minute cooldown.** A human can press this, and a claim is not a
@@ -441,7 +441,7 @@ export type BackfillResult =
    * `started: true` used to be the end of the conversation, and it was the one
    * answer of the three that could not be trusted: the workflow decides whether
    * there is a post in a merge *after* this returns, and most merges are not
-   * posts. So the row said "the riff will be on /riffs in a moment", the
+   * posts. So the row said "the riff will be on /ideas in a moment", the
    * selection said no a few seconds later, and nothing on screen ever heard
    * about it. Started is a beginning, and this is how the end gets read.
    */
@@ -539,7 +539,7 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
   if (!stored.stored) {
     /**
      * Already read, and this is where the old message was a guess. It said the
-     * riff was in /riffs; the likeliest truth is that the selection found no
+     * riff was in /ideas; the likeliest truth is that the selection found no
      * post in this merge and no riff was ever created. Ask the row.
      */
     const outcome = stored.sourceItemId
@@ -649,7 +649,7 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
     }
   }
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
   revalidatePath("/sources")
   return { ok: true, started: true, sourceItemId: stored.sourceItemId }
 }
@@ -852,7 +852,7 @@ export async function answerMergeQuestion(
     }
   }
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
   revalidatePath("/sources")
 
   return { ok: true }

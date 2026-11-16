@@ -29,7 +29,7 @@ import { voiceExamples } from "./voice"
 /**
  * An angle becomes a draft — the whole of it except who is allowed to ask.
  *
- * Lifted out of `app/(app)/riffs/actions.ts` unchanged, for the reason
+ * Lifted out of `app/(app)/ideas/actions.ts` unchanged, for the reason
  * lib/adapt-draft.ts was lifted out of the same file: it now has **two**
  * callers that disagree about exactly the things a server action owns. The
  * page has a session, revalidates two paths and resolves entitlement with
@@ -90,7 +90,7 @@ export type AngleDraftDeps = { generate?: DraftGenerator }
  * **A private repository's description reaches the writer, and that is the
  * intended behaviour rather than an oversight.** The selection rules refuse to
  * *return* anything a private repository would not want disclosed; this is one
- * step further on, and what it produces is a draft on the user's own /riffs
+ * step further on, and what it produces is a draft on the user's own /ideas
  * page. Nothing in Quincy publishes without them pressing Approve — the whole
  * product rests on that, per docs/vision.md — so the question is not "may the
  * model see this" but "may this reach a channel", and the answer to the second
@@ -247,7 +247,7 @@ export type DraftAngleResult =
        * somebody whose trial just ended.
        *
        * `cooldown` is in the union and, like `auth`, is never returned from
-       * here. It belongs to the caller that holds a session — the `/riffs`
+       * here. It belongs to the caller that holds a session — the `/ideas`
        * server action — and it is named here so the two share one result type
        * rather than the action widening it at its own call site.
        */
@@ -287,7 +287,7 @@ export async function draftFromAngle({
    *
    * Absent by default, and that is right for the two rhythm handlers: a draft
    * written by a cron at 07:00 must not hold a cooldown against the person
-   * asleep beside it. The `/riffs` server action passes `ADAPT_SPEND`, because
+   * asleep beside it. The `/ideas` server action passes `ADAPT_SPEND`, because
    * a cooldown that is read and never written is not a cooldown — the check
    * would only ever see the *other* buttons' rows and two presses of this one
    * would both pass.
@@ -362,7 +362,7 @@ export async function draftFromAngle({
       channels: existingVersions.map((v) => v.channel),
       // Nothing was written *by this call*, which is what the field reports.
       // Whether the draft already sitting there was written or fell back is a
-      // question about that draft, and /riffs answers it from the bodies —
+      // question about that draft, and /ideas answers it from the bodies —
       // see `status`/`fellBack` in lib/riffs.ts. `existing` is what the UI
       // branches on first, so these two never have to be read together.
       written: false,
@@ -626,7 +626,7 @@ export async function draftFromAngle({
      *
      * `generateDraft` is injectable, and the type is what the *default*
      * generator now promises rather than what this line receives. This is the
-     * assignment that took /riffs down on 2026-08-08: a mangled result made
+     * assignment that took /riffs (now /ideas) down on 2026-08-08: a mangled result made
      * `versions` a string, which reaches `versions.map` below — two statements
      * past the end of this try — and throws there, uncaught, as a 500 over the
      * whole route. Inside the try it becomes the empty-versions case, which is
@@ -693,7 +693,7 @@ export async function draftFromAngle({
     id,
     userId: userId,
     idea: angle.hook,
-    // The provenance that makes the angle read as drafted next time /riffs
+    // The provenance that makes the angle read as drafted next time /ideas
     // loads, and the idempotency key above. Not decoration — it is the only
     // record that the two are related.
     riffHook: angle.hook,

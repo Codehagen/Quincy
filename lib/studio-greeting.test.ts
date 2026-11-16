@@ -19,7 +19,7 @@ const waitingRiff = (
   waitedDays: 14,
   beats: true,
   openAngles: 3,
-  href: "/riffs",
+  href: "/ideas",
   ...over,
 })
 
@@ -195,8 +195,8 @@ describe("composeStudioGreeting", () => {
     })
 
     expect(greeting.link).toEqual({
-      href: "/riffs",
-      label: "Open it on /riffs",
+      href: "/ideas",
+      label: "Open it on /ideas",
     })
     expect(greeting.chips[0]).toBe("Draft the pull request from 26 Aug")
   })

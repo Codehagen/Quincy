@@ -108,6 +108,6 @@ export const FIXTURE_GREETING: StudioGreeting = {
     "The pull request I read yesterday has a post in it: “Cut onboarding from nine screens to three”. The second idea has a number.",
   ],
   chips: ["Draft the second idea", "Show me all three"],
-  link: { href: "/riffs", label: "Open Ideas" },
+  link: { href: "/ideas", label: "Open Ideas" },
   typed: false,
 }

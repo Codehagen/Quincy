@@ -103,7 +103,7 @@ export default function OneIdeaThreeHooks() {
               className="mx-auto"
               style={{ fontFamily: mono, fontSize: tx(10.5), color: faint }}
             >
-              hirequincy.com/riffs/nine-screens
+              hirequincy.com/ideas/nine-screens
             </span>
           </div>
 

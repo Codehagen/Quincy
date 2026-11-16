@@ -488,7 +488,7 @@ describe("the adapt family's cooldown", () => {
     // is where the session is read, not where the money is spent — so the count
     // is across both files.
     const [actions, writes] = await Promise.all([
-      readFile(new URL("../app/(app)/riffs/actions.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/(app)/ideas/actions.ts", import.meta.url), "utf8"),
       readFile(new URL("./riff-writes.ts", import.meta.url), "utf8"),
     ])
 

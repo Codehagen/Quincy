@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Riff } from "./riffs"
 
 /**
- * The channel-gap logic, which decides when /riffs offers to spend money.
+ * The channel-gap logic, which decides when /ideas offers to spend money.
  *
  * Pure, and tested here rather than left to the page, because every branch is a
  * judgment call with a cost attached: a false gap buys a model call for an

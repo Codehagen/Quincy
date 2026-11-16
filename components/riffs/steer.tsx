@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { askForAngle } from "@/app/(app)/riffs/actions"
+import { askForAngle } from "@/app/(app)/ideas/actions"
 import { Button, Disclosure, Field, Input, LiveDot, Text } from "@/components/kit"
 
 type Outcome =

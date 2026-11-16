@@ -8,7 +8,8 @@ import { IdeasScreen } from "@/components/riffs/ideas-screen"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
- * Work the raw material. Shown as **Ideas**; the route and the code keep
+ * Work the raw material. Shown as **Ideas**, at /ideas since 2026-11-16 (it was
+ * /riffs, which next.config.ts redirects); the code and the tables keep
  * `riff` until a rename is planned (plans/029).
  *
  * The step between Sources and Drafts: a scrap comes in, Quincy finds ideas
@@ -35,7 +36,7 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function RiffsPage() {
+export default async function IdeasPage() {
   // The layout is the gate (app/(app)/layout.tsx): it redirects to /login
   // and keeps the query (?idea=…); a redirect here dropped it.
   const session = await getSession()

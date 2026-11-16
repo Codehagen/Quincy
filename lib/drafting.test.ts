@@ -108,7 +108,7 @@ describe("targetsFor", () => {
 })
 
 /**
- * The number /riffs puts on every angle. It has to be `targetsFor` counted and
+ * The number /ideas puts on every angle. It has to be `targetsFor` counted and
  * nothing else — a second reading of `CHANNELS_FOR_SHAPE` would put a promise
  * on screen that the action then refuses, which is the 2026-08-08 Substack bug
  * with a user watching.

@@ -1,5 +1,5 @@
 /**
- * Prototype fixtures for /riffs, round three.
+ * Prototype fixtures for /ideas, round three.
  *
  * Round two ran on fourteen riffs to prove a point about scroll length, and the
  * point was won: Desk shipped. This round is asking two different questions —

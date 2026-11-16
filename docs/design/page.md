@@ -18,9 +18,10 @@ Props: `title` (string, the page's one `h1`, rendered at `text-kit-title`),
 baseline, may hold a `Count`), `actions` (at most two controls at the
 header's end: a quiet Button or ButtonLink, an IconButton, a Menu; never the
 ink action, which belongs to the object it acts on), `children` (the
-Stages).
+Stages), `width` (`page`, the default, or `wide`; below).
 
-It sets: width `max-w-kit-page` (720), side gutter `kit-page-gutter` (16 on a
+It sets: width `max-w-kit-page` (720, or `max-w-kit-wide` 1280 with
+`width="wide"`), side gutter `kit-page-gutter` (16 on a
 phone, 32 from 40rem), `kit-page-top` 64, `kit-page-bottom` 96,
 `kit-page-gap` 56 between the title and each Stage, and the landing's object
 padding (28 × 24) on every Card from 40rem.
@@ -87,12 +88,34 @@ export default function Page({ searchParams }: Props) {
 }
 ```
 
-The props are typed by hand on purpose. Next's global `PageProps<"/riffs">`
+The props are typed by hand on purpose. Next's global `PageProps<"/ideas">`
 is the same type, but it exists only after route types are generated
 (`next dev`, `next build` or `next typegen` write `.next/types`), and
 `pnpm typecheck` is plain `tsc`: on a fresh clone, or for a route added since
 the last dev run, `PageProps` fails to typecheck. Use it only in a route
 where you have run `pnpm next typegen`.
+
+### Width
+
+```
+Which width?
+ ├── Default, every page                                   → width="page" (720)
+ └── List and detail that should use a wide screen (Ideas) → width="wide" (1280)
+```
+
+`wide` raises the column's cap to `--container-kit-wide` (80rem) and
+changes nothing else: gutter, top, floor and gaps are the same. It is for
+list and detail only (below, "Wide"). A page of prose, a form, or single
+objects stays `page`: on a wide column every Stage is as wide as the page,
+and a line of prose that long is not read.
+
+```tsx
+// Correct — the screen lays its list and detail side by side when the stage allows
+<KitPage title="Ideas" summary={summary} width="wide">…</KitPage>
+
+// Incorrect — a wide page with nothing to put beside anything: a 1216px Card of prose
+<KitPage title="Settings" width="wide">…</KitPage>
+```
 
 ## List and detail
 
@@ -101,9 +124,11 @@ A list of things and the one that is open (Ideas, Drafts).
 ```
 Where does the open item go?
  ├── Default → the SAME Stage: list Card, then the detail Card stacked under it
+ ├── On a width="wide" page, on a stage ≥ --container-kit-split (66rem)
+ │   → the same Stage, the list in a left column, the detail beside it ("Wide")
  ├── Does the detail need its own lead (a different kind of object, such as a
  │   draft opened from a riff)? → its own Stage, directly after the list's
- └── Never beside the list. Side by side is a split stage
+ └── Otherwise never beside the list. Two unrelated objects side by side is a split stage
 ```
 
 - **Same width.** Both Cards take the same `width`. If the detail carries a
@@ -140,3 +165,58 @@ const detailRef = useRevealOnNarrow<HTMLDivElement>(open?.id)
 // Incorrect — a hand-measured stage width and a hand-rolled scroll flag
 useEffect(() => { if (stage.getBoundingClientRect().width < 512) card.scrollIntoView() }, [openId])
 ```
+
+### Wide
+
+On a `width="wide"` page, list and detail stand side by side once the Stage
+is at least `--container-kit-split` (66rem, 1056px). Under it, the single
+column above, unchanged. The test is a container query on the Stage
+(`@kit-split/kit-stage:`), not the viewport: the sidebar takes 208 of the
+window, and what matters is the room the Stage actually has.
+
+- **Two columns.** The list in `--container-kit-list` (24rem, 384), then
+  `kit-page-gutter` (32), then the detail in the rest. At the breakpoint the
+  detail column is 640, so a `with-margin` detail keeps about the 460 it
+  has on a 720 page: the split never makes the detail narrower than the
+  single column it replaces. At the 1280 cap the column is about 800 and the
+  card about 620, which holds prose near 70 characters, so the detail needs
+  no measure of its own.
+- **Each column is a `kit-stage` container** from the breakpoint on
+  (`[container:kit-stage/inline-size]`). The list column is under 32rem, so
+  the List drops the margin column and fills it, with no change to its
+  `width` prop; the detail column is over it, so a `with-margin` detail
+  keeps its notes.
+- **The list column sticks** (`top-kit-group`) and, past the window's height,
+  scrolls inside itself. The scroll pads 12 and takes it back with a negative
+  margin, so the List's ring and shadow are not clipped.
+- **The UndoBar and a refusal stand under the list**, in the list column and
+  outside its scroll, stacked with `STAGE_STACK` so a closed UndoBar folds as
+  it does in a Stage. Under the breakpoint they stay under the detail. Where
+  they stand is the one thing decided in script, by measuring the Stage
+  against the same variable; the columns are CSS, so the first paint is
+  already right.
+- **Focus and the reveal are unchanged.** Picking a row keeps focus on the
+  row; `useRevealOnNarrow` never scrolls here, since the Stage is wide. A
+  row picked while the page is scrolled past the detail's top brings that
+  top back (`block: "start"`, not smooth under reduced motion).
+
+```tsx
+// Correct — one Stage; a column per side from the breakpoint on
+<Stage lead="This is what came back.">
+  <div className="flex flex-col gap-kit-stack self-stretch @kit-split/kit-stage:grid @kit-split/kit-stage:grid-cols-[var(--container-kit-list)_minmax(0,1fr)] @kit-split/kit-stage:items-start @kit-split/kit-stage:gap-x-kit-page-gutter">
+    <div className={`${STAGE_STACK} @kit-split/kit-stage:sticky @kit-split/kit-stage:top-kit-group @kit-split/kit-stage:[container:kit-stage/inline-size]`}>
+      <List width="with-margin">…</List>
+    </div>
+    <div className="min-w-0 @kit-split/kit-stage:[container:kit-stage/inline-size]">
+      <Card key={open.id} ref={detailRef} width="with-margin">…</Card>
+    </div>
+  </div>
+</Stage>
+
+// Incorrect — a viewport breakpoint and a guessed column: wrong with the sidebar open
+<div className="xl:grid xl:grid-cols-[380px_1fr]">…</div>
+```
+
+Ideas (components/riffs/ideas-screen.tsx) is the one wide page. Drafts has
+the same list and open shape and would take the same treatment; it is still
+`page`.

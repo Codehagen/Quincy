@@ -10,10 +10,10 @@ import {
   readCorpus,
   skipFirstRun,
 } from "@/app/(welcome)/welcome/actions"
-// The same action /riffs uses. A second one that skipped its entitlement gate
+// The same action /ideas uses. A second one that skipped its entitlement gate
 // or its idempotency, reachable by an account two minutes old, is exactly the
 // cost bug AGENTS.md's money section describes.
-import { draftAngle } from "@/app/(app)/riffs/actions"
+import { draftAngle } from "@/app/(app)/ideas/actions"
 
 /**
  * What first run does to the world, as one object, the way Studio's draft card

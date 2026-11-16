@@ -704,7 +704,7 @@ describe("the agent ceiling", () => {
 /**
  * The session bridge, and the assertion that it is gone.
  *
- * `capture_riff` and `draft_angle` used to be the `/riffs` server actions,
+ * `capture_riff` and `draft_angle` used to be the `/ideas` server actions,
  * which read a cookie — so the MCP route ran them inside an `AsyncLocalStorage`
  * and a `/get-session` branch in lib/auth.ts answered from it. That made a
  * bearer token able to produce a session object, which is a thing no route

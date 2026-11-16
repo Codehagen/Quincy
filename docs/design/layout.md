@@ -44,6 +44,9 @@ to the margin column only on a stage ≥ 32rem (512px).
 <Stage lead="This week."><div className="grid grid-cols-2 gap-3"><Card>…</Card><Card>…</Card></div></Stage>
 ```
 
+List and detail on a `width="wide"` page is the one case of two objects side
+by side in a Stage: the list and the item it opened (page.md, "Wide").
+
 Stacking is allowed: objects one above the other, 14px apart (`kit-stack`,
 Stage does it). Only the last object crops. An `Arrive` (and `UndoBar`,
 which is one) stretches to the Stage's width; the object inside sets its

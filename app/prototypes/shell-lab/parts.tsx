@@ -40,7 +40,7 @@ import {
   WEEK,
 } from "./fixtures"
 
-/** A route in the mock, as nav.ts writes it ("/studio", "/riffs"). */
+/** A route in the mock, as nav.ts writes it ("/studio", "/ideas"). */
 export type Go = (href: string) => void
 
 /* ── The route model, read from the real nav.ts ───────────────────────── */
@@ -59,7 +59,7 @@ export const nav = (href: string): NavItem => byHref(href) ?? STUDIO
 export const current = (route: string, href: string) => isActive(route, href)
 
 /** Things waiting for the person, by route: the dot the real sidebar keeps a prop for. */
-export const WAITING: Record<string, number> = { "/riffs": 5, "/drafts": 2 }
+export const WAITING: Record<string, number> = { "/ideas": 5, "/drafts": 2 }
 
 /* ── Small pieces ─────────────────────────────────────────────────────── */
 
@@ -515,7 +515,7 @@ function ConversationsPage({ go }: { go: Go }) {
  * the thread itself, because where the chat lives is the question.
  */
 export function PageBody({ route, go }: { route: string; go: Go }) {
-  if (current(route, "/riffs")) return <IdeasPage />
+  if (current(route, "/ideas")) return <IdeasPage />
   if (current(route, "/drafts")) return <DraftsPage go={go} />
   if (current(route, "/lineup")) return <LineupPage />
   if (current(route, "/numbers")) return <NumbersPage />

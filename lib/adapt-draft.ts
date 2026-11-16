@@ -20,7 +20,7 @@ import { recordUsage } from "./usage"
  *
  * Deliberately a library function rather than living inside the server action,
  * which is where `draftAngle` puts the same orchestration
- * (`app/(app)/riffs/actions.ts`). The difference is that this one has **two**
+ * (`app/(app)/ideas/actions.ts`). The difference is that this one has **two**
  * call sites — the paste box on /drafts and the Bookmarks rhythm — and they
  * disagree about exactly the things a server action owns: one has a session
  * and one has a cron, one revalidates paths and one does not, one gates on
@@ -173,7 +173,7 @@ export async function createAdaptedDraft({
   }
 
   // Metered here rather than inside lib/adapt.ts: this is the layer that knows
-  // the userId, matching lib/voice.ts and app/(app)/riffs/actions.ts. The
+  // the userId, matching lib/voice.ts and app/(app)/ideas/actions.ts. The
   // generation already ran, so a bookkeeping failure logs and is dropped
   // rather than undoing work that already happened.
   if (generation.usage) {

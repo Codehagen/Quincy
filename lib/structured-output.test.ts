@@ -39,7 +39,7 @@ describe("unwrapStringifiedObject", () => {
   })
 
   /**
-   * The /riffs 500 of 2026-08-08, pinned at the layer that can be tested.
+   * The /riffs (now /ideas) 500 of 2026-08-08, pinned at the layer that can be tested.
    *
    * `generateDraft`'s schema has ONE required key, so the completeness check
    * that makes this function safe — "the parsed object accounts for the whole

@@ -34,8 +34,9 @@ export type NavItem = {
 /** The sidebar: the room you talk in, then the things you make and what feeds them. */
 export const NAV: NavItem[] = [
   { href: "/studio", label: "Studio", icon: Message01Icon },
-  // The route stays /riffs until the code and schema rename (plans/029).
-  { href: "/riffs", label: "Ideas", icon: BulbIcon },
+  // The route was /riffs until 2026-11-16 (next.config.ts redirects it); the
+  // code and the tables still say riff (plans/029).
+  { href: "/ideas", label: "Ideas", icon: BulbIcon },
   { href: "/drafts", label: "Drafts", icon: QuillWrite01Icon },
   { href: "/lineup", label: "Lineup", icon: Calendar03Icon },
   { href: "/numbers", label: "Numbers", icon: ChartLineData01Icon },

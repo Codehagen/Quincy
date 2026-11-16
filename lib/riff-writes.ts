@@ -8,7 +8,7 @@ import { createRiffFromSaid, MAX_TRANSCRIPT_CHARS } from "./riffs"
 import { spendCooldown } from "./usage"
 
 /**
- * The two writes /riffs offers, with the user named rather than resolved.
+ * The two writes /ideas offers, with the user named rather than resolved.
  *
  * **Why they left the server action file.** `capture_riff` and `draft_angle`
  * are the same two writes, reached over MCP by a program holding a bearer
@@ -26,7 +26,7 @@ import { spendCooldown } from "./usage"
  * **Nothing here is a server action and nothing here may become one.** These
  * take a user id as an argument, so exporting them from a `"use server"` file
  * would publish "act as any account" as an HTTP endpoint. The callers are the
- * two actions in `app/(app)/riffs/actions.ts`, which resolve the session
+ * two actions in `app/(app)/ideas/actions.ts`, which resolve the session
  * first, and `lib/chat-tools.ts`, which is handed a `ChatUser` the chat route
  * and the MCP route each resolved their own way.
  *
@@ -110,7 +110,7 @@ export async function draftAngleFor(
   // draft that was already there and already rendered, and revalidating for it
   // would throw two caches away to show the same rows again.
   if (result.ok && !result.existing) {
-    revalidatePath("/riffs")
+    revalidatePath("/ideas")
     revalidatePath("/drafts")
   }
 
@@ -203,7 +203,7 @@ export async function captureToRiffFor(
     return { ok: false, message: result.message }
   }
 
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
 
   return {
     ok: true,

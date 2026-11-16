@@ -62,14 +62,14 @@ describe("the route model (Desk)", () => {
 
   it("never says riff to a person", () => {
     for (const item of ALL_NAV) expect(item.label.toLowerCase()).not.toContain("riff")
-    expect(ALL_NAV.find((i) => i.href === "/riffs")?.label).toBe("Ideas")
+    expect(ALL_NAV.find((i) => i.href === "/ideas")?.label).toBe("Ideas")
   })
 
   it("lights at most one row for any route", () => {
     const routes = [
       "/studio",
       "/c/x",
-      "/riffs",
+      "/ideas",
       "/settings",
       "/settings/billing",
       "/brain",

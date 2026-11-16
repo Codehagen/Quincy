@@ -390,9 +390,9 @@ describe("the callers fetch the examples", () => {
     ).toHaveLength(3)
   })
 
-  it("reads them beside the brain on both /riffs actions", async () => {
+  it("reads them beside the brain on both /ideas actions", async () => {
     const source = await readFile(
-      new URL("../app/(app)/riffs/actions.ts", import.meta.url),
+      new URL("../app/(app)/ideas/actions.ts", import.meta.url),
       "utf8"
     )
 

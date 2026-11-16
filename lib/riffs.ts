@@ -274,7 +274,7 @@ async function angleContext(userId: string) {
 /**
  * Which of the user's channels no angle on this riff reaches.
  *
- * The gap the /riffs card offers to fill. Three rules, and each of them is the
+ * The gap the /ideas card offers to fill. Three rules, and each of them is the
  * difference between a useful prompt and a nag:
  *
  * - **Only channels they actually publish to.** `connected` comes from
@@ -954,7 +954,7 @@ const MAX_REFUSAL_CHARS = 500
  * The counterpart to `startShippedRiff`, and the argument above is exactly why
  * it had to exist. That comment is right that a merge carrying nothing deserves
  * no card — but the verdict then lived only in a server log, and `/sources`
- * offers a button that says "the riff will be on /riffs in a moment" before the
+ * offers a button that says "the riff will be on /ideas in a moment" before the
  * selection has run. When the answer was no, the sentence stayed on screen and
  * nothing ever contradicted it. A refusal is an answer, not a silence; it just
  * does not deserve a card.

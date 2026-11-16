@@ -231,7 +231,7 @@ export type RiffCardProps = {
    * (actions.md, "Which action wins"). The page decides; the card never does.
    */
   isAction?: boolean
-  /** `draftAngle` from app/(app)/riffs/actions.ts, or a stand-in with its result. */
+  /** `draftAngle` from app/(app)/ideas/actions.ts, or a stand-in with its result. */
   onDraft: (angle: Angle) => Promise<DraftAngleResult>
   /**
    * The riff leaves the page and stays in the table. The page folds the card

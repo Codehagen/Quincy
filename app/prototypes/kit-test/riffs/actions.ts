@@ -1,5 +1,5 @@
 /**
- * Local stand-ins for app/(app)/riffs/actions.ts. Not server actions: nothing
+ * Local stand-ins for app/(app)/ideas/actions.ts. Not server actions: nothing
  * here touches the database or spends. Each one waits about as long as the
  * real call does, so the pending states are visible.
  */

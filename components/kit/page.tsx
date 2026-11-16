@@ -25,11 +25,24 @@ export type KitPageProps = {
    * another page (the kit lab), so that page keeps its one h1.
    */
   titleAs?: "h1" | "p"
+  /**
+   * `page` (default): the 720px column (`max-w-kit-page`) every page reads
+   * in. `wide`: up to 1280px (`max-w-kit-wide`), for a page whose list and
+   * open item stand side by side once the stage is wide enough (Ideas;
+   * docs/design/page.md, "Wide"). Only for list and detail: a page of prose
+   * or of single objects stays `page`, because a wide column is a long line.
+   */
+  width?: "page" | "wide"
+}
+
+const WIDTH: Record<NonNullable<KitPageProps["width"]>, string> = {
+  page: "max-w-kit-page",
+  wide: "max-w-kit-wide",
 }
 
 /**
  * The page shell, inside the app frame (docs/design/app-shell.md): a 720px
- * column (`max-w-kit-page`), centred, on the white ground, with a 16px side
+ * column (`max-w-kit-page`, or 1280 with `width="wide"`), centred, on the white ground, with a 16px side
  * gutter on a phone and 32px from 40rem (`kit-page-gutter`), 64px from the
  * top, 96px of floor, and 56px between the title and each Stage
  * (`kit-page-gap`).
@@ -44,13 +57,20 @@ export type KitPageProps = {
  * itself. What it must never be is under a `<Suspense>` that waits on data,
  * because the title would wait with it (docs/design/page.md).
  */
-export function KitPage({ title, summary, actions, children, titleAs = "h1" }: KitPageProps) {
+export function KitPage({
+  title,
+  summary,
+  actions,
+  children,
+  titleAs = "h1",
+  width = "page",
+}: KitPageProps) {
   return (
     <div
       data-slot="kit-page"
       // From 40rem every Card on the page takes the landing's object padding
       // (28 × 24); on a phone it keeps 18, as the landing does.
-      className="mx-auto flex w-full max-w-kit-page flex-col gap-kit-page-gap px-kit-page-gutter pt-kit-page-top pb-kit-page-bottom sm:[--kit-object-pad-x:var(--spacing-kit-pad-x)] sm:[--kit-object-pad-y:var(--spacing-kit-pad-y)]"
+      className={`mx-auto flex w-full ${WIDTH[width]} flex-col gap-kit-page-gap px-kit-page-gutter pt-kit-page-top pb-kit-page-bottom sm:[--kit-object-pad-x:var(--spacing-kit-pad-x)] sm:[--kit-object-pad-y:var(--spacing-kit-pad-y)]`}
     >
       <header className="flex flex-wrap items-end justify-between gap-x-kit-group gap-y-kit-related">
         <div className="flex min-w-0 flex-col gap-kit-related">

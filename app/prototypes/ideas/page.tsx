@@ -4,7 +4,7 @@ import { IdeasScreen } from "@/components/riffs/ideas-screen"
 import { RIFFS } from "./data"
 
 /**
- * The shipped Ideas screen (/riffs) on fixture riffs, to see the filled
+ * The shipped Ideas screen (/ideas) on fixture riffs, to see the filled
  * states without seeding the shared dev account. Pressing Draft, Dismiss or
  * Ask calls the real server actions, which answer "Not signed in." or find
  * no such row here: look, do not press.

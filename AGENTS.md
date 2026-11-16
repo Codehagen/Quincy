@@ -225,7 +225,7 @@ confirm button.
 | --- | --- | --- |
 | Kit scale (`Text`, `text-kit-*`) | App chrome on kit pages and all new UI | `components/kit`, `docs/design/type.md` |
 | Role scale (`text-body`, `text-caption`, `text-card-title`, `text-section`, `text-display`, `text-eyebrow`) | App chrome on pages not moved to the kit yet | Cards, rows, buttons, forms |
-| `.typeset` + preset | Rendered markdown | Brain (`/brain`), streaming agent replies (`/riffs`, `/studio`); kit pages use `preset="kit"` (`.typeset-kit`) |
+| `.typeset` + preset | Rendered markdown | Brain (`/brain`), streaming agent replies (`/ideas`, `/studio`); kit pages use `preset="kit"` (`.typeset-kit`) |
 
 Never put `text-*` utilities inside a `.typeset` container — two rhythm systems
 would compete for the same paragraph.

@@ -89,7 +89,7 @@ function oneLine(value: string, max: number): string {
  *
  * Exported because two readers need it and neither can trust its input.
  * `cachedRepo` reads a `jsonb` column written by an older deploy;
- * `describeMaterial` in app/(app)/riffs/actions.ts reads `riff.context`, whose
+ * `describeMaterial` in app/(app)/ideas/actions.ts reads `riff.context`, whose
  * own contract says it is never parsed for logic and must degrade to a shorter
  * prompt rather than to a throw on a page somebody pressed Draft on. A cast
  * there would have been a claim about a row, and `repo.topics.length` on a row

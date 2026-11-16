@@ -366,7 +366,7 @@ export const RHYTHMS: Rhythm[] = [
      * The old card promised to fill next week's slots from the drafts you
      * already had, which is a sorting job: a plan made only from finished
      * writing can never propose the post nobody has written yet. So it reads
-     * the angles waiting on /riffs, argues with each against the strategy, and
+     * the angles waiting on /ideas, argues with each against the strategy, and
      * writes the survivors. Monday because the week it is planning is the one
      * starting, and a plan read on Sunday evening is a plan read on the one
      * evening nobody wants to think about work.

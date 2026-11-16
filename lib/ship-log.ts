@@ -430,13 +430,13 @@ export async function runShipLog({
      * A riff with angles that cannot reach X.
      *
      * Reported as an outcome rather than thrown: the riff exists and is on
-     * /riffs, so the run produced something the owner can act on. Only the
+     * /ideas, so the run produced something the owner can act on. Only the
      * draft is missing.
      */
     return {
       ok: false,
       reason: "no-angle",
-      summary: `${merges.length} merges are waiting on /riffs — none of the angles fits X.`,
+      summary: `${merges.length} merges are waiting on /ideas — none of the angles fits X.`,
     }
   }
 

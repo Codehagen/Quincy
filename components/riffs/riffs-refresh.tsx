@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 /**
  * Re-read the page while anything on it is still working.
  *
- * Without this the feature does not close its loop. /riffs is a server
+ * Without this the feature does not close its loop. /ideas is a server
  * component, a voice riff is written `working` and filled in by a workflow
  * minutes later, and nothing in the browser would ever learn that it finished
  * — somebody would record a thought, watch a skeleton, and have to reload the

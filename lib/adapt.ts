@@ -438,7 +438,7 @@ export const ANGLE_SHAPES = [
  * needs, not the longest" — which names no criteria and puts a thumb on the
  * shortest. It produced what you would expect: 16 of 23 angles in production
  * were `Short post` on 2026-08-09, `Carousel` had never once been chosen, and
- * 63% of angle sets came back with every angle the same shape, so /riffs
+ * 63% of angle sets came back with every angle the same shape, so /ideas
  * repeated "Short post · One idea, no setup · Goes to X and LinkedIn" down
  * the whole card.
  *
@@ -605,7 +605,7 @@ export function describeKinds(recent: readonly string[] = []): string {
      out-of-shape angle in code. `describeShapes` would be a third statement of
      a settled decision.
    - **`groundedIn`** has no reader there. `askForChannelAngle` and `askForAngle`
-     in app/(app)/riffs/actions.ts take `generation.angles` and drop the rest, so
+     in app/(app)/ideas/actions.ts take `generation.angles` and drop the rest, so
      a rule about that field would be an instruction with nobody downstream.
    - **English** was the one place the five actively disagreed, and the refactor
      of 2026-09-09 deliberately carried both sides rather than settling a
@@ -917,7 +917,7 @@ function buildAnglesSchema(shapes: readonly string[]) {
  *
  * **This is the only prompt the stranger's words ever reach.** `draftAngle`
  * writes from the chosen hook and never sees the scrap — see
- * `app/(app)/riffs/actions.ts`. That boundary is what stops a borrowed number
+ * `app/(app)/ideas/actions.ts`. That boundary is what stops a borrowed number
  * surviving into finished writing even if an angle slips one through.
  */
 export function buildAnglesPrompt(input: {
@@ -1608,7 +1608,7 @@ function buildChannelPrompt(input: {
 
 /* ── Angles you asked for ─────────────────────────────────────────────────
    The free-text sibling of the channel path above. See `Steer` in
-   components/riffs/riff-parts.tsx, which has drawn this form since /riffs
+   components/riffs/riff-parts.tsx, which has drawn this form since /ideas
    shipped and, until now, submitted it to nothing.
 
    A separate prompt rather than an optional `note` on `buildChannelPrompt`,

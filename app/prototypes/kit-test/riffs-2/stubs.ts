@@ -1,5 +1,5 @@
 /**
- * Local stand-ins for the server actions in app/(app)/riffs/actions.ts.
+ * Local stand-ins for the server actions in app/(app)/ideas/actions.ts.
  * Same result shapes, no database, no model call, no spend. The delays stand
  * in for the round trip so the pending states are visible.
  */

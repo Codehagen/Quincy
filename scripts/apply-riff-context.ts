@@ -117,7 +117,7 @@ async function main() {
    * differently.
    *
    * NOT NULL, because the whole point of the default is that every read path
-   * gets an object. `describeMaterial` in app/(app)/riffs/actions.ts narrows
+   * gets an object. `describeMaterial` in app/(app)/ideas/actions.ts narrows
    * whatever it is handed, so a null would not crash — it would silently drop
    * the block for every riff written before the migration, which is the kind
    * of fault nobody looks for.

@@ -245,7 +245,7 @@ export function NumbersScreen({ numbers }: { numbers: NumbersView }) {
           {best.posts.length} posts.{" "}
           <span className="text-kit-ink">{worst.label}</span> doesn&rsquo;t, at{" "}
           {formatMultiple(worst.medianMultiple)}. Start your next{" "}
-          <TextLink href="/riffs">idea</TextLink> from the top row.
+          <TextLink href="/ideas">idea</TextLink> from the top row.
         </Text>
       ) : null}
     </KitPage>

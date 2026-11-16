@@ -514,7 +514,7 @@ export function duplicates(draft: Draft): Record<string, string | undefined> {
 /**
  * What is still a decision, which is not the same as what exists.
  *
- * The same rule `countOpen` follows on /riffs: a count that keeps saying seven
+ * The same rule `countOpen` follows on /ideas: a count that keeps saying seven
  * after you have dealt with four is wrong in the direction that matters. A
  * draft whose versions are all approved is finished work sitting on the page
  * for reference, and counting it would make the number a measure of history

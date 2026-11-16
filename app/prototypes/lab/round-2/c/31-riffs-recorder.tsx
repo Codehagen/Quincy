@@ -19,7 +19,7 @@ import { color, motion } from "../tokens"
  * 31 — The Riffs page, with the recorder at the top of it.
  *
  * 17's record pill, moved into the page it belongs to. The recorder is the
- * first thing on /riffs (capture is the page; the queue is what came back),
+ * first thing on /ideas (capture is the page; the queue is what came back),
  * and stopping a take is what puts a new riff at the head of the queue and
  * moves the waiting count. No microphone opens: the voice is simulated so
  * the frame never asks for permission.
@@ -141,7 +141,7 @@ export default function RiffsRecorder() {
       rest="Stop, and the thought is at the top of your riffs before you are home."
     >
       <style>{css}</style>
-      <Window address="hirequincy.com/riffs" width={420}>
+      <Window address="hirequincy.com/ideas" width={420}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
           <Text weight="strong">Riffs</Text>
           <Mono>

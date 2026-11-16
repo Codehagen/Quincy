@@ -351,7 +351,7 @@ async function writeFirstRiff(
   })
 
   revalidatePath("/welcome")
-  revalidatePath("/riffs")
+  revalidatePath("/ideas")
 
   if (!result.ok) {
     // The riff is written and the material is safe. Say so, rather than

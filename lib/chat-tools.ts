@@ -80,7 +80,7 @@ import { YieldQueue } from "./yield-queue"
  * the only thing passed in. That is what lets one factory serve two routes:
  * `/api/chat` resolves a cookie session, `/api/mcp` verifies a bearer token
  * against the JWKS, and both arrive here holding a `ChatUser`. The two writes
- * used to be the `/riffs` server actions, which read the cookie themselves —
+ * used to be the `/ideas` server actions, which read the cookie themselves —
  * so the MCP route had to fake one through an `AsyncLocalStorage` and a
  * `/get-session` hook. That bridge is deleted; nothing on the MCP path resolves
  * a session at all now.
@@ -427,7 +427,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         const riffs = await getRiffs(user)
 
         if (riffs.length === 0) {
-          return "Nothing is waiting. Ideas (the /riffs page) arrive from a voice note, a recorded meeting, a merged pull request, or a post pasted in — see /sources for what is connected."
+          return "Nothing is waiting. Ideas (/ideas) arrive from a voice note, a recorded meeting, a merged pull request, or a post pasted in — see /sources for what is connected."
         }
 
         const lines = riffs.slice(0, LIST_LIMIT).map((riff) => {
@@ -481,7 +481,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         const drafts = await getDrafts(user)
 
         if (drafts.length === 0) {
-          return "Nothing is drafted. Drafts come from an angle on /riffs — draft_angle is how one gets written."
+          return "Nothing is drafted. Drafts come from an angle on /ideas — draft_angle is how one gets written."
         }
 
         const lines = drafts.slice(0, LIST_LIMIT).map((piece) => {
@@ -582,7 +582,7 @@ export function chatTools(user: ChatUser): Record<string, Tool> {
         const entries = Object.entries(connections)
 
         if (entries.length === 0) {
-          return `No source is connected, so no raw material arrives on its own. Sources are connected on /sources; a post can also be pasted straight into /riffs.${await corpusLine(user.id)}`
+          return `No source is connected, so no raw material arrives on its own. Sources are connected on /sources; a post can also be pasted straight into /ideas.${await corpusLine(user.id)}`
         }
 
         const lines = entries.map(([source, connection]) => {

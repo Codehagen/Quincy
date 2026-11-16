@@ -242,7 +242,7 @@ const handler = requireMcpAuth(
                * point.
                *
                * All eight tools take the user as an argument. The two writes
-               * used to be the `/riffs` server actions, which read the cookie
+               * used to be the `/ideas` server actions, which read the cookie
                * themselves, so this route wrapped them in an
                * `AsyncLocalStorage` that a `/get-session` hook in lib/auth.ts
                * answered from. Both are deleted: `chatTools(row)` closes over

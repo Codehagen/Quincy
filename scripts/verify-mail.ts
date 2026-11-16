@@ -177,7 +177,7 @@ async function main() {
     "/sources",
     "/brain",
     "/rhythm",
-    "/riffs",
+    "/ideas",
     "/studio",
     "/drafts",
     "/lineup",

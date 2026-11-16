@@ -6,7 +6,7 @@ import { riff } from "./schema-app"
 /**
  * Archive one riff, scoped to its owner in the same statement as the write.
  *
- * Shared by `archiveRiff` (app/(app)/riffs/actions.ts) and the keepalive route
+ * Shared by `archiveRiff` (app/(app)/ideas/actions.ts) and the keepalive route
  * the Ideas screen calls when the page goes away with a Dismiss still waiting
  * (app/api/riffs/archive/route.ts). One query in one place, so the two paths
  * cannot drift apart on who may archive what.

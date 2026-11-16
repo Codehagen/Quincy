@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 import { archiveRiffFor } from "@/lib/riff-archive"
 
 /**
- * The Dismiss on /riffs, written as the page goes away.
+ * The Dismiss on /ideas, written as the page goes away.
  *
  * Dismiss hides a riff at once and holds the archive back while its Undo is on
  * screen (components/riffs/ideas-screen.tsx). If the tab closes or the page is

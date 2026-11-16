@@ -106,7 +106,7 @@ brings its next question in under the rows.
 
 ```tsx
 // Correct — one way in
-<EmptyState bold="No ideas waiting." rest="Say a half-thought and I'll find the ideas in it."><ButtonLink href="/riffs">Record a thought</ButtonLink></EmptyState>
+<EmptyState bold="No ideas waiting." rest="Say a half-thought and I'll find the ideas in it."><ButtonLink href="/ideas">Record a thought</ButtonLink></EmptyState>
 
 // Incorrect — two ways in, and a number with no baseline
 <EmptyState bold="0 drafts"><Button>Record</Button><Button>Paste</Button></EmptyState>

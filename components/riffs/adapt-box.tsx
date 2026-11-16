@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { MagicWand01Icon } from "@hugeicons/core-free-icons"
 
-import { adaptPostToRiff } from "@/app/(app)/riffs/actions"
+import { adaptPostToRiff } from "@/app/(app)/ideas/actions"
 import {
   Button,
   Dialog,

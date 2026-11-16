@@ -117,7 +117,7 @@ export type WaitingWork =
        *
        * The list page, not the riff, because there is no per-riff route — and
        * a `#riff-id` hash that no card renders would be a link that lies about
-       * where it lands. The riff is at the bottom of /riffs, since the page
+       * where it lands. The riff is at the bottom of /ideas, since the page
        * sorts newest first and this one is the oldest thing waiting.
        */
       href: string
@@ -369,7 +369,7 @@ export async function waitingWork(
         ...describeWait(lead.createdAt, now, zone),
         beats: lead.beats,
         openAngles: lead.openAngles,
-        href: "/riffs",
+        href: "/ideas",
       }
     }
 

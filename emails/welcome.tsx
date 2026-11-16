@@ -77,7 +77,7 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
 
       <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
         4. Work a half-thought:{" "}
-        <Link href={`${appUrl}/riffs`} className="text-ink underline">
+        <Link href={`${appUrl}/ideas`} className="text-ink underline">
           open Ideas
         </Link>{" "}
         — scraps in, several directions out, before anything reaches Drafts.

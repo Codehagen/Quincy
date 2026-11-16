@@ -226,7 +226,7 @@ export function composeStudioGreeting({
         "What should I write about this week?",
         "What do you know about me so far?",
       ],
-      link: { href: offer.href, label: "Open it on /riffs" },
+      link: { href: offer.href, label: "Open it on /ideas" },
       typed,
     }
   }

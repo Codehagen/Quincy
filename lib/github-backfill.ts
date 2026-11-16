@@ -23,7 +23,7 @@ import {
  *
  * **One pull request, never a history.** The ceiling is the design, not a
  * safety valve: each merge Quincy turns into a riff costs a model call, and a
- * month of backfill would spend a month's worth to bury /riffs under work
+ * month of backfill would spend a month's worth to bury /ideas under work
  * nobody asked to write about. One recent merge proves the pipe and costs one
  * angle call.
  *

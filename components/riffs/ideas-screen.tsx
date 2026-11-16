@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { parseAsString, useQueryState } from "nuqs"
 
-import { archiveRiff, discardAngle, draftAngle } from "@/app/(app)/riffs/actions"
+import { archiveRiff, discardAngle, draftAngle } from "@/app/(app)/ideas/actions"
 import type { Angle, Riff } from "@/lib/riffs"
 import {
   Button,
@@ -18,8 +18,10 @@ import {
   ListRow,
   LiveDot,
   Stage,
+  STAGE_STACK,
   Text,
   UndoBar,
+  useReducedMotion,
   useRevealOnNarrow,
 } from "@/components/kit"
 import { Friend } from "@/components/mascot"
@@ -32,7 +34,7 @@ import { RiffsRefresh } from "./riffs-refresh"
 import { Steer } from "./steer"
 
 /**
- * /riffs, shown as Ideas: say what happened, then work what came back.
+ * /ideas, shown as Ideas: say what happened, then work what came back.
  *
  * **Capture is the page; the queue is what came back** (decided at
  * /prototypes/riffs on 2026-08-08: the live problem was input, not the size
@@ -43,6 +45,15 @@ import { Steer } from "./steer"
  *
  * **The screen renders KitPage**, because the summary counts the ideas still
  * waiting and that changes with every Draft and Dismiss.
+ *
+ * **Wide, the list and the open riff stand side by side** (KitPage
+ * `width="wide"`, docs/design/page.md "Wide"). From a stage of
+ * `--container-kit-split` (66rem) the Ideas Stage becomes two columns: the
+ * list in a 24rem column (`--container-kit-list`) that sticks and scrolls on
+ * its own, and the RiffCard in the rest. Under it, today's single column,
+ * unchanged. The layout is CSS (a container query on the Stage), so the
+ * first paint is already right; only where the UndoBar stands is decided in
+ * script (`useSplit`), and the UndoBar is never showing on load.
  *
  * **Which button is the action** is decided once, here (actions.md): words
  * typed into "Ask for a different idea" first, then the open riff's pick
@@ -60,6 +71,36 @@ import { Steer } from "./steer"
 
 /** How long a Dismiss can be undone before the archive goes out on its own. */
 const UNDO_MS = 7000
+
+/**
+ * The stage width the two columns start at, in rem, when the CSS variable
+ * cannot be read. `--container-kit-split` in app/globals.css is the source.
+ */
+const SPLIT_FALLBACK_REM = 66
+
+/**
+ * Whether the Stage is wide enough for list and detail side by side: the
+ * same test as the `@kit-split/kit-stage` container variant, measured on the
+ * same box (the Stage's content box), against the same variable. Used only
+ * to decide where the UndoBar stands; the columns themselves are CSS.
+ */
+function useSplit(ref: React.RefObject<HTMLElement | null>): boolean {
+  const [split, setSplit] = React.useState(false)
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const root = getComputedStyle(document.documentElement)
+    const rem = parseFloat(root.fontSize) || 16
+    const at =
+      (parseFloat(root.getPropertyValue("--container-kit-split")) || SPLIT_FALLBACK_REM) * rem
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setSplit(entry.contentRect.width >= at)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref])
+  return split
+}
 
 /** Rows before the open riff (page.md: at most 6). */
 const ROW_CAP = 6
@@ -131,6 +172,22 @@ export function IdeasScreen({
   const openKey = open?.id ?? ""
 
   const detailRef = useRevealOnNarrow<HTMLDivElement>(open?.id)
+  const stageRef = React.useRef<HTMLElement>(null)
+  const split = useSplit(stageRef)
+  const reduced = useReducedMotion()
+
+  // Wide, the list sticks while the detail scrolls with the page, so a row
+  // picked while reading far down a long riff opens one whose top is above
+  // the fold. Bring that top back, as useRevealOnNarrow does on a phone.
+  // Compared, not counted, so it never scrolls on load.
+  const seenWide = React.useRef(openKey)
+  React.useEffect(() => {
+    if (seenWide.current === openKey) return
+    seenWide.current = openKey
+    const el = detailRef.current
+    if (!split || !el || el.getBoundingClientRect().top >= 0) return
+    el.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" })
+  }, [openKey, split, reduced, detailRef])
 
   const select = React.useCallback(
     (id: string) => {
@@ -297,8 +354,28 @@ export function IdeasScreen({
   }
   const hidden = riffs.length - visible.length
 
+  /**
+   * A refusal, then the UndoBar. Under the list and the open riff in one
+   * column; under the list alone when the two stand side by side, so the
+   * Undo stays beside the row that folded away (page.md, "Wide").
+   */
+  const notices = (
+    <>
+      {/* Ink, not red: a refusal is not destruction (docs/design/states.md). */}
+      {refused ? (
+        <Text role="alert" variant="small">
+          {refused}
+        </Text>
+      ) : null}
+
+      <UndoBar show={undo != null} width={riffs.length === 0 ? "full" : "with-margin"} onUndo={restore}>
+        {undo ? dismissedSentence(undo) : null}
+      </UndoBar>
+    </>
+  )
+
   return (
-    <KitPage title="Ideas" summary={summary}>
+    <KitPage title="Ideas" summary={summary} width="wide">
       {/* Only mounts a timer while something is being read. */}
       <RiffsRefresh active={riffs.some((r) => r.state === "working")} />
 
@@ -322,6 +399,7 @@ export function IdeasScreen({
       </Stage>
 
       <Stage
+        ref={stageRef}
         aria-label="Ideas"
         {...(riffs.length > 0
           ? waiting > 0
@@ -338,81 +416,89 @@ export function IdeasScreen({
             <ButtonLink href="/sources">Add a source</ButtonLink>
           </EmptyState>
         ) : (
-          <>
-            <List width="with-margin" aria-label="Ideas">
-              {groupByDay(visible).map(([day, dayRiffs]) => (
-                <React.Fragment key={day}>
-                  <ListHeading>{day}</ListHeading>
-                  {dayRiffs.map((r) => (
+          /* One column, 14 apart, as the Stage stacks them; from a stage of
+             --container-kit-split, two. Each column is then a kit-stage
+             container of its own, so the list (384, under 32rem) drops the
+             margin column and the RiffCard (≥ 640) keeps it. */
+          <div className="flex flex-col gap-kit-stack self-stretch @kit-split/kit-stage:grid @kit-split/kit-stage:grid-cols-[var(--container-kit-list)_minmax(0,1fr)] @kit-split/kit-stage:items-start @kit-split/kit-stage:gap-x-kit-page-gutter">
+            {/* The list column. Wide, it sticks under the top of the page
+                and, past the window's height, scrolls inside itself; the
+                UndoBar and a refusal stand under the list, outside the
+                scroll, so they are never scrolled away. */}
+            <div className={`${STAGE_STACK} @kit-split/kit-stage:sticky @kit-split/kit-stage:top-kit-group @kit-split/kit-stage:max-h-[calc(100svh-2*var(--spacing-kit-group))] @kit-split/kit-stage:[container:kit-stage/inline-size]`}>
+              {/* The scroll. The 12px pad, given back by a negative margin,
+                  keeps the list's ring and shadow from being clipped. */}
+              <div className="self-stretch @kit-split/kit-stage:-m-kit-related @kit-split/kit-stage:min-h-0 @kit-split/kit-stage:overflow-y-auto @kit-split/kit-stage:overscroll-contain @kit-split/kit-stage:p-kit-related">
+                <List width="with-margin" aria-label="Ideas">
+                  {groupByDay(visible).map(([day, dayRiffs]) => (
+                    <React.Fragment key={day}>
+                      <ListHeading>{day}</ListHeading>
+                      {dayRiffs.map((r) => (
+                        <ListRow
+                          key={r.id}
+                          id={rowId(r.id)}
+                          selected={r.id === openKey}
+                          titleLines={2}
+                          leading={r.state === "working" ? <LiveDot pulse /> : undefined}
+                          description={rowDescription(r)}
+                          onClick={() => {
+                            clearUndo()
+                            select(r.id)
+                          }}
+                        >
+                          {riffTitle(r)}
+                        </ListRow>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                  {hidden > 0 ? (
                     <ListRow
-                      key={r.id}
-                      id={rowId(r.id)}
-                      selected={r.id === openKey}
-                      titleLines={2}
-                      leading={r.state === "working" ? <LiveDot pulse /> : undefined}
-                      description={rowDescription(r)}
                       onClick={() => {
                         clearUndo()
-                        select(r.id)
+                        setShowAll(true)
                       }}
                     >
-                      {riffTitle(r)}
+                      Show {hidden} more
                     </ListRow>
-                  ))}
-                </React.Fragment>
-              ))}
-              {hidden > 0 ? (
-                <ListRow
-                  onClick={() => {
-                    clearUndo()
-                    setShowAll(true)
-                  }}
-                >
-                  Show {hidden} more
-                </ListRow>
-              ) : null}
-            </List>
+                  ) : null}
+                </List>
+              </div>
+              {split ? notices : null}
+            </div>
 
             {open ? (
-              <RiffCard
-                key={open.id}
-                ref={detailRef}
-                riff={open}
-                isAction={pickIsAction}
-                writes={writes}
-                onDraft={draft}
-                onDismiss={dismiss}
-                angleExtra={(angle) =>
-                  angle.status === "drafted" ? null : (
-                    <NotThisOne angle={angle} onStart={clearUndo} />
-                  )
-                }
-              >
-                {open.state === "ready" && open.angles.length > 0 ? (
-                  <>
-                    <ChannelGaps riffId={open.id} gaps={gaps[open.id] ?? []} onAsk={clearUndo} />
-                    <Steer
-                      riffId={open.id}
-                      onTypingChange={setSteering}
-                      onAsk={clearUndo}
-                    />
-                  </>
-                ) : null}
-              </RiffCard>
+              <div className="min-w-0 @kit-split/kit-stage:[container:kit-stage/inline-size]">
+                <RiffCard
+                  key={open.id}
+                  ref={detailRef}
+                  riff={open}
+                  isAction={pickIsAction}
+                  writes={writes}
+                  onDraft={draft}
+                  onDismiss={dismiss}
+                  angleExtra={(angle) =>
+                    angle.status === "drafted" ? null : (
+                      <NotThisOne angle={angle} onStart={clearUndo} />
+                    )
+                  }
+                >
+                  {open.state === "ready" && open.angles.length > 0 ? (
+                    <>
+                      <ChannelGaps riffId={open.id} gaps={gaps[open.id] ?? []} onAsk={clearUndo} />
+                      <Steer
+                        riffId={open.id}
+                        onTypingChange={setSteering}
+                        onAsk={clearUndo}
+                      />
+                    </>
+                  ) : null}
+                </RiffCard>
+              </div>
             ) : null}
-          </>
+          </div>
         )}
 
-        {/* Ink, not red: a refusal is not destruction (docs/design/states.md). */}
-        {refused ? (
-          <Text role="alert" variant="small">
-            {refused}
-          </Text>
-        ) : null}
-
-        <UndoBar show={undo != null} width={riffs.length === 0 ? "full" : "with-margin"} onUndo={restore}>
-          {undo ? dismissedSentence(undo) : null}
-        </UndoBar>
+        {split && riffs.length > 0 ? null : notices}
       </Stage>
     </KitPage>
   )

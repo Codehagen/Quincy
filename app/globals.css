@@ -936,6 +936,19 @@
   /* The page shell (KitPage). The side gutter is responsive, so it is a
      plain variable below, not a theme value. */
   --container-kit-page: 45rem; /* page measure (720): a with-margin Card still has 416 */
+  /* KitPage width="wide" (1280): a page whose list and open item stand side
+     by side once the stage is wide enough (Ideas). Every other page is 720. */
+  --container-kit-wide: 80rem;
+  /* List and detail side by side (docs/design/page.md, "Wide"): the list's
+     column (384), and the stage width the two columns start at (1056). At
+     1056 the detail column is 640, so a with-margin RiffCard keeps 460, about
+     what it has on a 720 page (476): the split never makes the detail
+     narrower than the single column it replaces. The split width is used as
+     a container variant (@kit-split/kit-stage), and
+     components/riffs/ideas-screen.tsx reads this variable at runtime to place
+     the UndoBar, so the two cannot disagree. */
+  --container-kit-list: 24rem;
+  --container-kit-split: 66rem;
   --spacing-kit-page-top: 4rem; /* 64, was 40: the landing's air */
   --spacing-kit-page-bottom: 6rem; /* 96 */
   /* Title to first stage, stage to stage: 56, was 40. The landing's line-to-

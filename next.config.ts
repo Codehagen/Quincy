@@ -49,7 +49,7 @@ const RENAMED_ROUTES: Array<[from: string, to: string]> = [
   // path lands on the one real page rather than on a 404.
   ["/rituals-grid", "/rhythm"],
   ["/rhythm-grid", "/rhythm"],
-  ["/ideate", "/riffs"],
+  ["/ideate", "/ideas"],
   // /wiki was the Brain's first name. This pointed at /voice, which was itself
   // deleted as a placeholder (see components/app-sidebar.tsx) — so the one
   // entry in this list whose job is to prevent a 404 was answering with one.
@@ -154,11 +154,25 @@ const nextConfig: NextConfig = {
       "/rhythm",
     ])
 
-    return [...RENAMED_ROUTES, ...retired].map(([source, destination]) => ({
-      source,
-      destination,
-      permanent: false,
-    }))
+    return [
+      ...[...RENAMED_ROUTES, ...retired].map(([source, destination]) => ({
+        source,
+        destination,
+        permanent: false,
+      })),
+      /**
+       * /riffs became /ideas on 2026-11-16: the page had said "Ideas" since
+       * plans/029, and the route was the last place the internal word showed.
+       * Permanent (308), unlike the table above, by the owner's call: the
+       * name is settled, and /riffs will not be reused for anything else.
+       * Next passes the query through on its own, so `/riffs?idea=…` lands on
+       * `/ideas?idea=…` with the same idea open. `/riffs/:path*` alone would
+       * match the bare path too (`*` is zero or more); both are written so
+       * the intent reads without knowing path-to-regexp.
+       */
+      { source: "/riffs", destination: "/ideas", permanent: true },
+      { source: "/riffs/:path*", destination: "/ideas/:path*", permanent: true },
+    ]
   },
 }
 
@@ -173,7 +187,7 @@ const nextConfig: NextConfig = {
  * `after()` was the cheaper alternative and does not survive the comparison.
  * It is not durable — a crashed function loses the work with nothing to
  * inspect, no retry, and no row that knows it was ever running — and the
- * stuck-state story /riffs needs (`startedAt`, a failed state, a retry) is
+ * stuck-state story /ideas needs (`startedAt`, a failed state, a retry) is
  * exactly the machinery Workflow already ships. Writing it by hand to avoid a
  * dependency would be writing this dependency.
  *

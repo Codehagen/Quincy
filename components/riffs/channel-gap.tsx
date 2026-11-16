@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { askForChannelAngle } from "@/app/(app)/riffs/actions"
+import { askForChannelAngle } from "@/app/(app)/ideas/actions"
 import { Button, LiveDot, Text } from "@/components/kit"
 import { PlatformMark } from "@/components/channels/platform-mark"
 
