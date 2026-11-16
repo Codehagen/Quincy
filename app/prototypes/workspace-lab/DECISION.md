@@ -33,7 +33,9 @@ the person's own week ("you usually draft 4").
     muted text, joined with "·" in the detail.
   - Icons 16 at stroke 1.75 (chevrons 14 at 1.75).
   - Empty state keeps the column heads, 13/560 + 13 muted + a quiet 28px
-    "Clear filters", on the rows' edge. Loading: eight static skeleton
+    "Clear filters", centred in the space under the heads (2026-11-16:
+    every empty state stands in the middle of the region it replaces,
+    docs/design/states.md, "Empty"). Loading: eight static skeleton
     rows on the same grid and row height (no shimmer, no motion path
     needed), with a polite "Loading ideas" status.
 - Still on a control (taste, not rule): row height (default 36), row title

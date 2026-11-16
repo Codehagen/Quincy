@@ -961,6 +961,7 @@
   --spacing-kit-row-y: 0.625rem;
   --container-kit-lead: 21.25rem; /* lead measure (340) */
   --container-kit-doc: 34.375rem; /* a column of reading prose (550), after Stageshow */
+  --container-kit-empty: 26rem; /* an empty state's words, centred (416): short lines read as one message */
 
   /* The marketing shell (components/marketing). Spacing names never repeat
      a container name: `max-w-*` reads --spacing-* too, so a shared name

@@ -71,7 +71,7 @@ export function IdeaTable({
   )
 
   return (
-    <div className="@container/list flex min-h-0 flex-col">
+    <div className="@container/list flex min-h-full flex-col">
       {variant === "table" ? <TableHead /> : null}
       <TableLoading variant={variant} />
       {rows.length === 0 ? (
@@ -128,10 +128,11 @@ const STATUS_EMPTY = {
 } as const
 
 /**
- * The empty list. When a filter or a search empties it, Clear filters
- * clears them and goes back to Open (Clear alone keeps the status, and a
- * status can empty the list by itself, which would leave this same state).
- * When the status alone empties it, it says so and offers Open.
+ * The empty list, centred in the space under the heads. When a filter or a
+ * search empties it, Clear filters clears them and goes back to Open (Clear
+ * alone keeps the status, and a status can empty the list by itself, which
+ * would leave this same state). When the status alone empties it, it says
+ * so and offers Open.
  */
 function Empty({ ws }: { ws: Workspace }) {
   const f = ws.filters
@@ -141,8 +142,8 @@ function Empty({ ws }: { ws: Workspace }) {
     ws.setFilter("status", "open")
   }
   return (
-    <div data-ws-rows className="flex flex-col items-start gap-kit-related px-kit-group pt-kit-related pb-kit-group">
-      <div className="flex flex-col gap-kit-tight">
+    <div data-ws-rows className="flex flex-1 flex-col items-center justify-center gap-kit-related px-kit-group py-kit-group text-center">
+      <div className="flex max-w-kit-empty flex-col gap-kit-tight text-balance">
         <p className="ws-row-title font-kit-strong text-kit-ink">{narrowed ? "No ideas match." : STATUS_EMPTY[f.status][0]}</p>
         <p className="ws-row-title text-kit-ink-muted">
           {narrowed ? "Clear a filter, or search for a word you said instead of one Quincy wrote." : STATUS_EMPTY[f.status][1]}

@@ -164,7 +164,7 @@ export {
   type AccordionProps,
   type AccordionItemProps,
 } from "./disclosure"
-export { EmptyState, type EmptyStateProps } from "./empty-state"
+export { EmptyState, EmptyRegion, type EmptyStateProps, type EmptyRegionProps } from "./empty-state"
 export { Progress, type ProgressProps } from "./progress"
 export { Kbd, type KbdProps, type KbdKey } from "./kbd"
 
@@ -231,6 +231,7 @@ export {
   DataListEmpty,
   DATA_LIST_ROW,
   revealDataListRow,
+  focusRestoredDataList,
   type DataListProps,
   type DataListColumn,
   type DataListGroup,

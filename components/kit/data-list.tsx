@@ -13,6 +13,7 @@ import * as React from "react"
 import { Listbox, ListboxGroup, ListboxGroupLabel, ListboxItem } from "@ui-sdk/react/listbox"
 
 import { FOCUS_RING, SELECTION_BAR } from "./control-styles"
+import { EmptyRegion } from "./empty-state"
 
 /**
  * DataList: a dense, keyboard-first list with columns, for a workspace
@@ -92,7 +93,11 @@ export type DataListProps<T> = {
   status?: DataListStatus
   /** What the persistent status says while loading ("Loading ideas"). */
   loadingLabel?: string
-  /** What shows under the head when there are no rows: a DataListEmpty. */
+  /**
+   * What shows under the head when there are no rows: a DataListEmpty, or
+   * an EmptyState with `frame="none"`. The list centres it in the space
+   * under the heads, so pass it bare, with no padding of its own.
+   */
   empty?: React.ReactNode
   /** The keys the page binds while the list is in view ("j k"). Announced on the list. */
   "aria-keyshortcuts"?: string
@@ -100,6 +105,27 @@ export type DataListProps<T> = {
 
 /** The selector for every DataList row. Each row also carries its key: `[data-kit-row="<key>"]`. */
 export const DATA_LIST_ROW = "[data-kit-row]"
+
+/**
+ * After an empty state's action brought the rows back (Clear filters): the
+ * button that held focus is gone, so focus has fallen to the body. Put it
+ * on the open row if one is still shown, else on the first row, so the
+ * keyboard lands on the list it just restored and j/k and the arrows go on
+ * from there. Runs on the next frame, after React has drawn the rows; does
+ * nothing if focus already went somewhere on purpose.
+ */
+export function focusRestoredDataList(scope: ParentNode = document) {
+  requestAnimationFrame(() => {
+    const active = document.activeElement
+    if (active != null && active !== document.body) return
+    const el =
+      scope.querySelector<HTMLElement>(`${DATA_LIST_ROW}[data-selected]`) ??
+      scope.querySelector<HTMLElement>(DATA_LIST_ROW)
+    if (!el) return
+    el.focus({ preventScroll: true })
+    el.scrollIntoView({ block: "nearest" })
+  })
+}
 
 /**
  * After the page moved the selection by key (j/k), or after an action took
@@ -203,7 +229,9 @@ export function DataList<T>({
   return (
     <div
       data-slot="kit-data-list"
-      className="@container/kit-data-list flex min-h-0 flex-col"
+      // min-h-full: the list fills its pane, so an empty state can stand in
+      // the middle of the space under the heads.
+      className="@container/kit-data-list flex min-h-full flex-col"
       style={{ "--kit-data-list-cols": t.narrow, "--kit-data-list-cols-wide": t.wide } as React.CSSProperties}
     >
       {head && columns ? <DataListHead columns={columns} /> : null}
@@ -215,7 +243,7 @@ export function DataList<T>({
       {loading ? (
         <DataListLoading columns={columns} />
       ) : all.length === 0 ? (
-        empty
+        empty != null ? <EmptyRegion>{empty}</EmptyRegion> : null
       ) : (
         <Listbox<string>
           aria-label={label}
@@ -369,14 +397,16 @@ export type DataListEmptyProps = {
 }
 
 /**
- * The empty list: under the column heads (they stay), on the rows' edge,
- * 13/560 then 13 muted, and one quiet 28px action. Say why it is empty and
- * the way out; when a filter emptied it, the action clears the filters.
+ * The empty list: under the column heads (they stay), centred in the space
+ * below them (DataList stands it in an EmptyRegion), 13/560 then 13 muted,
+ * and one quiet 28px action. Say why it is empty and the way out; when a
+ * filter emptied it, the action clears the filters and then calls
+ * `focusRestoredDataList`, so focus lands on the rows it brought back.
  */
 export function DataListEmpty({ title, children, action }: DataListEmptyProps) {
   return (
-    <div data-slot="kit-data-list-empty" className="flex flex-col items-start gap-kit-related px-kit-group pt-kit-related pb-kit-group">
-      <div className="flex flex-col gap-kit-tight">
+    <div data-slot="kit-data-list-empty" className="flex flex-col items-center gap-kit-related text-center">
+      <div className="flex max-w-kit-empty flex-col gap-kit-tight text-balance">
         <p className="text-kit-dense font-kit-strong text-kit-ink">{title}</p>
         {children != null ? <p className="text-kit-dense text-kit-ink-muted">{children}</p> : null}
       </div>

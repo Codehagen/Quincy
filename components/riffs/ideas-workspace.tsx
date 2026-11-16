@@ -10,6 +10,7 @@ import {
   ButtonLink,
   Count,
   DataList,
+  EmptyRegion,
   EmptyState,
   FilterMenu,
   FootBar,
@@ -30,6 +31,7 @@ import {
   ToolbarTitle,
   WorkspacePage,
   WorkspacePanes,
+  focusRestoredDataList,
   revealDataListRow,
   useAnnounce,
   useLetterKeys,
@@ -239,7 +241,7 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
       </Toolbar>
 
       {nothingYet ? (
-        <div className="flex flex-1 flex-col border-t border-kit-hairline px-kit-group py-kit-group">
+        <EmptyRegion edge="rule">
           <EmptyState
             frame="none"
             bold="Nothing to work on yet."
@@ -247,7 +249,7 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
           >
             <ButtonLink href="/sources">Add a source</ButtonLink>
           </EmptyState>
-        </div>
+        </EmptyRegion>
       ) : (
         <>
           <IdeasFilters
@@ -455,33 +457,44 @@ function bySource(rows: readonly IdeaRow[]): DataListGroup<IdeaRow>[] {
   })
 }
 
-/** Under the column heads when a filter or the search leaves nothing. */
+/**
+ * Under the column heads when a filter or the search leaves nothing. Bare:
+ * the region around it (DataList's, or the inline list's EmptyRegion)
+ * centres it. Its action takes its own button away with the empty state,
+ * so focus follows to the rows it brought back.
+ */
 function FilteredEmpty({ ideas }: { ideas: IdeasState }) {
   const on = filtersOn(ideas.filters)
+  const clear = () => {
+    ideas.clearFilters()
+    focusRestoredDataList()
+  }
+  const showOpen = () => {
+    ideas.showOpen()
+    focusRestoredDataList()
+  }
   return (
-    <div className="px-kit-group py-kit-group">
-      <EmptyState
-        frame="none"
-        bold={on ? "No ideas match." : ideas.filters.status === "open" ? "Nothing is waiting on you." : "No ideas here."}
-        rest={
-          on
-            ? "Clear a filter, or search for a word you said."
-            : ideas.filters.status === "open"
-              ? "Every idea here is drafted or set aside. Record a thought, and the ideas in it show here."
-              : "Nothing has been drafted from an idea yet."
-        }
-      >
-        {on ? (
-          <Button size="xs" onClick={ideas.clearFilters}>
-            Clear filters
-          </Button>
-        ) : ideas.filters.status !== "open" ? (
-          <Button size="xs" onClick={ideas.showOpen}>
-            Show open ideas
-          </Button>
-        ) : null}
-      </EmptyState>
-    </div>
+    <EmptyState
+      frame="none"
+      bold={on ? "No ideas match." : ideas.filters.status === "open" ? "Nothing is waiting on you." : "No ideas here."}
+      rest={
+        on
+          ? "Clear a filter, or search for a word you said."
+          : ideas.filters.status === "open"
+            ? "Every idea here is drafted or set aside. Record a thought, and the ideas in it show here."
+            : "Nothing has been drafted from an idea yet."
+      }
+    >
+      {on ? (
+        <Button size="xs" onClick={clear}>
+          Clear filters
+        </Button>
+      ) : ideas.filters.status !== "open" ? (
+        <Button size="xs" onClick={showOpen}>
+          Show open ideas
+        </Button>
+      ) : null}
+    </EmptyState>
   )
 }
 
@@ -792,10 +805,19 @@ function InlineIdeas({ ideas, detail }: { ideas: IdeasState; detail: (row: IdeaR
     }
   }
 
+  if (ideas.shown.length === 0) {
+    return (
+      <PanelBody>
+        <EmptyRegion>
+          <FilteredEmpty ideas={ideas} />
+        </EmptyRegion>
+      </PanelBody>
+    )
+  }
+
   return (
     <PanelBody>
       <div onKeyDown={onListKey} className="mx-auto flex w-full max-w-[60rem] flex-col gap-kit-related px-2 py-kit-related @[40rem]/kit-workspace:px-kit-group">
-        {ideas.shown.length === 0 ? <FilteredEmpty ideas={ideas} /> : null}
         {days.map(([day, rows]) => (
           <section key={day} aria-label={day} className="flex flex-col gap-px">
             <h2 aria-hidden className="px-3 pt-kit-related pb-1 text-kit-meta font-kit-strong text-kit-ink-muted">

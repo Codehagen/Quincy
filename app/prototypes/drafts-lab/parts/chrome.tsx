@@ -6,6 +6,7 @@ import {
   Button,
   ButtonLink,
   Count,
+  EmptyRegion,
   EmptyState,
   FilterMenu,
   FootBar,
@@ -14,6 +15,7 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarTitle,
+  focusRestoredDataList,
   useAnnounce,
   type KeyBarItem,
 } from "@/components/kit"
@@ -215,41 +217,46 @@ export function DraftsFoot({ store, onUndo }: { store: DraftsStore; onUndo: () =
   )
 }
 
-/** Under the heads when a filter or the search leaves nothing. */
+/**
+ * Under the heads when a filter or the search leaves nothing. Bare: the
+ * region around it (DataList's, or the layout's EmptyRegion) centres it.
+ * Clear filters takes its own button away, so focus follows to the rows it
+ * brought back.
+ */
 export function FilteredEmpty({ store }: { store: DraftsStore }) {
+  const clear = () => {
+    store.clearFilters()
+    focusRestoredDataList()
+  }
   return (
-    <div className="px-kit-group py-kit-group">
-      <EmptyState
-        frame="none"
-        media={<Friend size={40} state="reading" className="text-kit-ink" />}
-        bold="No drafts match."
-        rest="Clear a filter, or search for a word from the post."
-      >
-        <Button size="xs" onClick={store.clearFilters}>
-          Clear filters
-        </Button>
-      </EmptyState>
-    </div>
+    <EmptyState
+      frame="none"
+      media={<Friend size={40} state="reading" className="text-kit-ink" />}
+      bold="No drafts match."
+      rest="Clear a filter, or search for a word from the post."
+    >
+      <Button size="xs" onClick={clear}>
+        Clear filters
+      </Button>
+    </EmptyState>
   )
 }
 
 /** Nothing ever arrived, or the last piece was discarded: the honest next step is Ideas. */
 export function NothingYet() {
   return (
-    <div className="flex flex-1 flex-col border-t border-kit-hairline px-kit-group py-kit-group">
-      <div className="max-w-[34rem]">
-        <EmptyState
-          frame="none"
-          media={<Friend size={48} state="resting" className="text-kit-ink" />}
-          bold="Nothing written yet."
-          rest="Drafts start in Ideas. Pick one worth writing and I'll write a version for each channel you post to."
-        >
-          <ButtonLink href="/ideas" variant="action">
-            Go to Ideas
-          </ButtonLink>
-        </EmptyState>
-      </div>
-    </div>
+    <EmptyRegion edge="rule">
+      <EmptyState
+        frame="none"
+        media={<Friend size={48} state="resting" className="text-kit-ink" />}
+        bold="Nothing written yet."
+        rest="Drafts start in Ideas. Pick one worth writing and I'll write a version for each channel you post to."
+      >
+        <ButtonLink href="/ideas" variant="action">
+          Go to Ideas
+        </ButtonLink>
+      </EmptyState>
+    </EmptyRegion>
   )
 }
 

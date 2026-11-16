@@ -211,8 +211,8 @@ export const overlays: Section[] = [
       <>
         <P>
           Nothing here yet, said by a person who has run out of work, with the
-          person&apos;s own baseline under it and the one way in. Left-aligned,
-          a sentence on the page. The friend may stand above it, once per page.{" "}
+          person&apos;s own baseline under it and the one way in. Centred in
+          the region it replaces, the friend above the words.{" "}
           <Code>frame=&quot;none&quot;</Code> drops the card for inside an object
           that is already there.
         </P>
@@ -221,7 +221,7 @@ export const overlays: Section[] = [
         </Demo>
         <Pair
           incorrect={{
-            caption: "A centred poster: an icon in a tinted circle and a sentence from a database.",
+            caption: "An icon in a tinted circle and a sentence from a database.",
             children: <EmptyAsPoster />,
           }}
           correct={{

@@ -126,7 +126,11 @@ What it does for you: rows 36 (44 on touch), 1px apart; hover
 so a row moved into view never parks under the heads; one persistent
 `role="status"` that says `loadingLabel`; loading as eight static skeleton
 rows on the same grid (no shimmer, so no motion path); `empty` under the
-heads, which stay.
+heads, which stay, centred in the space below them (an `EmptyRegion`;
+states.md, "Empty"). Pass the empty state bare, with no padding of its own.
+When its action clears the filters, call `focusRestoredDataList()` after
+it: the button goes away with the empty state, and focus lands on the open
+row, or the first row, it brought back.
 
 A listbox, not a grid: a row is one choice (open this item) and holds no
 control. Its verbs live in the open item's pane, as ListRow's do.

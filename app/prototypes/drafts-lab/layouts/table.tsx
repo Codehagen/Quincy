@@ -4,6 +4,7 @@ import * as React from "react"
 
 import {
   DataList,
+  EmptyRegion,
   Panel,
   PanelBody,
   PanelHeader,
@@ -109,19 +110,29 @@ function TableSurface({ store, opts }: { store: DraftsStore; opts: LabOptions })
                       <DraftSheet row={open} store={store} />
                     </div>
                   </>
+                ) : store.phase !== "loading" && !anyWaiting ? (
+                  // Every draft decided: the pane's one message, in the middle
+                  // of the space under its strip (the strip keeps one line
+                  // across both panes).
+                  <div className="flex min-h-full flex-col">
+                    <PanelHeader>
+                      <span aria-hidden />
+                    </PanelHeader>
+                    <EmptyRegion>
+                      <AllDecided />
+                    </EmptyRegion>
+                  </div>
                 ) : (
                   <>
                     <PanelHeader>
                       <span aria-hidden />
                     </PanelHeader>
                     <div className="px-kit-group pt-kit-group">
-                      {store.phase === "loading" ? null : anyWaiting ? (
+                      {store.phase === "loading" ? null : (
                         <div className="flex flex-col gap-kit-tight">
                           <p className="text-kit-dense font-kit-strong text-kit-ink">Nothing open.</p>
                           <p className="text-kit-dense text-pretty text-kit-ink-muted">Pick a draft, or press j, to read it marked up.</p>
                         </div>
-                      ) : (
-                        <AllDecided />
                       )}
                     </div>
                   </>

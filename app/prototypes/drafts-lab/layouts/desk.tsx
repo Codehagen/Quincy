@@ -3,7 +3,7 @@
 import * as React from "react"
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons"
 
-import { Button, LiveDot, PanelBody, Tag, WorkspacePage } from "@/components/kit"
+import { Button, EmptyRegion, LiveDot, PanelBody, Tag, WorkspacePage } from "@/components/kit"
 import { FOCUS_RING } from "@/components/kit/control-styles"
 
 import { FromGlyph, NextCell, fromName } from "../parts/cells"
@@ -61,35 +61,38 @@ function DeskSurface({ store, opts }: { store: DraftsStore; opts: LabOptions }) 
       ) : (
         <>
           <DraftsFilters store={store} count={false} end={position} />
-          <PanelBody label="The open draft" scrollKey={open?.id ?? null}>
-            <div className="dl-desk mx-auto flex w-full max-w-[46rem] flex-col gap-kit-group px-kit-group pt-8 pb-12" data-type={opts.deskType}>
-              {store.phase === "loading" ? (
-                <p role="status" className="text-kit-dense text-kit-ink-muted">
-                  <LiveDot pulse>Getting your drafts.</LiveDot>
-                </p>
-              ) : store.shown.length === 0 && !open ? (
-                <FilteredEmpty store={store} />
-              ) : !open ? (
-                <AllDecided />
-              ) : (
-                <>
-                  <div className="flex min-w-0 items-center gap-2 text-kit-meta text-kit-ink-muted">
-                    <FromGlyph row={open} />
-                    <span className="truncate">{open.draft.from.adaptedFrom ? `Adapted from ${fromName(open)}` : `From your ${open.draft.from.sourceLabel}`}</span>
-                    <span aria-hidden>·</span>
-                    <span className="font-kit-mono text-kit-mono-sm">{open.draft.from.at}</span>
-                    {open.draft.kind ? (
-                      <span className="ms-auto">
-                        <Tag look="text">{open.draft.kind}</Tag>
-                      </span>
-                    ) : null}
-                  </div>
-                  <DraftSheet row={open} store={store} />
-                  {next.length > 0 ? <UpNext rows={next} use={opts.title} onPick={store.select} /> : null}
-                </>
-              )}
-            </div>
-          </PanelBody>
+          {store.phase !== "loading" && !open ? (
+            // Nothing on the desk: the empty state stands in its middle.
+            <PanelBody>
+              <EmptyRegion>{store.shown.length === 0 ? <FilteredEmpty store={store} /> : <AllDecided />}</EmptyRegion>
+            </PanelBody>
+          ) : (
+            <PanelBody label="The open draft" scrollKey={open?.id ?? null}>
+              <div className="dl-desk mx-auto flex w-full max-w-[46rem] flex-col gap-kit-group px-kit-group pt-8 pb-12" data-type={opts.deskType}>
+                {store.phase === "loading" ? (
+                  <p role="status" className="text-kit-dense text-kit-ink-muted">
+                    <LiveDot pulse>Getting your drafts.</LiveDot>
+                  </p>
+                ) : !open ? null : (
+                  <>
+                    <div className="flex min-w-0 items-center gap-2 text-kit-meta text-kit-ink-muted">
+                      <FromGlyph row={open} />
+                      <span className="truncate">{open.draft.from.adaptedFrom ? `Adapted from ${fromName(open)}` : `From your ${open.draft.from.sourceLabel}`}</span>
+                      <span aria-hidden>·</span>
+                      <span className="font-kit-mono text-kit-mono-sm">{open.draft.from.at}</span>
+                      {open.draft.kind ? (
+                        <span className="ms-auto">
+                          <Tag look="text">{open.draft.kind}</Tag>
+                        </span>
+                      ) : null}
+                    </div>
+                    <DraftSheet row={open} store={store} />
+                    {next.length > 0 ? <UpNext rows={next} use={opts.title} onPick={store.select} /> : null}
+                  </>
+                )}
+              </div>
+            </PanelBody>
+          )}
         </>
       )}
       {store.phase === "empty" ? null : <DraftsFoot store={store} onUndo={store.undo} />}

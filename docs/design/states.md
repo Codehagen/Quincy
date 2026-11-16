@@ -28,15 +28,47 @@ are the whole pattern.
 
 ## Empty
 
-`Lead` inside a Card: one bold sentence saying nothing is waiting, a grey
-continuation saying what to do, and at most one control to do it.
+The kit's `EmptyState`: the friend, one bold sentence saying nothing is
+waiting, a grey continuation saying what to do, and at most one control to
+do it (quincy-chat.md, "EmptyState").
+
+**An empty state stands in the middle of the region it replaces,
+horizontally and vertically. The friend sits above the title, and the
+title, the text and the action are centred under it.**
+
+Why: it is best practice. A centred empty state reads as the page's one
+message. On the rows' left edge, under the heads, it reads as a row that
+is missing.
+<!-- 2026-11-16, the owner: "For the empty state it should be in the middle of the screen as a best practice." -->
+
+The region is what the empty state stands in for: the list or table pane,
+the space under a table's column heads (they stay), or the whole workspace
+when there is nothing at all. `EmptyState` centres its own content;
+`EmptyRegion` centres it in the region, both ways.
 
 ```tsx
-<Card>
-  <Lead bold="Nothing is waiting on you." rest="Say a half-thought above and I'll find the angles in it." />
-  <div className="pt-kit-related"><ButtonLink href="/sources">Connect a source</ButtonLink></div>
-</Card>
+// Correct — a table that a filter emptied: DataList puts `empty` in an EmptyRegion itself
+<DataList … empty={<EmptyState frame="none" bold="No ideas match." rest="Clear a filter.">
+  <Button size="xs" onClick={() => { clearFilters(); focusRestoredDataList() }}>Clear filters</Button>
+</EmptyState>} />
+
+// Correct — nothing at all: the region is the whole workspace under the toolbar
+<EmptyRegion edge="rule">
+  <EmptyState frame="none" bold="Nothing to work on yet." rest="Add a source and I'll bring you the material.">
+    <ButtonLink href="/sources">Add a source</ButtonLink>
+  </EmptyState>
+</EmptyRegion>
+
+// Incorrect — top-left under the heads, padded like a row
+<div className="px-kit-group py-kit-group"><EmptyState frame="none" bold="No ideas match." /></div>
 ```
+
+- On a page (KitPage), the region is the object the list would be:
+  `EmptyState` in its Card, the content centred in it.
+- The action keeps its 44px hit area; nothing about centring changes it.
+- When the action takes the empty state away (Clear filters brings the
+  rows back), its button goes with it. Move focus on purpose:
+  `focusRestoredDataList()` puts it on the open row, or the first row.
 
 ## Refused or failed
 

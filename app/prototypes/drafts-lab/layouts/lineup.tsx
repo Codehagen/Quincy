@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { PanelBody, SkeletonLines, WorkspacePage } from "@/components/kit"
+import { EmptyRegion, PanelBody, SkeletonLines, WorkspacePage } from "@/components/kit"
 import { FOCUS_RING } from "@/components/kit/control-styles"
 
 import { Channels, FromGlyph, NextCell, fromName } from "../parts/cells"
@@ -83,47 +83,53 @@ export function LineupSurface({ store, opts }: { store: DraftsStore; opts: LabOp
       ) : (
         <>
           <DraftsFilters store={store} status={false} />
-          <PanelBody>
-            <div onKeyDown={onListKey} className="mx-auto flex w-full max-w-[60rem] flex-col gap-kit-related px-2 py-kit-related @[40rem]/kit-workspace:px-kit-group">
-              {store.phase === "loading" ? (
-                <div role="status" aria-label="Loading drafts" className="flex flex-col gap-3 px-3 pt-kit-related">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <SkeletonLines key={i} widths={[i % 2 ? "62%" : "78%"]} />
-                  ))}
-                </div>
-              ) : store.shown.length === 0 ? (
+          {store.phase !== "loading" && store.shown.length === 0 ? (
+            <PanelBody>
+              <EmptyRegion>
                 <FilteredEmpty store={store} />
-              ) : (
-                groups.map((g) => (
-                  <section key={g.key} aria-label={g.title} className="flex flex-col gap-px">
-                    <h2 className="flex items-baseline gap-2 px-3 pt-kit-related pb-1 text-kit-meta font-kit-strong text-kit-ink-muted">
-                      <span>{g.title}</span>
-                      <span className="font-kit-mono text-kit-mono-sm font-normal tabular-nums">{g.rows.length}</span>
-                    </h2>
-                    <ul className="flex flex-col gap-px">
-                      {g.rows.map((r) => (
-                        <InlineRow
-                          key={r.id}
-                          row={r}
-                          use={opts.title}
-                          open={open?.id === r.id}
-                          onToggle={(was) => {
-                            if (was) setClosed(r.id)
-                            else {
-                              setClosed(null)
-                              store.select(r.id)
-                            }
-                          }}
-                        >
-                          <DraftSheet row={r} store={store} />
-                        </InlineRow>
-                      ))}
-                    </ul>
-                  </section>
-                ))
-              )}
-            </div>
-          </PanelBody>
+              </EmptyRegion>
+            </PanelBody>
+          ) : (
+            <PanelBody>
+              <div onKeyDown={onListKey} className="mx-auto flex w-full max-w-[60rem] flex-col gap-kit-related px-2 py-kit-related @[40rem]/kit-workspace:px-kit-group">
+                {store.phase === "loading" ? (
+                  <div role="status" aria-label="Loading drafts" className="flex flex-col gap-3 px-3 pt-kit-related">
+                    {Array.from({ length: 8 }, (_, i) => (
+                      <SkeletonLines key={i} widths={[i % 2 ? "62%" : "78%"]} />
+                    ))}
+                  </div>
+                ) : (
+                  groups.map((g) => (
+                    <section key={g.key} aria-label={g.title} className="flex flex-col gap-px">
+                      <h2 className="flex items-baseline gap-2 px-3 pt-kit-related pb-1 text-kit-meta font-kit-strong text-kit-ink-muted">
+                        <span>{g.title}</span>
+                        <span className="font-kit-mono text-kit-mono-sm font-normal tabular-nums">{g.rows.length}</span>
+                      </h2>
+                      <ul className="flex flex-col gap-px">
+                        {g.rows.map((r) => (
+                          <InlineRow
+                            key={r.id}
+                            row={r}
+                            use={opts.title}
+                            open={open?.id === r.id}
+                            onToggle={(was) => {
+                              if (was) setClosed(r.id)
+                              else {
+                                setClosed(null)
+                                store.select(r.id)
+                              }
+                            }}
+                          >
+                            <DraftSheet row={r} store={store} />
+                          </InlineRow>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
+                )}
+              </div>
+            </PanelBody>
+          )}
         </>
       )}
       {store.phase === "empty" ? null : <DraftsFoot store={store} onUndo={store.undo} />}

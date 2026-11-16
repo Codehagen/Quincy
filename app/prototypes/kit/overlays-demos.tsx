@@ -550,7 +550,7 @@ export function EmptyLineup() {
   )
 }
 
-/** Incorrect: a centred icon in a tinted circle, and a sentence from a database. */
+/** Incorrect: an icon in a tinted circle, and a sentence from a database. */
 export function EmptyAsPoster() {
   return (
     <Card>
@@ -565,7 +565,7 @@ export function EmptyAsPoster() {
   )
 }
 
-/** Correct: a person's sentence, left-aligned, with the one way in. */
+/** Correct: the friend, a person's sentence, centred, with the one way in. */
 export function EmptyAsSentence() {
   return (
     <EmptyState bold="Nothing planned yet." rest="Tell me what you shipped.">

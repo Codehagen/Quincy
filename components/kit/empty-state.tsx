@@ -52,9 +52,12 @@ export function emptyStateMedia(media: React.ReactNode | undefined): React.React
 }
 
 /**
- * Nothing here yet, and the one next step. Left-aligned like everything
- * else in the kit: an empty state is a sentence on the page, not a poster
- * centred in a void. components/quincy/empty-state.tsx is this with the
+ * Nothing here yet, and the one next step. Centred: the friend above, the
+ * words and the action under it, all on one axis, so the empty state reads
+ * as the page's one message and not as a row that failed to load
+ * (docs/design/states.md, "Empty"). To centre it in the region it replaces
+ * as well, stand it in an `EmptyRegion`; a DataList does that for its
+ * `empty` by itself. components/quincy/empty-state.tsx is this with the
  * Quincy defaults (with-margin, the starters) and can sit on it.
  *
  * Put it in a Stage with no lead of its own, so the page does not say two
@@ -71,9 +74,9 @@ export function EmptyState({
 }: EmptyStateProps) {
   const shown = emptyStateMedia(media)
   const body = (
-    <div data-slot="kit-empty-state" className="flex flex-col gap-kit-related">
-      {shown != null ? <div className="flex">{shown}</div> : null}
-      <div className="flex flex-col gap-kit-tight">
+    <div data-slot="kit-empty-state" className="flex flex-col items-center gap-kit-related text-center">
+      {shown != null ? <div className="flex justify-center">{shown}</div> : null}
+      <div className="flex max-w-kit-empty flex-col gap-kit-tight text-balance">
         <Lead bold={bold} rest={rest} />
         {baseline ? (
           <Text variant="small" tone="muted">
@@ -81,8 +84,33 @@ export function EmptyState({
           </Text>
         ) : null}
       </div>
-      {children != null ? <div className="flex flex-wrap gap-kit-controls pt-kit-tight">{children}</div> : null}
+      {children != null ? <div className="flex flex-wrap justify-center gap-kit-controls pt-kit-tight">{children}</div> : null}
     </div>
   )
   return frame === "card" ? <Card width={width}>{body}</Card> : body
+}
+
+export type EmptyRegionProps = {
+  children: React.ReactNode
+  /** `rule`: a hairline on top, where the region stands right under a Toolbar. */
+  edge?: "rule" | "none"
+}
+
+/**
+ * The region an empty state replaces (a pane, a table's body under its
+ * heads, the whole workspace when there is nothing at all), with the empty
+ * state in its middle, both ways. It takes the space it is given: as a flex
+ * item it grows into it, and as the block child of a pane it fills the
+ * pane's height. The padding keeps the words off the edges when the region
+ * is short.
+ */
+export function EmptyRegion({ children, edge = "none" }: EmptyRegionProps) {
+  return (
+    <div
+      data-slot="kit-empty-region"
+      className={`flex min-h-full flex-1 flex-col items-center justify-center px-kit-group py-kit-group ${edge === "rule" ? "border-t border-kit-hairline" : ""}`}
+    >
+      {children}
+    </div>
+  )
 }
