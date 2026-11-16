@@ -156,6 +156,64 @@ describe("createDeepgramTranscriber", () => {
       globalThis.fetch = original
     }
   })
+
+  it("meters the audio before the request goes out", async () => {
+    // The meter is the first thing, so a request that times out on our side
+    // and is billed on theirs is still on /credits.
+    const order: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => {
+      order.push("fetch")
+      return new Response("{}")
+    }) as unknown as typeof fetch
+
+    try {
+      await createDeepgramTranscriber({
+        apiKey: "k",
+        onRequest: async (seconds) => {
+          order.push(`meter ${seconds}`)
+        },
+      }).transcribe(new Int16Array(32000), 16000)
+
+      expect(order).toEqual(["meter 2", "fetch"])
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it("sends nothing when the meter fails", async () => {
+    let fetched = false
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => {
+      fetched = true
+      return new Response("{}")
+    }) as unknown as typeof fetch
+
+    try {
+      await expect(
+        createDeepgramTranscriber({
+          apiKey: "k",
+          onRequest: async () => {
+            throw new Error("db down")
+          },
+        }).transcribe(new Int16Array(16), 16000)
+      ).rejects.toThrow("db down")
+      expect(fetched).toBe(false)
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it("counts every language it may retry in as a pass", () => {
+    expect(createDeepgramTranscriber({ apiKey: "k" }).maxPasses).toBe(1)
+    expect(
+      createDeepgramTranscriber({
+        apiKey: "k",
+        language: "no",
+        languages: ["no", "en"],
+      }).maxPasses
+    ).toBe(2)
+  })
 })
 
 describe("language", () => {

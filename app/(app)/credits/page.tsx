@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/lib/session"
 import { formatMicros } from "@/lib/pricing"
 import { recentUsage, summariseUsage } from "@/lib/usage"
+import { usageAmount } from "@/lib/usage-amount"
 import { calendarDayIn, resolveTimeZone, startOfDayIn } from "@/lib/timezone"
 import {
   ButtonLink,
@@ -110,48 +111,51 @@ export default async function CreditsPage() {
           >
             <Card>
               <ul className="flex flex-col gap-kit-related">
-                {turns.map((turn) => (
-                  <li key={turn.id} className="flex items-start gap-kit-related">
-                    {/* The date and what it was spent on, stacked rather than
-                        a fourth column: `usage_event.model` holds either a
-                        provider slug or a label, and the longest of those is
-                        wider than the two number columns put together. */}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <Mono tone="ink">
-                        {turn.createdAt.toLocaleString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          timeZone: zone,
-                        })}
-                      </Mono>
-                      {/* Verbatim, never mapped to a friendlier noun. This is
-                          the value a query would be written against, and a
-                          prettier word here would be a second vocabulary for
-                          the same column. */}
-                      <span className="truncate text-kit-small text-kit-ink-muted">
-                        {turn.model}
-                        {/* On a phone the token column has no room, so the
-                            counts ride on this line instead of vanishing. */}
-                        <span className="tabular-nums sm:hidden">
-                          {" · "}
-                          {turn.inputTokens.toLocaleString("en-GB")} in ·{" "}
-                          {turn.outputTokens.toLocaleString("en-GB")} out
+                {turns.map((turn) => {
+                  // Tokens for a model turn, seconds of audio for Deepgram,
+                  // nothing for a label that bought neither.
+                  const amount = usageAmount(turn)
+                  return (
+                    <li key={turn.id} className="flex items-start gap-kit-related">
+                      {/* The date and what it was spent on, stacked rather than
+                          a fourth column: `usage_event.model` holds either a
+                          provider slug or a label, and the longest of those is
+                          wider than the two number columns put together. */}
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <Mono tone="ink">
+                          {turn.createdAt.toLocaleString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            timeZone: zone,
+                          })}
+                        </Mono>
+                        {/* Verbatim, never mapped to a friendlier noun. This is
+                            the value a query would be written against, and a
+                            prettier word here would be a second vocabulary for
+                            the same column. */}
+                        <span className="truncate text-kit-small text-kit-ink-muted">
+                          {turn.model}
+                          {/* On a phone the amount column has no room, so the
+                              counts ride on this line instead of vanishing. */}
+                          {amount ? (
+                            <span className="tabular-nums sm:hidden">
+                              {" · "}
+                              {amount}
+                            </span>
+                          ) : null}
                         </span>
                       </span>
-                    </span>
-                    <span className="hidden shrink-0 text-right sm:block">
-                      <Mono>
-                        {turn.inputTokens.toLocaleString("en-GB")} in ·{" "}
-                        {turn.outputTokens.toLocaleString("en-GB")} out
-                      </Mono>
-                    </span>
-                    <span className="w-20 shrink-0 text-right">
-                      <Mono tone="ink">{formatMicros(turn.costMicros)}</Mono>
-                    </span>
-                  </li>
-                ))}
+                      <span className="hidden shrink-0 text-right sm:block">
+                        {amount ? <Mono>{amount}</Mono> : null}
+                      </span>
+                      <span className="w-20 shrink-0 text-right">
+                        <Mono tone="ink">{formatMicros(turn.costMicros)}</Mono>
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
             </Card>
           </Stage>

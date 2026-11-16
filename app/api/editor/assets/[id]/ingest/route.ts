@@ -7,6 +7,18 @@ import {
   getAsset,
 } from "@/lib/editor/assets"
 import { runIngest, type Transcriber } from "@/lib/editor/ingest"
+import {
+  cooldownMessage,
+  dailyVerdict,
+  IngestRefusedError,
+  recordingVerdict,
+} from "@/lib/editor/ingest-limits"
+import {
+  ingestCooldown,
+  recordIngestStart,
+  recordTranscription,
+  transcribedSecondsToday,
+} from "@/lib/editor/ingest-meter"
 import { peaksFromPcm } from "@/lib/editor/media"
 import { createR2Storage, downloadObject } from "@/lib/editor/storage-r2"
 import {
@@ -18,6 +30,11 @@ import {
   isDeepgramConfigured,
   readDeepgramOptions,
 } from "@/lib/editor/transcriber-deepgram"
+import {
+  isEntitled,
+  paywallResponse,
+  resolveEntitlementForRequest,
+} from "@/lib/entitlement"
 import { getSession } from "@/lib/session"
 
 /**
@@ -33,6 +50,15 @@ import { getSession } from "@/lib/session"
  * The claim is what makes calling this twice safe. Two tabs, a retry, a
  * double-click: the second call finds the row already `processing` and is told
  * so, rather than starting a second transcode of the same gigabyte.
+ *
+ * **What it may spend** (AGENTS.md, "Money"; numbers in
+ * lib/editor/ingest-limits.ts). Entitlement first, as on the editor agent.
+ * Then the cooldown, because a claim is not one: a claim is released when the
+ * run ends, and a failed asset is claimable again at once. Then the day's
+ * Deepgram seconds, before anything is downloaded. Then, inside the pipeline,
+ * the recording's own length against the per-recording ceiling and the day —
+ * after the probe and before the transcode. Every Deepgram request is metered
+ * before it is sent.
  */
 
 /** Seconds. The platform ceiling on all plans; nothing gains from asking for less. */
@@ -50,6 +76,11 @@ export async function POST(
 
   if (!session) {
     return Response.json({ error: "Not signed in." }, { status: 401 })
+  }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return paywallResponse(entitlement)
   }
 
   const { id } = await params
@@ -82,6 +113,27 @@ export async function POST(
     })
   }
 
+  const cooldown = await ingestCooldown(userId)
+  if (!cooldown.ready) {
+    return Response.json(
+      {
+        error: cooldownMessage(cooldown.secondsLeft),
+        state: "cooldown",
+        secondsLeft: cooldown.secondsLeft,
+      },
+      { status: 429 }
+    )
+  }
+
+  const today = dailyVerdict({ usedSeconds: await transcribedSecondsToday(userId) })
+  if (!today.ok) {
+    return Response.json({ error: today.error, state: "ceiling" }, { status: 429 })
+  }
+
+  // The attempt row, before the claim. A press that then loses the claim to
+  // another tab still counts against the cooldown, which is the safe way round.
+  await recordIngestStart(userId)
+
   const claim = await claimForIngest(id, userId)
   if (!claim.claimed) {
     return Response.json(
@@ -89,6 +141,11 @@ export async function POST(
       { status: 409 }
     )
   }
+
+  const meteredTranscriber = transcriber((audioSeconds) =>
+    recordTranscription(userId, id, audioSeconds)
+  )
+  const passes = meteredTranscriber.maxPasses ?? 1
 
   try {
     const result = await withWorkspace(async (workdir) => {
@@ -107,8 +164,32 @@ export async function POST(
         {
           storage: createR2Storage(),
           transcoder: createFfmpegTranscoder({ workdir }),
-          transcriber: transcriber(),
+          transcriber: meteredTranscriber,
           peaksFromPcm,
+          admit: async (probe) => {
+            const seconds = probe.durationUs / 1_000_000
+            const length = recordingVerdict(seconds)
+            if (!length.ok) throw new IngestRefusedError(length.error, 413)
+
+            if (!probe.hasAudio) return
+            const day = dailyVerdict({
+              usedSeconds: await transcribedSecondsToday(userId),
+              requestSeconds: seconds * passes,
+            })
+            if (!day.ok) throw new IngestRefusedError(day.error, 429)
+          },
+          // The second line, on the PCM length: a container that reported no
+          // duration passed `admit` at zero seconds.
+          admitTranscription: async (audioSeconds) => {
+            const length = recordingVerdict(audioSeconds)
+            if (!length.ok) return length.error
+
+            const day = dailyVerdict({
+              usedSeconds: await transcribedSecondsToday(userId),
+              requestSeconds: audioSeconds * passes,
+            })
+            return day.ok ? null : day.error
+          },
         }
       )
     })
@@ -133,6 +214,15 @@ export async function POST(
     // a real button rather than a re-upload.
     await failIngest(id, userId, reason)
 
+    // A refusal is a limit, not a broken file: its own status, so the client
+    // can tell "too long" and "enough for today" apart from a codec failure.
+    if (error instanceof IngestRefusedError) {
+      return Response.json(
+        { error: reason, state: "failed", refused: true },
+        { status: error.status }
+      )
+    }
+
     return Response.json({ error: reason, state: "failed" }, { status: 422 })
   }
 }
@@ -146,9 +236,11 @@ export async function POST(
  * entirely, would make a missing key indistinguishable from a file with no
  * speech in it, and only one of those is worth telling someone about.
  */
-function transcriber(): Transcriber {
+function transcriber(
+  onRequest: (audioSeconds: number) => Promise<void>
+): Transcriber {
   if (isDeepgramConfigured()) {
-    return createDeepgramTranscriber(readDeepgramOptions())
+    return createDeepgramTranscriber({ ...readDeepgramOptions(), onRequest })
   }
 
   return {

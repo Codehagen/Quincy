@@ -1,17 +1,18 @@
 import { redirect } from "next/navigation"
 
 import { Card, KitPage, List, Mono, NavRow, Stage, Text } from "@/components/kit"
+import { SampleButton } from "@/components/editor/sample-button"
 import { UploadDrop } from "@/components/editor/upload-drop"
 import { listProjects } from "@/lib/editor/projects"
+import { sampleAvailable } from "@/lib/editor/sample"
 import { constructMetadata } from "@/lib/metadata"
 import { getSession } from "@/lib/session"
 
 /**
  * One recording in, several cuts out.
  *
- * Deliberately not in the sidebar yet. The editor is the largest unfinished
- * surface in the app and putting it in the navigation would promise a finished
- * one — the same call /channels made while it only had two platforms.
+ * In the sidebar as "Cuts · Beta" (nav.ts): the editor is still the largest
+ * unfinished surface in the app, and the tag says so instead of hiding it.
  */
 export const metadata = constructMetadata({
   title: "Cuts",
@@ -26,9 +27,12 @@ export default async function CutsPage({
   const session = await getSession()
   if (!session) redirect("/login?next=/cuts")
 
-  const [projects, { all }] = await Promise.all([
+  const [projects, { all }, hasSample] = await Promise.all([
     listProjects(session.user.id),
     searchParams,
+    // Only when the owner has committed a prepared sample (see
+    // docs/video-ingest.md). Before that there is no button, not a broken one.
+    sampleAvailable(),
   ])
 
   // Cuts opens the room, not a list of rooms: with a cut in progress, the
@@ -47,7 +51,12 @@ export default async function CutsPage({
         rest="It is transcoded to an editing copy, the audio is read for a waveform, and the words are timestamped, all before you touch it."
       >
         <Card>
-          <UploadDrop />
+          <div className="flex flex-col gap-kit-related">
+            <UploadDrop />
+            {/* For someone with nothing to cut yet. Made from files prepared
+                once and committed, so it spends nothing (lib/editor/sample.ts). */}
+            {hasSample && projects.length === 0 ? <SampleButton /> : null}
+          </div>
         </Card>
       </Stage>
 

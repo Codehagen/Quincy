@@ -34,7 +34,13 @@ export type UploadResult = {
 export class UploadError extends Error {
   constructor(
     message: string,
-    readonly phase: UploadPhase
+    readonly phase: UploadPhase,
+    /**
+     * The HTTP status when the server refused. 402 is the paywall
+     * (lib/entitlement.ts), which the drop zone answers with a way to the
+     * billing page rather than with the sentence alone.
+     */
+    readonly status?: number
   ) {
     super(message)
     this.name = "UploadError"
@@ -47,6 +53,11 @@ export async function uploadAndOpen(
   signal?: AbortSignal
 ): Promise<UploadResult> {
   onProgress({ phase: "hashing", fraction: 0 })
+
+  // Read before hashing, so the server can refuse an over-long file before
+  // the browser spends minutes reading and uploading it. A courtesy: the
+  // server probes the real file after upload either way.
+  const durationSeconds = await readDurationSeconds(file)
 
   const { hash, sizeBytes } = await hashFile(file, (bytesRead) =>
     onProgress({
@@ -72,6 +83,7 @@ export async function uploadAndOpen(
       mimeType: file.type || guessMimeType(file.name),
       sizeBytes,
       hash,
+      ...(durationSeconds !== null ? { durationSeconds } : {}),
     },
     "requesting",
     signal
@@ -206,11 +218,49 @@ async function postJson<T>(
 
     throw new UploadError(
       detail ?? `Request failed (${response.status}).`,
-      phase
+      phase,
+      response.status
     )
   }
 
   return (await response.json()) as T
+}
+
+/**
+ * The file's length from its own metadata, or null when the browser cannot
+ * read it (an unusual container, a codec it does not play). Null is not a
+ * refusal: the file goes up and the server's probe decides.
+ */
+function readDurationSeconds(file: File): Promise<number | null> {
+  if (typeof document === "undefined") return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    const media = document.createElement(
+      file.type.startsWith("audio/") ? "audio" : "video"
+    )
+    const url = URL.createObjectURL(file)
+
+    const finish = (value: number | null) => {
+      window.clearTimeout(timer)
+      media.removeAttribute("src")
+      media.load()
+      URL.revokeObjectURL(url)
+      resolve(value)
+    }
+
+    // A file the browser cannot place should not hold the upload up.
+    const timer = window.setTimeout(() => finish(null), 4000)
+
+    media.preload = "metadata"
+    media.onloadedmetadata = () =>
+      finish(
+        Number.isFinite(media.duration) && media.duration > 0
+          ? media.duration
+          : null
+      )
+    media.onerror = () => finish(null)
+    media.src = url
+  })
 }
 
 /** Enough to get past the server's family check. ffprobe decides the truth. */

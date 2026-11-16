@@ -1,5 +1,19 @@
 import { findOrCreateAsset } from "@/lib/editor/assets"
+import {
+  cooldownMessage,
+  dailyVerdict,
+  recordingVerdict,
+} from "@/lib/editor/ingest-limits"
+import {
+  ingestCooldown,
+  transcribedSecondsToday,
+} from "@/lib/editor/ingest-meter"
 import { createUploadUrl, isR2Configured } from "@/lib/editor/storage-r2"
+import {
+  isEntitled,
+  paywallResponse,
+  resolveEntitlementForRequest,
+} from "@/lib/entitlement"
 import { getSession } from "@/lib/session"
 
 /**
@@ -13,6 +27,12 @@ import { getSession } from "@/lib/session"
  * The hash arrives before the bytes do, which is what makes a re-upload free:
  * a file this user already has comes back as `alreadyIngested` with no URL at
  * all, and the browser skips straight to opening it.
+ *
+ * The ingest limits are checked here as well as on the ingest route, read-only,
+ * so a refusal arrives before a gigabyte is uploaded rather than after it.
+ * The ingest route is the guard; this is the courtesy that makes the guard
+ * cheap to meet. Entitlement is checked before the row exists, so nothing is
+ * stored for someone who may not spend.
  */
 
 /** Bytes. R2 takes 5GB in a single PUT; this is a product limit, not a protocol one. */
@@ -33,6 +53,12 @@ type UploadRequest = {
   mimeType?: unknown
   sizeBytes?: unknown
   hash?: unknown
+  /**
+   * Seconds, as the browser read them from the file's metadata. Optional and
+   * client-supplied, so a courtesy only: it refuses an obviously long file
+   * before the upload. The probe on the ingest route is the real check.
+   */
+  durationSeconds?: unknown
 }
 
 export async function POST(request: Request) {
@@ -40,6 +66,11 @@ export async function POST(request: Request) {
 
   if (!session) {
     return Response.json({ error: "Not signed in." }, { status: 401 })
+  }
+
+  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!isEntitled(entitlement)) {
+    return paywallResponse(entitlement)
   }
 
   if (!isR2Configured()) {
@@ -60,6 +91,16 @@ export async function POST(request: Request) {
 
   const invalid = validate(body)
   if (invalid) return Response.json({ error: invalid }, { status: 400 })
+
+  if (typeof body.durationSeconds === "number") {
+    const length = recordingVerdict(body.durationSeconds)
+    if (!length.ok) {
+      return Response.json(
+        { error: length.error, state: "too-long" },
+        { status: 413 }
+      )
+    }
+  }
 
   const filename = body.filename as string
   const mimeType = body.mimeType as string
@@ -82,6 +123,29 @@ export async function POST(request: Request) {
       state: asset.state,
       alreadyIngested: true,
     })
+  }
+
+  // After the dedupe, so re-opening a file already in the library is never
+  // refused: that path buys nothing.
+  const [cooldown, usedSeconds] = await Promise.all([
+    ingestCooldown(session.user.id),
+    transcribedSecondsToday(session.user.id),
+  ])
+
+  if (!cooldown.ready) {
+    return Response.json(
+      {
+        error: cooldownMessage(cooldown.secondsLeft),
+        state: "cooldown",
+        secondsLeft: cooldown.secondsLeft,
+      },
+      { status: 429 }
+    )
+  }
+
+  const today = dailyVerdict({ usedSeconds })
+  if (!today.ok) {
+    return Response.json({ error: today.error, state: "ceiling" }, { status: 429 })
   }
 
   const upload = await createUploadUrl(asset.storageKey, mimeType)

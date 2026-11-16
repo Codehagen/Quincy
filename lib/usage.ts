@@ -2,6 +2,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
+import { cooldownDecision } from "./cooldown"
 import { estimateCostMicros, type Micros } from "./pricing"
 
 /**
@@ -58,12 +59,18 @@ export async function summariseUsage(
   userId: string,
   since: Date
 ): Promise<UsageSummary> {
+  // Token sums skip label rows (`x:post`, `deepgram:transcribe`, …). Those
+  // never spent a token, and `deepgram:transcribe` puts seconds of audio in
+  // `input_tokens` (see lib/editor/ingest-meter.ts) — summed in here they
+  // would be counted as tokens. A gateway model slug has no colon in it.
+  const tokenRow = sql`${usageEvent.model} not like '%:%'`
+
   const [row] = await db
     .select({
       turns: sql<number>`count(*)::int`,
-      inputTokens: sql<number>`coalesce(sum(${usageEvent.inputTokens}), 0)::int`,
-      cachedInputTokens: sql<number>`coalesce(sum(${usageEvent.cachedInputTokens}), 0)::int`,
-      outputTokens: sql<number>`coalesce(sum(${usageEvent.outputTokens}), 0)::int`,
+      inputTokens: sql<number>`coalesce(sum(${usageEvent.inputTokens}) filter (where ${tokenRow}), 0)::int`,
+      cachedInputTokens: sql<number>`coalesce(sum(${usageEvent.cachedInputTokens}) filter (where ${tokenRow}), 0)::int`,
+      outputTokens: sql<number>`coalesce(sum(${usageEvent.outputTokens}) filter (where ${tokenRow}), 0)::int`,
       costMicros: sql<number>`coalesce(sum(${usageEvent.costMicros}), 0)::int`,
     })
     .from(usageEvent)
@@ -120,15 +127,7 @@ export async function spendCooldown(
     .orderBy(desc(usageEvent.createdAt))
     .limit(1)
 
-  if (!recent) return { ready: true }
-
-  const elapsed = Date.now() - recent.createdAt.getTime()
-  if (elapsed >= cooldownMs) return { ready: true }
-
-  return {
-    ready: false,
-    secondsLeft: Math.ceil((cooldownMs - elapsed) / 1000),
-  }
+  return cooldownDecision(recent?.createdAt ?? null, cooldownMs)
 }
 
 /** The most recent turns, for the activity list on /credits. */

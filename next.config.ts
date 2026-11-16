@@ -143,6 +143,13 @@ const nextConfig: NextConfig = {
      * downloads exactly one binary at install, and on Vercel that install runs
      * on Linux, so its single file is already the right one.
      */
+    /**
+     * The Cuts sample (lib/editor/sample.ts). Read with `fs` from the page and
+     * its server action to copy into the bucket, and `public/` is served by
+     * the CDN rather than traced into functions — so without this the button
+     * never renders in production, because the manifest is not on disk.
+     */
+    "/cuts": ["./public/samples/cuts/**"],
     "/api/editor/assets/[id]/ingest": [
       "./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/ffmpeg",
       "./node_modules/.pnpm/ffprobe-static@*/node_modules/ffprobe-static/bin/linux/x64/ffprobe",

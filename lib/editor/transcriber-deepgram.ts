@@ -103,6 +103,13 @@ export type DeepgramOptions = {
    * turning it on later means re-transcribing the library.
    */
   diarize?: boolean
+  /**
+   * Called with the seconds of audio about to be sent, before every request
+   * — the first pass and each language retry. This is the meter: it is
+   * awaited, and a throw stops the request, so nothing is sent that was not
+   * recorded first. See lib/editor/ingest-meter.ts.
+   */
+  onRequest?: (audioSeconds: number) => Promise<void>
 }
 
 export function isDeepgramConfigured(
@@ -206,6 +213,8 @@ export function createDeepgramTranscriber(
     sampleRate: number,
     language: string | undefined
   ): Promise<unknown> => {
+    if (sampleRate > 0) await options.onRequest?.(pcm.length / sampleRate)
+
     const response = await fetch(
       listenUrl(sampleRate, { ...options, language }),
       {
@@ -241,6 +250,11 @@ export function createDeepgramTranscriber(
 
   return {
     name: "deepgram",
+    maxPasses:
+      1 +
+      (options.languages ?? []).filter(
+        (language) => language !== options.language
+      ).length,
 
     /**
      * One request, and a second round only when the first one does not

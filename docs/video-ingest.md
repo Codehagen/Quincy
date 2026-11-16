@@ -48,6 +48,65 @@ you scrubbing footage, and an asset with no speech has no transcript by
 definition — making it fatal would mean music and b-roll could never be
 ingested at all.
 
+## What it may spend
+
+AGENTS.md, "Money": a ceiling on what is bought, and a cooldown because a
+person presses the button. The numbers are named constants in
+`lib/editor/ingest-limits.ts`; the database half is `ingest-meter.ts`.
+
+| Limit | Value | Where it is checked |
+| --- | --- | --- |
+| Entitlement | trialing or active | both routes, first, before any row or URL |
+| `INGEST_COOLDOWN_MS` | one ingest start a minute | uploads (read-only) and ingest |
+| `MAX_RECORDING_SECONDS` | 20 minutes | uploads (browser's duration, a courtesy), then after the probe, then on the PCM length |
+| `DAILY_TRANSCRIBE_SECONDS` | 60 minutes of Deepgram audio, rolling 24h | uploads (anything left?), ingest (anything left?), after the probe (this file × passes) |
+
+Order on the ingest route: entitlement → cooldown → day exhausted? → write the
+`cuts:ingest` attempt row → claim → download → probe → **admit** (length, and
+day + this file × the transcriber's `maxPasses`) → transcode → audio →
+**admitTranscription** (the same checks on the PCM length, for containers whose
+probe had no duration) → Deepgram.
+
+A refusal at admit is fatal: the asset goes `failed` with the sentence on the
+row, the route answers 413 (too long) or 429 (the day), and the asset can be
+retried once the limit allows. A refusal at admitTranscription is a warning,
+like a Deepgram outage: the asset opens without captions.
+
+**Metering.** Every ingest start writes `cuts:ingest` (zero cost; it is the
+cooldown's attempt log, so a silent screen recording still counts). Every
+Deepgram request — the first pass and each language retry — writes
+`deepgram:transcribe` *before* it is sent, with the seconds of audio in
+`input_tokens` and `DEEPGRAM_COST_MICROS_PER_SECOND` × seconds in
+`cost_micros`. The daily ceiling sums those seconds, so it counts what was
+bought, not what was kept. /credits shows the row as "1m 05s of audio".
+
+Vision does not spend today: the ingest route passes no vision port. When one
+is added it meters as `vision:<provider>` through the same table.
+
+Not bounded yet: R2 storage. The 5GB per-file cap and the cooldown bound how
+fast it grows, but there is no per-user total.
+
+## The sample recording
+
+/cuts offers "Try it with a sample recording" to someone with no projects. It
+makes a project from files prepared once and committed, so pressing it never
+transcodes and never calls Deepgram (`lib/editor/sample.ts`). The prepared
+files are copied into the bucket under content-addressed `sample-cuts:` keys
+the first time anyone uses the sample, which makes the sample asset an
+ordinary row that every reader signs like any other. One sample project per
+person at a time (pressing again opens it), and 30 seconds between new ones.
+
+The button renders only when `public/samples/cuts/manifest.json` exists and
+validates, so nothing changes until a sample is committed. To add one:
+
+1. Record a 10–20 second clip with speech in it that you own.
+2. `npx tsx --env-file=.env.local scripts/prepare-cuts-sample.ts <clip> --yes`
+   — this is the one Deepgram call the sample ever makes, a few cents.
+3. Commit `public/samples/cuts/`.
+
+`next.config.ts` traces `public/samples/cuts/**` into the `/cuts` function,
+because the page and its server action read the files from disk.
+
 ## Bucket CORS
 
 Required, because the browser PUTs to R2 directly. Without it the upload fails

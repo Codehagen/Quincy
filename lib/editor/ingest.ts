@@ -71,6 +71,13 @@ export type Transcriber = {
     hints?: { voicedSeconds: number }
   ): Promise<unknown>
   name: string
+  /**
+   * The most requests one `transcribe` call can make. Deepgram retries in a
+   * second language when the first pass looks wrong, and each pass pays for
+   * the whole audio again, so a ceiling on seconds bought has to multiply by
+   * this. Absent means one.
+   */
+  maxPasses?: number
 }
 
 export type VisionUploader = {
@@ -123,6 +130,19 @@ export type IngestPorts = {
   peaksFromPcm: (pcm: Int16Array, sampleRate: number) => AudioPeaks
   proxyOptions?: ProxyOptions
   onProgress?: (step: IngestStep) => void
+  /**
+   * Refuse the asset, given what the probe found. Runs before the transcode
+   * and before any audio is bought, so a two-hour file costs a probe and
+   * nothing more. A throw here is fatal, like a failed probe.
+   */
+  admit?: (probe: ProbeResult) => void | Promise<void>
+  /**
+   * Refuse the transcription alone, given the measured audio length. Returns
+   * the reason, or null to go ahead. Not fatal: the asset still opens, without
+   * captions — the same policy as a Deepgram outage. This is the second line
+   * behind `admit`, for containers whose probe reported no duration.
+   */
+  admitTranscription?: (audioSeconds: number) => Promise<string | null>
 }
 
 export type IngestStep =
@@ -169,6 +189,7 @@ export async function runIngest(
 
   onProgress?.("probing")
   const probe = parseProbe(await transcoder.probe(input.source))
+  await ports.admit?.(probe)
 
   onProgress?.("transcoding")
   // Content-addressed, so a second project cutting the same talk finds the
@@ -197,11 +218,22 @@ export async function runIngest(
       const { pcm, sampleRate } = await transcoder.audio(input.source)
       peaks = ports.peaksFromPcm(pcm, sampleRate)
 
-      onProgress?.("transcribing")
-      transcript = await transcriber.transcribe(pcm, sampleRate, {
-        voicedSeconds: voicedSeconds(peaks),
-      })
-      transcriptProvider = transcriber.name
+      // What Deepgram bills on is the audio sent, so the ceiling is checked
+      // against the PCM length rather than the container's claim.
+      const refusal =
+        sampleRate > 0
+          ? await ports.admitTranscription?.(pcm.length / sampleRate)
+          : null
+
+      if (refusal) {
+        warnings.push(`transcript: ${refusal}`)
+      } else {
+        onProgress?.("transcribing")
+        transcript = await transcriber.transcribe(pcm, sampleRate, {
+          voicedSeconds: voicedSeconds(peaks),
+        })
+        transcriptProvider = transcriber.name
+      }
     } catch (error) {
       warnings.push(`transcript: ${message(error)}`)
     }

@@ -3,8 +3,12 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { Progress, Text } from "@/components/kit"
-import { uploadAndOpen, type UploadProgress } from "@/lib/editor/upload-client"
+import { Progress, Text, TextLink } from "@/components/kit"
+import {
+  UploadError,
+  uploadAndOpen,
+  type UploadProgress,
+} from "@/lib/editor/upload-client"
 
 /**
  * Drop a recording here and end up in the editor.
@@ -39,6 +43,8 @@ export function UploadDrop({
 
   const [progress, setProgress] = React.useState<UploadProgress | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  // The paywall is a refusal with somewhere to go, unlike the others.
+  const [paywalled, setPaywalled] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
 
   const busy = progress !== null && progress.phase !== "done"
@@ -46,6 +52,7 @@ export function UploadDrop({
   const start = React.useCallback(
     async (file: File) => {
       setError(null)
+      setPaywalled(false)
       onFileChosen?.(file)
 
       try {
@@ -61,6 +68,7 @@ export function UploadDrop({
         router.push(`/cuts/${result.projectId}`)
       } catch (failure) {
         setProgress(null)
+        setPaywalled(failure instanceof UploadError && failure.status === 402)
         setError(
           failure instanceof Error ? failure.message : "The upload failed."
         )
@@ -144,10 +152,19 @@ export function UploadDrop({
         </div>
       )}
 
+      {/* Every refusal is a plain sentence in ink: a limit reached (too
+          long, enough for today, one at a time) is not a failure, and red is
+          kept for destructive actions. The server writes the sentence. */}
       {error ? (
         <div className="mt-kit-related">
           <Text variant="small" role="alert">
             {error}
+            {paywalled ? (
+              <>
+                {" "}
+                <TextLink href="/settings/billing">See plans</TextLink>
+              </>
+            ) : null}
           </Text>
         </div>
       ) : null}

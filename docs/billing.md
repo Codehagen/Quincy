@@ -200,6 +200,17 @@ non-entitled users at the top of the loop, and the skip belongs in its existing
 Route handlers get a `requireEntitlement()` that returns the 402 directly, so a
 new surface is gated by calling it rather than by remembering the rule.
 
+**Video ingest follows the rule.** `POST /api/editor/uploads` and
+`POST /api/editor/assets/:id/ingest` both resolve entitlement before anything
+is stored or spent and answer a non-entitled account with the same 402 body;
+the drop zone shows the sentence and a link to `/settings/billing`. Entitlement
+says who may spend, not how much — the per-recording and per-day Deepgram
+ceilings and the one-a-minute cooldown are in `lib/editor/ingest-limits.ts`,
+described in `docs/video-ingest.md`, and metered on `usage_event` as
+`cuts:ingest` (each start, zero cost) and `deepgram:transcribe` (seconds of
+audio in `input_tokens`, an estimated cost in `cost_micros`). The Cuts sample
+recording spends nothing and is not gated.
+
 ## The trial ceiling
 
 This is the open exposure created by not asking for a card, and it should be

@@ -122,6 +122,53 @@ describe("runIngest", () => {
     expect(result.warnings).toEqual([])
   })
 
+  it("refuses before the transcode when admit throws", async () => {
+    // A two-hour file should cost a probe and nothing more.
+    const p = ports({
+      admit: () => {
+        throw new Error("too long")
+      },
+    })
+
+    await expect(runIngest(input, p)).rejects.toThrow("too long")
+    expect(p.transcoder.proxy).not.toHaveBeenCalled()
+    expect(p.transcriber.transcribe).not.toHaveBeenCalled()
+  })
+
+  it("hands admit the probe it read", async () => {
+    const admit = vi.fn()
+    await runIngest(input, ports({ admit }))
+
+    expect(admit).toHaveBeenCalledWith(
+      expect.objectContaining({ durationUs: 144_553_000, hasAudio: true })
+    )
+  })
+
+  it("skips transcription, not the asset, when the ceiling refuses it", async () => {
+    const admitTranscription = vi
+      .fn()
+      .mockResolvedValue("Enough for today.")
+    const p = ports({ admitTranscription })
+
+    const result = await runIngest(input, p)
+
+    // 1600 samples at 16kHz: the PCM length, not the container's claim.
+    expect(admitTranscription).toHaveBeenCalledWith(0.1)
+    expect(p.transcriber.transcribe).not.toHaveBeenCalled()
+    expect(result.transcript).toBeNull()
+    expect(result.warnings).toEqual(["transcript: Enough for today."])
+    expect(result.keys.proxy).toContain("derived/proxy/v2/")
+  })
+
+  it("transcribes when the ceiling admits it", async () => {
+    const p = ports({ admitTranscription: vi.fn().mockResolvedValue(null) })
+
+    const result = await runIngest(input, p)
+
+    expect(p.transcriber.transcribe).toHaveBeenCalledOnce()
+    expect(result.warnings).toEqual([])
+  })
+
   it("fetches a vision handle when one is configured", async () => {
     const expiresAt = new Date(Date.now() + 48 * 3600 * 1000)
     const p = ports({
