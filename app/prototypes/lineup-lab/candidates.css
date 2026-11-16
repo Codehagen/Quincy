@@ -1,0 +1,351 @@
+/* ══════════════════════════════════════════════════════════════════
+   CANDIDATES — lab-local, not kit tokens.
+
+   Colours, shadows, radii and every workspace height come from the kit
+   (--kit-*, the promoted Toolbar / DataList / Panel / KeyBar). Inside a
+   feed column the platform's own look is drafts-lab/candidates.css
+   ("C · Feed, picked"), imported, never restated here: this file only
+   reads its variables (--xf-*, --lf-*) for what is drawn for you inside
+   the column (an open slot, a quiet day, now). When a value is picked it
+   becomes a kit token (DECISION.md says which) and this file goes.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 2 · Board ───────────────────────────────────────────────────── */
+
+.ll-board {
+  display: grid;
+  border-bottom: 1px solid var(--kit-hairline);
+  border-right: 1px solid var(--kit-hairline);
+}
+.ll-board-corner,
+.ll-board-day {
+  min-height: var(--spacing-kit-head);
+  border-left: 1px solid var(--kit-hairline);
+}
+.ll-board-corner {
+  border-left: 0;
+}
+.ll-board-day {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 8px 6px;
+}
+.ll-board-time {
+  padding: 10px 8px 0 0;
+  border-top: 1px solid var(--kit-hairline);
+}
+.ll-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 4px;
+  border-top: 1px solid var(--kit-hairline);
+  border-left: 1px solid var(--kit-hairline);
+}
+/* Today is the one column that is a recess: the well grey, never a tint. */
+.ll-cell[data-today] {
+  background: color-mix(in oklch, var(--kit-stage) 60%, transparent);
+}
+.ll-cell[data-drop] {
+  outline: 1px dashed var(--kit-ink-muted);
+  outline-offset: -3px;
+}
+
+/* A cell's card: a lifted object while it is still to happen; flat once it
+   has (sent), or while it is only a commitment (open, passed). The radius is
+   the control's inner step (cell padding 4). */
+.ll-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px 7px;
+  border-radius: var(--radius-kit-control-inner);
+  background: var(--kit-object);
+  box-shadow: var(--shadow-kit-object);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--kit-duration-state) var(--ease-kit-out),
+    box-shadow var(--kit-duration-state) var(--ease-kit-out);
+}
+.ll-card[draggable="true"] {
+  cursor: grab;
+}
+.ll-card[data-kind="published"],
+.ll-card[data-kind="open"],
+.ll-card[data-kind="passed"] {
+  background: transparent;
+  box-shadow: none;
+}
+.ll-card[data-kind="open"],
+.ll-card[data-kind="passed"] {
+  flex: 1;
+  outline: 1px dashed var(--kit-ink-muted);
+  outline-offset: -1px;
+}
+.ll-card[data-kind="passed"] {
+  outline-color: var(--kit-hairline);
+}
+.ll-card:hover {
+  background: var(--kit-row-hover);
+}
+.ll-card[data-picked] {
+  background: var(--kit-selected);
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+.ll-card:focus-visible,
+.ll-empty:focus-visible,
+.ll-rail-btn:focus-visible {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+.ll-card-tray {
+  width: auto;
+  max-width: 18rem;
+}
+.ll-card-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--ll-lines, 2);
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  font-weight: var(--text-kit-meta--font-weight);
+  letter-spacing: var(--text-kit-meta--letter-spacing);
+  overflow-wrap: anywhere;
+}
+.ll-card-skel {
+  display: block;
+  height: 52px;
+  background: var(--kit-skeleton);
+  box-shadow: none;
+}
+/* An empty cell: nothing, until you point at it (then it offers to become a slot). */
+.ll-empty {
+  flex: 1;
+  width: 100%;
+  min-height: 28px;
+  border-radius: var(--radius-kit-control-inner);
+  background: transparent;
+  transition: background-color var(--kit-duration-state) var(--ease-kit-out);
+}
+.ll-empty:hover {
+  background: var(--kit-row-hover);
+}
+.ll-empty[data-picked] {
+  background: var(--kit-selected);
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+
+/* ── 3 · Feed: a rail, the column, a margin ──────────────────────── */
+
+.ll-feed {
+  display: grid;
+  grid-template-columns: var(--ll-rail, 112px) minmax(0, var(--ll-col, 598px)) var(--ll-margin, 248px);
+  column-gap: 20px;
+  justify-content: center;
+  padding: 0 var(--spacing-kit-group) calc(var(--spacing-kit-group) + env(safe-area-inset-bottom));
+}
+.ll-row {
+  display: contents;
+}
+.ll-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 14px;
+  text-align: end;
+}
+.ll-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.ll-rail-btn {
+  /* j / k bring a post to the top, under the column's sticky tabs. */
+  scroll-margin-top: 72px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 2px 6px;
+  margin-inline-end: -6px;
+  border-radius: var(--radius-kit-chip);
+  cursor: pointer;
+}
+/* 44px of hit area on a coarse pointer, without moving anything. */
+@media (pointer: coarse) {
+  .ll-rail-btn::after {
+    content: "";
+    position: absolute;
+    inset: -8px -4px;
+  }
+}
+.ll-margin {
+  padding-top: 14px;
+  min-width: 0;
+}
+.ll-slice {
+  min-width: 0;
+  position: relative;
+}
+.ll-row[data-picked] > .ll-slice {
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+.ll-row-top > .ll-slice {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.ll-tail {
+  min-height: 48px;
+}
+.ll-loading {
+  min-height: 70vh;
+}
+.ll-mark-row > .ll-rail {
+  padding-top: 10px;
+}
+
+/* Drawn for you only, inside the column, in the platform's secondary
+   colour (the convention of the fold line): a quiet day, the head of the
+   no-time posts. Dashed rules either side of a few words. */
+.ll-band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--xf-dim, var(--lf-dim));
+  border-bottom: 1px solid var(--xf-line, transparent);
+}
+.lf .ll-band {
+  color: var(--lf-dim);
+  border-bottom: 0;
+}
+.ll-band::before,
+.ll-band::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed currentColor;
+}
+
+/* Now: one ink line across the column, the dot in the rail. */
+.ll-now > .ll-rail {
+  padding-top: 0;
+  justify-content: center;
+  min-height: 20px;
+}
+.ll-now > .ll-slice {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+}
+.ll-now-line {
+  display: block;
+  width: 100%;
+  border-top: 1px solid var(--kit-ink);
+}
+.ll-now > .ll-slice.lf {
+  padding: 0;
+}
+
+/* An open slot where a post would stand: a dashed outline, the platform's
+   secondary colour, plain words. Never a fake post. */
+.ll-gap {
+  padding: 12px 16px;
+  color: var(--xf-dim, var(--lf-dim));
+  border-bottom: 1px solid var(--xf-line, transparent);
+}
+.lf .ll-gap {
+  padding: 0;
+  color: var(--lf-dim);
+  border-bottom: 0;
+}
+.ll-gap-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px dashed currentColor;
+  border-radius: 12px;
+}
+.ll-gap[data-passed] .ll-gap-box {
+  border-color: var(--xf-line, var(--lf-line));
+}
+.ll-gap-title {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+  color: var(--xf-text, var(--lf-text));
+}
+.ll-gap[data-passed] .ll-gap-title {
+  color: inherit;
+}
+.ll-gap-sub {
+  font-size: 13px;
+  line-height: 16px;
+}
+/* A sent post recedes and stays: you can check that it happened. */
+.ll-feed-post[data-state="published"] .feed-text {
+  color: var(--xf-dim, var(--lf-dim));
+}
+
+/* The phone fold: the rail becomes a line over each post, the margin a
+   block under it. */
+@container kit-workspace (max-width: 47.99rem) {
+  .ll-feed {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: max(0px, env(safe-area-inset-left)) max(0px, env(safe-area-inset-right));
+  }
+  .ll-rail {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 6px;
+    text-align: start;
+  }
+  .ll-day {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .ll-rail-btn {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: 0;
+    margin-inline-start: auto;
+  }
+  .ll-margin {
+    padding: 8px 16px 12px;
+  }
+  .ll-margin:empty {
+    display: none;
+  }
+  .ll-now > .ll-rail {
+    padding: 4px 16px;
+  }
+  .ll-row-top > .ll-rail,
+  .ll-row-top > .ll-margin,
+  .ll-tail + .ll-margin {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-card,
+  .ll-empty {
+    transition: none;
+  }
+}
