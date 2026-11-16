@@ -143,8 +143,12 @@
         "app/prototypes/workspace-lab/**",
         // The Drafts working-surface lab, judged against the same pictures.
         "app/prototypes/drafts-lab/**",
+        // The Numbers dashboard lab, beside the Drafts lab.
+        "app/prototypes/numbers-lab/**",
         // The Lineup working-surface lab, on the Drafts lab's feed parts.
         "app/prototypes/lineup-lab/**",
+        // Sources and Channels as one Connectors page, after the owner's reference.
+        "app/prototypes/connectors-lab/**",
         "app/prototypes/video-*/**",
         // Judges the app's personality against the landing's pictures, by import.
         "app/prototypes/personality-lab/**",
