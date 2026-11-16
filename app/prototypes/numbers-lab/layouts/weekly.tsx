@@ -20,7 +20,7 @@ import type { LayoutProps } from "./types"
  * The period is a week, stepped back and forth; the dashboard is the
  * margin. Under ~56rem the margin drops under each paragraph.
  */
-export function WeeklyLayout({ data, phase, openPost }: LayoutProps) {
+export function WeeklyLayout({ data, phase, openTable }: LayoutProps) {
   const opts = useLabOptions()
   const [back, setBack] = React.useState(0)
   const maxBack = Math.max(0, data.historyWeeks - 1)
@@ -139,7 +139,7 @@ export function WeeklyLayout({ data, phase, openPost }: LayoutProps) {
                       {top.post.body && readBeats(top.post.body)
                         ? "It had all three beats: what you did, a number on its own line, and what it meant."
                         : "It had no number on its own line, so it reads as an opinion, not a story."}{" "}
-                      <TextButton onClick={() => openPost(top.post.id)}>Open it</TextButton>
+                      <TextButton onClick={() => openTable({ post: top.post.id, order: "best" }, `row-${top.post.id}`)}>Open it</TextButton>
                     </>
                   ) : (
                     <>Nothing went out this week, so there is nothing to rank.</>

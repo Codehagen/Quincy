@@ -79,7 +79,13 @@ Tried in the labs, looked at, and thrown out. Do not bring them back.
   is stated against the person's own median in a line of text, not shouted.
 - **Bento splits and grids of tiles in the app** (12, 14). One stage, one
   object; a split stage divides the attention the page exists to focus.
-  Bento is allowed on marketing pages only (showcase.md).
+  Bento is allowed on marketing pages only (showcase.md). **One exception:
+  Numbers** (2026-11-16), whose job is the glance, so a row of four tiles
+  and a grid of panels stand there and nowhere else. It holds because each
+  tile is a sentence against the person's own usual, not a shouted count
+  (`app/prototypes/numbers-lab/DECISION.md`). Every other page keeps the
+  rule.
+  <!-- 2026-11-16, the owner on /prototypes/numbers-lab: "Så jeg liker Dashboard og table." -->
 - **A window waiting on a loop** (06), and **auto-looping cursor demos** where
   nothing happens until it plays (09, 10). Every motion has a cause.
 - **Strikethrough diffs** (04). Quincy marks up a draft; it does not grade it.
@@ -90,4 +96,11 @@ Tried in the labs, looked at, and thrown out. Do not bring them back.
 - **A follower chart, or a metrics/vanity dashboard** (tiles of counts, a
   chart of items per week, a bare total). `docs/vision.md`. A dense working
   surface (toolbar, table, panels; workspace.md) is allowed: it is where
-  the work is done, not a wall of numbers about it.
+  the work is done, not a wall of numbers about it. **Numbers is the one
+  dashboard** (2026-11-16, the owner's pick of Dashboard with Table): every
+  number on it is a sentence against the person's own usual, Depth
+  (replies, who came back) comes before Volume (posts, views per post),
+  and there is no follower count, no bare total and no colour for good or
+  bad. A tile or a row opens the posts behind it in a Table. No other page
+  gets tiles or a metrics grid, and a follower chart stays out everywhere.
+  <!-- 2026-11-16, the owner: "Så jeg liker Dashboard og table." -->

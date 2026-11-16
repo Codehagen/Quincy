@@ -24,6 +24,7 @@ import {
   WorkspacePage,
   WorkspacePanes,
   focusRestoredDataList,
+  revealDataListRow,
   useLetterKeys,
   type DataListColumn,
 } from "@/components/kit"
@@ -32,32 +33,43 @@ import { dayLabel, fmt, formatMultiple, type NumbersData, type Post } from "../d
 import { useLabOptions } from "../lab-options"
 import { Climb, MultipleBar } from "../parts/charts"
 import { EmptyNumbers, NumbersToolbar, Proposed, StateLine } from "../parts/chrome"
-import type { LayoutProps } from "./types"
+import type { Against, LayoutProps, Show, TableState } from "./types"
 
 /**
- * B · Table and panel: the house pattern (Ideas, Drafts). Posts as a dense
- * table whose columns are already against your baseline (× your median, a
- * bar from the median line, replies against your usual), and the open post
- * beside it: its numbers, how it climbed, the three beats when the post has
- * them, and who replied. The dashboard is the column heads; there are no
- * tiles. Under ~900px of workspace the pane folds away and a row opens in
- * its place.
+ * B · Table and panel, picked as what the Dashboard opens (2026-11-16).
+ * Posts as a dense table whose columns are already against your baseline
+ * (× your median, a bar from the median line, replies), and the open post
+ * beside it: its numbers, how it climbed, the three beats when the post
+ * has them, and who replied. Under ~900px of workspace the pane folds away
+ * and a row opens in its place.
+ *
+ * Its filters are the URL's (`show`, `order`, `against`, `post`), so a tile
+ * lands here already filtered to its measure and a "What worked" row lands
+ * with that post open. Opened from the Dashboard, the toolbar carries the
+ * crumb back, and Esc goes back (after closing a folded post first).
  */
 
-type Against = "any" | "above" | "below" | "outlier"
-type Order = "newest" | "best"
 type Row = { post: Post; multiple: number | null }
+
+function passAgainst(a: Against, r: Row) {
+  return a === "any" ? true : r.multiple === null ? false : a === "above" ? r.multiple >= 1 : a === "below" ? r.multiple < 1 : r.multiple >= 3
+}
 
 const FOLD = 900
 
-export function TableLayout({ data, read, phase, period, setPeriod, initialPost }: LayoutProps) {
+const SHOW_LABEL: Record<Show, string> = {
+  all: "Every post",
+  replies: "Got replies",
+  returning: "Someone came back",
+}
+
+export function TableLayout({ data, read, phase, period, setPeriod, table, setTable, back }: LayoutProps) {
   const opts = useLabOptions()
   const ref = React.useRef<HTMLDivElement>(null)
   const [fold, setFold] = React.useState<boolean | null>(null)
-  const [against, setAgainst] = React.useState<Against>("any")
-  const [order, setOrder] = React.useState<Order>("newest")
-  const [open, setOpen] = React.useState<string | null>(initialPost)
-  const [detail, setDetail] = React.useState(initialPost !== null)
+  const [detail, setDetail] = React.useState(table.post !== null)
+  const { against, order, show } = table
+  const set = (next: Partial<TableState>) => setTable({ ...table, ...next })
 
   React.useLayoutEffect(() => {
     const el = ref.current
@@ -73,23 +85,71 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
     () => read.scored.filter((s) => s.post.day !== null && s.post.day < read.days).sort((a, b) => a.post.day! - b.post.day!),
     [read.scored, read.days],
   )
-  const test = (a: Against, r: Row) =>
-    a === "any" || r.multiple === null ? a === "any" : a === "above" ? r.multiple >= 1 : a === "below" ? r.multiple < 1 : r.multiple >= 3
-  const rows = React.useMemo(() => {
-    const kept = all.filter((r) => test(against, r))
-    return order === "best" ? [...kept].sort((a, b) => b.post.views - a.post.views) : kept
-  }, [all, against, order])
+  // A post someone came back to: one of its repliers had replied to an earlier post.
+  const returning = React.useMemo(() => {
+    const people = data.people
+    if (!people) return new Set<string>()
+    const byId = new Map(people.map((p) => [p.id, p]))
+    return new Set(
+      all.filter((r) => r.post.repliers.some((id) => byId.get(id)?.replyDays.some((d) => d > r.post.day!))).map((r) => r.post.id),
+    )
+  }, [all, data.people])
+
+  const passShow = (v: Show, r: Row) => (v === "all" ? true : v === "replies" ? r.post.replies > 0 : returning.has(r.post.id))
+
+  // A few dozen rows: filtered on every render, no memo to keep in step.
+  const kept = all.filter((r) => passAgainst(against, r) && passShow(show, r))
+  const rows =
+    order === "best"
+      ? [...kept].sort((a, b) => b.post.views - a.post.views)
+      : order === "replies"
+        ? [...kept].sort((a, b) => b.post.replies - a.post.replies || b.post.views - a.post.views)
+        : kept
 
   // Keep the open row when a filter hides it; open the first when none is open.
-  const current = open && all.some((r) => r.post.id === open) ? open : (rows[0]?.post.id ?? null)
+  const current = table.post && all.some((r) => r.post.id === table.post) ? table.post : (rows[0]?.post.id ?? null)
   const openRow = all.find((r) => r.post.id === current) ?? null
+  const open = (id: string) => set({ post: id })
+
+  // Arriving with a post: bring its row into view, once the fold has settled.
+  const arrival = React.useRef(table.post)
+  React.useEffect(() => {
+    const key = arrival.current
+    if (!key || fold !== false) return
+    arrival.current = null
+    requestAnimationFrame(() => document.querySelector(`[data-kit-row="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "nearest" }))
+  }, [fold])
 
   const move = (d: 1 | -1) => {
     const i = rows.findIndex((r) => r.post.id === current)
     const next = rows[Math.max(0, Math.min(rows.length - 1, i + d))]
-    if (next) setOpen(next.post.id)
+    if (next) {
+      open(next.post.id)
+      revealDataListRow(next.post.id)
+    }
   }
   useLetterKeys({ j: () => move(1), k: () => move(-1) })
+
+  // Esc: a folded post closes first, then the Table goes back to the Dashboard.
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target instanceof HTMLElement ? e.target : null
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return
+      if (document.querySelector('[role="menu"], [role="listbox"][data-open], [role="dialog"], [role="alertdialog"]')) return
+      if (fold && detail) {
+        e.preventDefault()
+        setDetail(false)
+        return
+      }
+      if (back) {
+        e.preventDefault()
+        back()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [back, fold, detail])
 
   const repliesUsual = read.medianReplies
   const columns: DataListColumn<Row>[] = [
@@ -101,7 +161,18 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
       skeleton: "title",
     },
     { id: "day", header: "Out", width: "3.5rem", align: "end", wide: true, cell: (r) => <DataListMono>{dayLabel(data.today, r.post.day!)}</DataListMono> },
-    { id: "views", header: "Views", width: "4rem", align: "end", cell: (r) => <DataListMono>{fmt(r.post.views)}</DataListMono> },
+    {
+      id: "views",
+      header: "Views",
+      width: "4rem",
+      align: "end",
+      cell: (r) => (
+        <>
+          <DataListMono>{fmt(r.post.views)}</DataListMono>
+          <span className="sr-only"> views</span>
+        </>
+      ),
+    },
     {
       id: "against",
       header: "Against your median",
@@ -115,13 +186,13 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
     },
     {
       id: "multiple",
-      header: "×",
-      width: "3rem",
+      header: "× median",
+      width: "4rem",
       align: "end",
       cell: (r) => (
         <>
           <DataListMono>{r.multiple === null ? "—" : formatMultiple(r.multiple)}</DataListMono>
-          <span className="sr-only">{r.multiple === null ? "no median yet" : "your median"}</span>
+          <span className="sr-only">{r.multiple === null ? "no median yet" : " your median"}</span>
         </>
       ),
     },
@@ -130,15 +201,31 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
       header: "Replies",
       width: "3.5rem",
       align: "end",
-      cell: (r) => <DataListMono>{r.post.replies}</DataListMono>,
+      cell: (r) => (
+        <>
+          <DataListMono>{r.post.replies}</DataListMono>
+          <span className="sr-only"> {r.post.replies === 1 ? "reply" : "replies"}</span>
+        </>
+      ),
     },
   ]
 
-  const count = (a: Against) => all.filter((r) => test(a, r)).length
   const pane = `clamp(${opts.paneMin}px, ${opts.paneShare}cqi, ${opts.paneMax}px)`
   const loading = phase === "loading"
+  const filtered = against !== "any" || show !== "all"
+  const proposedEmpty = show === "returning" && data.people === null
   const empty = (
-    <EmptyState frame="none" bold={all.length === 0 ? `Nothing went out in the last ${read.days} days.` : "No posts match."} rest={all.length === 0 ? "Pick a longer period." : "Clear the filter."}>
+    <EmptyState
+      frame="none"
+      bold={
+        proposedEmpty
+          ? "I can't tell who came back yet."
+          : all.length === 0
+            ? `Nothing went out in the last ${read.days} days.`
+            : "No posts match."
+      }
+      rest={proposedEmpty ? "I count replies, I don't read them yet. Show every post instead." : all.length === 0 ? "Pick a longer period." : "Clear the filters."}
+    >
       {all.length === 0 ? (
         <Button size="xs" onClick={() => setPeriod("90")}>
           Show 90 days
@@ -147,11 +234,11 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
         <Button
           size="xs"
           onClick={() => {
-            setAgainst("any")
+            set({ against: "any", show: "all" })
             focusRestoredDataList()
           }}
         >
-          Clear filter
+          {proposedEmpty ? "Show every post" : "Clear filters"}
         </Button>
       )}
     </EmptyState>
@@ -159,14 +246,14 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
 
   const list = (
     <DataList
-      label="Posts"
-      aria-keyshortcuts="j k"
+      label={`Posts, ${SHOW_LABEL[show].toLowerCase()}`}
+      aria-keyshortcuts={back ? "j k Escape" : "j k"}
       items={rows}
       getKey={(r) => r.post.id}
       getLabel={(r) => r.post.hook}
       value={current}
       onValueChange={(k) => {
-        setOpen(k)
+        open(k)
         if (fold) setDetail(true)
       }}
       columns={columns}
@@ -176,9 +263,11 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
     />
   )
 
+  const keys = [{ keys: ["j", "k"], label: "Move" }, ...(back ? [{ keys: ["Esc"], label: "Dashboard" }] : [])]
+
   return (
     <WorkspacePage ref={ref}>
-      <NumbersToolbar data={data} phase={phase} period={period} setPeriod={setPeriod} />
+      <NumbersToolbar data={data} phase={phase} period={period} setPeriod={setPeriod} back={back} />
       {phase === "empty" || phase === "disconnected" ? (
         <EmptyNumbers kind={phase} />
       ) : (
@@ -186,29 +275,49 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
           <Toolbar label="Filters" size="filter">
             <ToolbarGroup>
               <FilterMenu
+                label="Show"
+                value={show}
+                onValueChange={(v) => set({ show: v })}
+                options={(["all", "replies", "returning"] as const).map((v) => ({
+                  value: v,
+                  label: SHOW_LABEL[v],
+                  count: all.filter((r) => passAgainst(against, r) && passShow(v, r)).length,
+                }))}
+              />
+              <FilterMenu
                 label="Against your median"
                 value={against}
-                onValueChange={setAgainst}
-                options={[
-                  { value: "any", label: "Every post", count: count("any") },
-                  { value: "above", label: "Above your median", count: count("above") },
-                  { value: "below", label: "Below your median", count: count("below") },
-                  { value: "outlier", label: "3× or more", count: count("outlier") },
-                ]}
+                onValueChange={(v) => set({ against: v })}
+                options={(
+                  [
+                    ["any", "Any"],
+                    ["above", "Above your median"],
+                    ["below", "Below your median"],
+                    ["outlier", "3× or more"],
+                  ] as const
+                ).map(([v, label]) => ({ value: v, label, count: all.filter((r) => passAgainst(v, r) && passShow(show, r)).length }))}
               />
+            </ToolbarGroup>
+            <ToolbarGroup>
               <FilterMenu
                 label="Order"
                 value={order}
-                onValueChange={setOrder}
+                onValueChange={(v) => set({ order: v })}
                 options={[
-                  { value: "newest", label: "Newest first", count: all.length },
-                  { value: "best", label: "Most views first", count: all.length },
+                  { value: "newest", label: "Newest first", count: rows.length },
+                  { value: "best", label: "Most views first", count: rows.length },
+                  { value: "replies", label: "Most replies first", count: rows.length },
                 ]}
               />
+              {filtered ? (
+                <Button size="xs" variant="ghost" onClick={() => set({ against: "any", show: "all" })}>
+                  Clear
+                </Button>
+              ) : null}
             </ToolbarGroup>
             <ToolbarGroup end>
               <span className="text-kit-meta text-kit-ink-muted tabular-nums">
-                {loading ? "" : `${rows.length} posts · median ${read.medianViews === null ? "not yet" : fmt(read.medianViews)}`}
+                {loading ? "" : `${rows.length} of ${all.length} posts · median ${read.medianViews === null ? "not yet" : fmt(read.medianViews)}`}
               </span>
             </ToolbarGroup>
           </Toolbar>
@@ -228,7 +337,19 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
                 <PostDetail row={openRow} data={data} medianViews={read.medianViews} repliesUsual={repliesUsual} minWeeks={opts.minWeeks} />
               </div>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col">{list}</div>
+              // A tap on the row that is already open still opens it: the
+              // list only reports a change of value.
+              <div
+                className="flex min-h-0 flex-1 flex-col"
+                onClick={(e) => {
+                  if ((e.target as Element).closest("[data-kit-row]")) setDetail(true)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.target as Element).closest("[data-kit-row]")) setDetail(true)
+                }}
+              >
+                {list}
+              </div>
             )
           ) : (
             <WorkspacePanes>
@@ -255,7 +376,7 @@ export function TableLayout({ data, read, phase, period, setPeriod, initialPost 
               </Panel>
             </WorkspacePanes>
           )}
-          <KeyBar keys={[{ keys: ["j", "k"], label: "Move" }, { keys: ["1", "2", "3"], label: "Layouts" }]} />
+          <KeyBar keys={keys} />
         </div>
       )}
     </WorkspacePage>
@@ -354,10 +475,10 @@ function PostDetail({
         <h3 className="text-kit-meta font-kit-strong text-kit-ink">Who replied</h3>
         {people === null ? (
           <Proposed why="the replies themselves are not read yet, only their count" />
-        ) : people.length === 0 ? (
+        ) : post.replies === 0 ? (
           <p className="text-kit-meta text-kit-ink-muted">Nobody yet.</p>
         ) : (
-          <p className="text-kit-dense text-kit-ink">
+          <p className="text-kit-dense text-pretty text-kit-ink">
             {people.map((p, i) => (
               <React.Fragment key={p.id}>
                 {i > 0 ? ", " : ""}
@@ -365,6 +486,12 @@ function PostDetail({
                 {p.replyDays.length > 1 ? <span className="text-kit-ink-muted"> ({p.replyDays.length} times)</span> : null}
               </React.Fragment>
             ))}
+            {post.replies > people.length ? (
+              <span className={people.length ? "text-kit-ink-muted" : ""}>
+                {people.length ? ", and " : ""}
+                {post.replies - people.length} {post.replies - people.length === 1 ? "person" : "people"} replying for the first time.
+              </span>
+            ) : null}
           </p>
         )}
       </section>

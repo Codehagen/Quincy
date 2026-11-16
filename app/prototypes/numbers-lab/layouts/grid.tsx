@@ -2,8 +2,11 @@
 
 import * as React from "react"
 
+import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
+
 import { readBeats } from "@/lib/draft-beats"
-import { Avatar, Button, Tag, WorkspacePage } from "@/components/kit"
+import { Avatar, Button, ICON_DENSE_CHEVRON, Menu, MenuPanel, MenuRadioGroup, MenuRadioItem, MenuTrigger, Tag, WorkspacePage } from "@/components/kit"
 
 import {
   againstMedianPost,
@@ -18,23 +21,37 @@ import {
 import { useLabOptions } from "../lab-options"
 import { MultipleBar, MultipleScale, Sparkline, WeekColumns, WeekDots, roundUsual } from "../parts/charts"
 import { Bars, EmptyNumbers, GridPanel, NumbersToolbar, Proposed, StateLine } from "../parts/chrome"
-import type { LayoutProps } from "./types"
+import { TABLE_FOR, type LayoutProps } from "./types"
 
 /**
- * A · Dashboard grid. The owner's word, read as form: a period switch in
- * the toolbar, four tiles you scan in one glance, then a grid of panels.
- * The content stays the vision's: every tile is a sentence against your
- * own usual, Depth (replies, people who came back) before Volume (posts,
- * views per post), no follower count anywhere. A tile is a button: it
- * picks what the trend panel draws, so the four tiles and the one chart are
- * one control, not five ornaments.
+ * A · Dashboard grid, picked (2026-11-16: "Så jeg liker Dashboard og
+ * table"). A period switch in the toolbar, four tiles you scan in one
+ * glance, then a grid of panels. The content stays the vision's: every
+ * tile is a sentence against your own usual, Depth (replies, people who
+ * came back) before Volume (posts, views per post), no follower count.
+ *
+ * A tile and a "What worked" row are ways in, not ornaments: each opens
+ * Table on the posts behind it (TABLE_FOR), and Esc or the crumb comes back
+ * here with focus on what opened it. The trend panel picks its own measure.
  */
-export function GridLayout({ data, read, phase, period, setPeriod, openPost }: LayoutProps) {
+export function GridLayout({ data, read, phase, period, setPeriod, openTable, returnTo }: LayoutProps) {
   const opts = useLabOptions()
   const [measure, setMeasure] = React.useState<Measure>("replies")
   const loading = phase === "loading"
   const tiles = opts.order === "depth" ? read.tiles : [...read.tiles.slice(2), ...read.tiles.slice(0, 2)]
   const picked = read.tiles.find((t) => t.measure === measure) ?? read.tiles[0]!
+  const inWindow = read.weeks.map((w) => w.inWindow)
+
+  // Back from Table: focus lands on the tile or row that opened it.
+  React.useEffect(() => {
+    if (!returnTo) return
+    const id = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-return="${CSS.escape(returnTo)}"]`)
+      el?.focus({ preventScroll: true })
+      el?.scrollIntoView({ block: "nearest" })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [returnTo])
 
   return (
     <WorkspacePage>
@@ -48,18 +65,53 @@ export function GridLayout({ data, read, phase, period, setPeriod, openPost }: L
 
             <div role="group" aria-label={`The last ${read.days} days against your usual`} className="grid grid-cols-2 gap-kit-related @[60rem]/kit-workspace:grid-cols-4">
               {tiles.map((t) => (
-                <StatTile key={t.measure} tile={t} inWindow={read.weeks.map((w) => w.inWindow)} days={read.days} minWeeks={opts.minWeeks} loading={loading} picked={t.measure === measure} onPick={() => setMeasure(t.measure)} />
+                <StatTile
+                  key={t.measure}
+                  tile={t}
+                  inWindow={inWindow}
+                  days={read.days}
+                  minWeeks={opts.minWeeks}
+                  loading={loading}
+                  onOpen={() => openTable(TABLE_FOR[t.measure], `tile-${t.measure}`)}
+                />
               ))}
             </div>
 
             <div className="grid grid-cols-1 gap-kit-related @[60rem]/kit-workspace:grid-cols-3">
-              <GridPanel title={`${picked.label} per week`} meta={loading ? null : "Pick a tile to change it"} className="@[60rem]/kit-workspace:col-span-2">
+              <GridPanel
+                title={`${picked.label} per week`}
+                meta={
+                  loading ? null : (
+                    <Menu>
+                      <MenuTrigger
+                        aria-label={`Chart: ${picked.label}. Change what it shows`}
+                        render={
+                          <Button size="xs" variant="ghost" iconEnd={ArrowDown01Icon}>
+                            {picked.label}
+                          </Button>
+                        }
+                      />
+                      <MenuPanel align="end">
+                        <MenuRadioGroup value={measure} onValueChange={(v) => setMeasure(v as Measure)}>
+                          {read.tiles.map((t) => (
+                            <MenuRadioItem key={t.measure} value={t.measure}>
+                              {t.label}
+                            </MenuRadioItem>
+                          ))}
+                        </MenuRadioGroup>
+                      </MenuPanel>
+                    </Menu>
+                  )
+                }
+                className="@[60rem]/kit-workspace:col-span-2"
+              >
                 {loading ? (
                   <Bars widths={["100%", "92%", "96%", "88%"]} />
                 ) : picked.proposed ? (
                   <Proposed why={picked.proposed} />
                 ) : (
                   <WeekColumns
+                    key={picked.measure}
                     label={`${picked.label} per week`}
                     weeks={read.weeks.map((w, i) => ({ label: w.label, inWindow: w.inWindow, value: picked.weekly[i] ?? null }))}
                     usual={perWeek(picked, read.days)}
@@ -70,7 +122,7 @@ export function GridLayout({ data, read, phase, period, setPeriod, openPost }: L
 
               <PeoplePanel read={read} loading={loading} />
 
-              <BestPanel read={read} loading={loading} openPost={openPost} />
+              <BestPanel read={read} loading={loading} openPost={(id) => openTable({ post: id, show: "all", order: "best" }, `row-${id}`)} />
 
               <QuincyPanel now={read.quincy.now} usual={read.quincy.usual} loading={loading} days={read.days} minWeeks={opts.minWeeks} />
             </div>
@@ -87,22 +139,28 @@ function perWeek(t: Tile, days: number) {
   return t.measure === "reach" ? t.baseline.usual : t.baseline.usual / (days / 7)
 }
 
+/** What a tile opens, said to assistive tech after the tile's own sentence. */
+const OPENS: Record<Measure, string> = {
+  replies: "Open the posts that got replies.",
+  people: "Open the posts someone came back to.",
+  posts: "Open the posts.",
+  reach: "Open the posts, most views first.",
+}
+
 function StatTile({
   tile,
   inWindow,
   days,
   minWeeks,
   loading,
-  picked,
-  onPick,
+  onOpen,
 }: {
   tile: Tile
   inWindow: boolean[]
   days: number
   minWeeks: number
   loading: boolean
-  picked: boolean
-  onPick: () => void
+  onOpen: () => void
 }) {
   const opts = useLabOptions()
   const sentence =
@@ -114,15 +172,22 @@ function StatTile({
   return (
     <button
       type="button"
-      aria-pressed={picked}
-      onClick={onPick}
+      data-return={`tile-${tile.measure}`}
+      onClick={onOpen}
       disabled={loading}
-      className={`group/tile relative flex min-w-0 cursor-pointer flex-col gap-kit-tight overflow-hidden rounded-kit-control bg-kit-object px-kit-group pt-kit-related pb-kit-related text-start shadow-kit-object outline-hidden transition-[background-color] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus disabled:cursor-default motion-reduce:transition-none`}
+      className="group/tile relative flex min-w-0 cursor-pointer flex-col gap-kit-tight rounded-kit-control bg-kit-object px-kit-group py-kit-related text-start shadow-kit-object outline-hidden transition-[background-color,scale] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus active:scale-(--kit-press-scale) disabled:cursor-default disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100"
     >
-      {picked && !loading ? <span aria-hidden className="absolute inset-x-kit-group top-0 h-kit-selection-bar rounded-b-full bg-kit-ink" /> : null}
       <span className="flex items-baseline justify-between gap-2 text-kit-meta">
         <span className="font-kit-strong text-kit-ink">{tile.label}</span>
-        <span className="text-kit-ink-muted">{tile.kind === "depth" ? "Depth" : "Volume"}</span>
+        <span className="flex items-center gap-1 text-kit-ink-muted">
+          {tile.kind === "depth" ? "Depth" : "Volume"}
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            {...ICON_DENSE_CHEVRON}
+            aria-hidden
+            className="-me-1 transition-[translate] duration-(--kit-duration-state) ease-kit-out group-hover/tile:translate-x-0.5 motion-reduce:transition-none"
+          />
+        </span>
       </span>
       {loading ? (
         <span className="flex flex-col gap-2 py-1">
@@ -145,6 +210,7 @@ function StatTile({
           <Sparkline values={tile.weekly} inWindow={inWindow} usual={perWeek(tile, days)} kind={opts.spark} />
         </>
       )}
+      <span className="sr-only">{OPENS[tile.measure]}</span>
     </button>
   )
 }
@@ -175,7 +241,7 @@ function PeoplePanel({ read, loading }: { read: LayoutProps["read"]; loading: bo
                   <span className="block truncate text-kit-dense text-kit-ink">
                     {person.name} <span className="text-kit-ink-muted">@{person.handle}</span>
                   </span>
-                  <span className="block truncate text-kit-meta text-kit-ink-muted tabular-nums">
+                  <span className="block text-kit-meta text-pretty text-kit-ink-muted tabular-nums">
                     {inWindow} {inWindow === 1 ? "reply" : "replies"} now{before ? `, ${before} before` : ", new"}
                     {person.answered ? "" : ". Not answered"}
                   </span>
@@ -219,10 +285,10 @@ function BestPanel({ read, loading, openPost }: { read: LayoutProps["read"]; loa
         <p className="text-kit-dense text-kit-ink-muted">Nothing went out in the last {read.days} days.</p>
       ) : (
         <div className="flex flex-col">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_3.25rem] gap-x-kit-related pb-1 @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_3.25rem_4rem]">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_4rem] gap-x-kit-related pb-1 @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_4rem_4rem]">
             <span className="text-kit-meta text-kit-ink-muted">Post</span>
             <MultipleScale scale={opts.scale} />
-            <span className="text-end text-kit-meta text-kit-ink-muted">Median</span>
+            <span className="text-end text-kit-meta whitespace-nowrap text-kit-ink-muted">× median</span>
             <span className="hidden text-end text-kit-meta text-kit-ink-muted @[40rem]/kit-workspace:block">Replies</span>
           </div>
           <ul className="-mx-2 flex flex-col">
@@ -232,9 +298,10 @@ function BestPanel({ read, loading, openPost }: { read: LayoutProps["read"]; loa
                 <li key={post.id}>
                   <button
                     type="button"
+                    data-return={`row-${post.id}`}
                     onClick={() => openPost(post.id)}
                     aria-label={`${post.hook}. ${fmt(post.views)} views${multiple ? `, ${formatMultiple(multiple)} your median` : ""}, ${post.replies} replies. Open it.`}
-                    className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_3.25rem] items-center gap-x-kit-related rounded-kit-chip px-2 py-1.5 text-start outline-hidden transition-[background-color] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus motion-reduce:transition-none @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_3.25rem_4rem]"
+                    className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_4rem] items-center gap-x-kit-related rounded-kit-chip px-2 py-1.5 text-start outline-hidden transition-[background-color] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus motion-reduce:transition-none @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_4rem_4rem]"
                   >
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="truncate text-kit-dense text-kit-ink">{post.hook}</span>

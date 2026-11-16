@@ -175,4 +175,77 @@ the control. Tokens re-point in dark mode, so no `dark:` variants.
 
 ## Picked
 
-_The owner fills this in._
+- **1 · Dashboard is the page, and 2 · Table is what it opens** (owner,
+  2026-11-16: "Så jeg liker Dashboard og table."). 3 · Weekly read stays in
+  the lab until /numbers moves; its "Open it" uses the same hand-off.
+- The tile rule moved for Numbers only: `docs/design/decisions.md`, the two
+  "Never" rows (grids of tiles, a metrics dashboard), amended with his
+  words. No other page gets tiles.
+
+### The flow
+
+- **A tile opens Table filtered to its measure.** Replies → Show "Got
+  replies", Order "Most replies first". Came back → Show "Someone came
+  back". Posts → every post, newest first. Views per post → every post,
+  most views first. (`TABLE_FOR` in layouts/types.ts.)
+- **A "What worked" row opens Table with that post open** in the pane
+  (Order "Most views first", so the row sits near the top).
+- **The URL holds it**: `?view=table&post=…&show=…&order=…&against=…`,
+  with `period` beside it. Entering Table pushes a history entry, so a
+  link opens the same Table and the browser's Back and Forward work.
+- **The way back**: Esc, the crumb "Numbers / Posts" in the toolbar (the
+  page's name, so the crumb reads as a path rather than a view switch),
+  or Back. Focus lands on the tile or row that opened Table. On a phone,
+  Esc first closes an open post, then goes back. The KeyBar says "Esc
+  Dashboard".
+- **The trend panel picks its own measure** (a quiet menu in its header),
+  since the tiles now open Table instead of driving the chart.
+
+### Values the page settles on
+
+- **Frame:** toolbar 52 (name, "Against your own median. Read this morning
+  at 06:00.", period 7 / 30 / 90 days, default 30). The grid pads 20, gaps
+  12. Tiles 4-up from a 60rem workspace, 2-up below; panels 3 columns
+  (trend and What worked span 2) from 60rem, stacked below.
+- **Tile:** an object on the ground (`rounded-kit-control`, object
+  shadow), 20 × 12 padding. Name 12/560 with "Depth" or "Volume" and a
+  chevron at the end; value as the figure (18/600); one sentence against
+  the usual at 12, two lines held; a 28px sparkline of 16 weeks, the
+  period in ink, the weeks before it in the faint mark, the usual as a
+  muted line. Hover is `kit-row-hover`, press scales; every tile is a
+  button with "Open the posts …" for assistive tech.
+- **Order:** Depth first (Replies, Came back), then Volume (Posts, Views
+  per post). Baselines are stated after 3 weeks; before that, "Needs 3
+  weeks".
+- **Panels:** heads 13/560 at a 28 minimum, so a head with a control and
+  a head without one align. Trend: columns ≤ 24, usual line labelled,
+  arrow-key readout, "As a table". What worked: 5 rows on a log2 scale
+  (0.25× to 32×) with "× median" and replies. What I did: read, drafted,
+  approved, went out, cost, each with "usually N".
+- **Table:** filters Show, Against your median, Order (with counts) and
+  Clear; columns Post · Out (wide only) · Views · Against your median
+  (wide only) · × median · Replies. The pane is clamp(400px, 40cqi,
+  560px); under 900 it folds and a row opens in place. "Who replied" names
+  the people and counts first-timers, so it never contradicts the replies
+  figure.
+- **Still flagged, not decided:** loading as static bars plus a LiveDot
+  line, against states.md's "Skeleton is never a loading state". The
+  owner settles it.
+
+### Review fixes made with the pick (2026-11-16)
+
+- The trend's measure moved from the tiles to a header menu: tiles now
+  open Table, and one control should do one thing.
+- "Who replied" said "Nobody yet." on posts with replies (the repliers were
+  first-timers); it now counts them.
+- Table's filter row overflowed sideways at 390; the chips now wrap in two
+  groups.
+- A tap on the already-open row did nothing in the folded Table; a tap or
+  Enter on it now opens the post.
+- Browser Back lost focus; it now lands on what opened Table.
+- "× median" wrapped onto two lines in What worked; the column is 4rem.
+- The climb chart's area wash read as a grey block on near-flat lines; it
+  is a line now.
+- The tile's chevron is always shown (hover may move it, never reveal
+  it), so the label no longer shifts.
+- The KeyBar no longer lists the lab's 1–3 keys.

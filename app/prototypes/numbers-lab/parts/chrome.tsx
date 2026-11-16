@@ -34,6 +34,7 @@ export function NumbersToolbar({
   period,
   setPeriod,
   control,
+  back,
 }: {
   data: NumbersData
   phase: Phase
@@ -41,12 +42,37 @@ export function NumbersToolbar({
   setPeriod: (p: Period) => void
   /** In place of the period: C's week stepper. */
   control?: React.ReactNode
+  /** Table opened from the Dashboard: the title becomes a crumb back. */
+  back?: () => void
 }) {
   const quiet = phase === "empty" || phase === "disconnected"
   return (
     <Toolbar label="Numbers" divided>
       <div className="flex min-w-0 items-baseline gap-kit-related">
-        <ToolbarTitle>Numbers</ToolbarTitle>
+        {back ? (
+          <nav aria-label="Breadcrumb" className="shrink-0">
+            <ol className="flex items-baseline gap-1.5 text-kit-heading">
+              <li>
+                <button
+                  type="button"
+                  onClick={back}
+                  aria-keyshortcuts="Escape"
+                  className="cursor-pointer rounded-kit-chip text-kit-ink-muted outline-hidden transition-[color] duration-(--kit-duration-state) ease-kit-out hover:text-kit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus motion-reduce:transition-none"
+                >
+                  Numbers
+                </button>
+              </li>
+              <li aria-hidden className="text-kit-ink-muted">
+                /
+              </li>
+              <li>
+                <ToolbarTitle as="h2">Posts</ToolbarTitle>
+              </li>
+            </ol>
+          </nav>
+        ) : (
+          <ToolbarTitle>Numbers</ToolbarTitle>
+        )}
         <p className="hidden truncate text-kit-meta text-kit-ink-muted @[40rem]/kit-workspace:block">
           {quiet
             ? "Every post against your own median. Never a follower count."
@@ -168,7 +194,7 @@ export function GridPanel({
   const hid = React.useId()
   return (
     <section id={id} aria-labelledby={hid} className={`flex min-w-0 flex-col gap-kit-related rounded-kit-control bg-kit-object p-kit-group shadow-kit-object ${className}`}>
-      <header className="flex flex-wrap items-baseline justify-between gap-x-kit-related gap-y-kit-tight">
+      <header className="flex min-h-7 flex-wrap items-center justify-between gap-x-kit-related gap-y-kit-tight">
         <h2 id={hid} className="text-kit-dense font-kit-strong text-kit-ink">
           {title}
         </h2>

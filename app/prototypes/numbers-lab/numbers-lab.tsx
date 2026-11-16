@@ -9,7 +9,7 @@ import { EMPTY_DATA, makeFixtures, readNumbers, type NumbersData, type Period } 
 import { DEFAULT_OPTIONS, LabOptionsContext, type LabOptions } from "./lab-options"
 import { GridLayout } from "./layouts/grid"
 import { TableLayout } from "./layouts/table"
-import type { LayoutProps } from "./layouts/types"
+import type { Against, LayoutProps, Order, Show, TableState } from "./layouts/types"
 import { WeeklyLayout } from "./layouts/weekly"
 import type { Phase } from "./parts/chrome"
 import "../picker.css"
@@ -22,7 +22,49 @@ import "./harness.css"
  * `?v=1..3` picks the direction; `?clean` hides the picker and the panel;
  * `?state=loading|empty|disconnected|thin|failed`; `?data=yours` reads the
  * signed-in account's own rows; `?period=7|30|90`. 1–3 switch directions.
+ *
+ * Picked (2026-11-16): Dashboard is the page and Table is what it opens.
+ * On 1 · Dashboard, `?view=table&post=…&show=…&order=…&against=…` is the
+ * Table a tile or a "What worked" row opened; Esc or the crumb goes back.
+ * Entering pushes a history entry, so the browser's Back works too.
  */
+
+const SHOWS: Show[] = ["all", "replies", "returning"]
+const ORDERS: Order[] = ["newest", "best", "replies"]
+const AGAINSTS: Against[] = ["any", "above", "below", "outlier"]
+
+function pick<T extends string>(v: string | null, from: readonly T[], fallback: T): T {
+  return v && (from as readonly string[]).includes(v) ? (v as T) : fallback
+}
+
+type Nav = { view: "dashboard" | "table"; table: TableState; returnTo: string | null }
+
+function navFrom(sp: URLSearchParams): Nav {
+  return {
+    view: sp.get("view") === "table" ? "table" : "dashboard",
+    table: {
+      post: sp.get("post"),
+      show: pick(sp.get("show"), SHOWS, "all"),
+      order: pick(sp.get("order"), ORDERS, "newest"),
+      against: pick(sp.get("against"), AGAINSTS, "any"),
+    },
+    returnTo: null,
+  }
+}
+
+function urlWith(nav: Nav, period: string) {
+  const url = new URL(location.href)
+  for (const k of ["view", "post", "show", "order", "against"]) url.searchParams.delete(k)
+  url.searchParams.set("period", period)
+  if (nav.view === "table") {
+    url.searchParams.set("view", "table")
+    if (nav.table.post) url.searchParams.set("post", nav.table.post)
+    if (nav.table.show !== "all") url.searchParams.set("show", nav.table.show)
+    if (nav.table.order !== "newest") url.searchParams.set("order", nav.table.order)
+    if (nav.table.against !== "any") url.searchParams.set("against", nav.table.against)
+  }
+  return url
+}
 
 type Variant = { name: string; bet: string; givesUp: string; View: (p: LayoutProps) => React.ReactNode }
 
@@ -101,7 +143,7 @@ export function NumbersLab({ real }: { real: NumbersData | null }) {
     const p = params.get("period")
     return p === "7" || p === "90" ? p : "30"
   })
-  const [initialPost, setInitialPost] = React.useState<string | null>(null)
+  const [nav, setNav] = React.useState<Nav>(() => navFrom(new URLSearchParams(params.toString())))
 
   const fixtures = React.useMemo(() => makeFixtures(), [])
   const thin = React.useMemo(() => makeFixtures({ historyWeeks: 2 }), [])
@@ -121,18 +163,64 @@ export function NumbersLab({ real }: { real: NumbersData | null }) {
   const select = React.useCallback((i: number) => {
     if (i < 0 || i >= VARIANTS.length) return
     setCurrent(i)
+    setNav((n) => ({ ...n, view: "dashboard", returnTo: null }))
     const url = new URL(location.href)
     url.searchParams.set("v", String(i + 1))
+    for (const k of ["view", "post", "show", "order", "against"]) url.searchParams.delete(k)
     history.replaceState(null, "", url)
   }, [])
 
-  const openPost = React.useCallback(
-    (id: string) => {
-      setInitialPost(id)
-      select(1)
+  // The browser's Back and Forward move between Dashboard and Table.
+  React.useEffect(() => {
+    const onPop = () => setNav((n) => ({ ...navFrom(new URLSearchParams(location.search)), returnTo: n.returnTo }))
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
+
+  // The period is in the URL too, so a shared link opens the same slice.
+  const navRef = React.useRef(nav)
+  React.useLayoutEffect(() => {
+    navRef.current = nav
+  })
+  React.useEffect(() => {
+    history.replaceState(history.state, "", urlWith(navRef.current, period))
+  }, [period])
+
+  const openTable = React.useCallback(
+    (next: Partial<TableState>, returnTo: string) => {
+      const to: Nav = {
+        view: "table",
+        table: { post: null, show: "all", order: "newest", against: "any", ...next },
+        returnTo,
+      }
+      setNav(to)
+      history.pushState({ nl: "table" }, "", urlWith(to, period))
     },
-    [select],
+    [period],
   )
+  const setTable = React.useCallback(
+    (table: TableState) => {
+      setNav((n) => {
+        const to = { ...n, table }
+        history.replaceState(history.state, "", urlWith(to, period))
+        return to
+      })
+    },
+    [period],
+  )
+  const back = React.useCallback(() => {
+    // Came in by a push: step back, so Forward still returns to the Table.
+    if (history.state?.nl === "table") {
+      history.back()
+      setNav((n) => ({ ...n, view: "dashboard" }))
+      return
+    }
+    setNav((n) => {
+      const to: Nav = { ...n, view: "dashboard" }
+      history.replaceState(null, "", urlWith(to, period))
+      return to
+    })
+  }, [period])
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -148,7 +236,9 @@ export function NumbersLab({ real }: { real: NumbersData | null }) {
   }, [select])
 
   const v = VARIANTS[current]!
-  const View = v.View
+  // The pick: on Dashboard (and the weekly read), `view=table` is the Table it opened.
+  const handedOff = current !== 1 && nav.view === "table"
+  const View = handedOff ? VARIANTS[1]!.View : v.View
 
   return (
     <div className="nl-lab">
@@ -156,14 +246,17 @@ export function NumbersLab({ real }: { real: NumbersData | null }) {
         <Shell>
           <div className="flex min-h-0 flex-1 flex-col">
             <View
-              key={`${current}-${source}-${shown === "thin" ? "thin" : "full"}`}
+              key={`${current}-${handedOff ? "table" : "page"}-${source}-${shown === "thin" ? "thin" : "full"}`}
               data={data}
               read={read}
               phase={shown}
               period={period}
               setPeriod={setPeriod}
-              openPost={openPost}
-              initialPost={initialPost}
+              openTable={openTable}
+              table={nav.table}
+              setTable={setTable}
+              back={handedOff ? back : undefined}
+              returnTo={handedOff ? null : nav.returnTo}
             />
           </div>
         </Shell>

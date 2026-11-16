@@ -301,7 +301,6 @@ export function Climb({ climb, label }: { climb: number[]; label: string }) {
   const x = (i: number) => (n <= 1 ? 0 : (i / (n - 1)) * W)
   const y = (v: number) => H - 1 - (final ? (v / final) * (H - 6) : 0)
   const line = climb.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join("")
-  const area = `${line}L${W},${H}L0,${H}Z`
   const dayOne = final ? Math.round(((climb[0] ?? 0) / final) * 100) : 0
   const say = (i: number) => `Day ${i + 1}: ${fmt(climb[i]!)} views, ${final ? Math.round((climb[i]! / final) * 100) : 0}% of today's.`
 
@@ -342,7 +341,6 @@ export function Climb({ climb, label }: { climb: number[]; label: string }) {
         className="relative h-12 w-full touch-pan-y rounded-kit-chip outline-hidden focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-kit-focus"
       >
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden>
-          <path d={area} className="fill-kit-ink opacity-10" />
           <line x1={0} x2={W} y1={H - 0.5} y2={H - 0.5} className="stroke-kit-hairline" strokeWidth={1} vectorEffect="non-scaling-stroke" />
           <path d={line} fill="none" className="stroke-kit-ink" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           {at !== null ? <line x1={x(at)} x2={x(at)} y1={0} y2={H} className="stroke-kit-ink-muted" strokeWidth={1} vectorEffect="non-scaling-stroke" /> : null}
