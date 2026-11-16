@@ -31,6 +31,15 @@ import {
   type StatusFilter,
 } from "../use-drafts"
 
+/** Round 2: the post is the editor, so there is no Preview to switch to. */
+export const KEYS_POST: readonly KeyBarItem[] = [
+  { keys: ["j", "k"], label: "Move" },
+  { keys: ["A"], label: "Approve" },
+  { keys: ["E"], label: "Edit" },
+  { keys: ["U"], label: "Undo" },
+  { keys: ["/"], label: "Search" },
+]
+
 /** The keys every layout binds (use-letter-keys). D is not one: the app's D (theme) stands down here. */
 export const KEYS: readonly KeyBarItem[] = [
   { keys: ["j", "k"], label: "Move" },
@@ -189,7 +198,7 @@ function noticeSentence(n: Notice) {
 }
 
 /** The KeyBar, or the note after an action in its place: the same 36px, so the panes never move. */
-export function DraftsFoot({ store, onUndo }: { store: DraftsStore; onUndo: () => void }) {
+export function DraftsFoot({ store, onUndo, keys = KEYS }: { store: DraftsStore; onUndo: () => void; keys?: readonly KeyBarItem[] }) {
   const n = store.notice
   const { dismissNotice } = store
   const announce = useAnnounce()
@@ -202,7 +211,7 @@ export function DraftsFoot({ store, onUndo }: { store: DraftsStore; onUndo: () =
     return () => clearTimeout(t)
   }, [n, announce, dismissNotice])
 
-  if (!n) return <KeyBar keys={KEYS} />
+  if (!n) return <KeyBar keys={keys} />
   return (
     <FootBar>
       <p className="min-w-0 flex-1 truncate text-kit-meta text-kit-ink-muted">

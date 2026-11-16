@@ -50,7 +50,7 @@ import type { DraftsStore, Row } from "../use-drafts"
  */
 
 /** States with no time and no way out but a press here, where Post now leads. */
-const STRANDED: GoingOutKind[] = ["no-slot", "slots-full", "failed"]
+export const STRANDED: GoingOutKind[] = ["no-slot", "slots-full", "failed"]
 
 export function DraftSheet({
   row,
@@ -101,7 +101,7 @@ export function DraftSheet({
 }
 
 /** The idea, in the person's words. The kind sits on the strip above (Table, Desk), not twice. */
-function Head({ draft }: { draft: LabDraft }) {
+export function Head({ draft }: { draft: LabDraft }) {
   return <h2 className="text-kit-body font-kit-strong text-pretty text-kit-ink">{draft.idea}</h2>
 }
 
@@ -111,7 +111,7 @@ function Head({ draft }: { draft: LabDraft }) {
  * and link (every real draft today); or your own idea, when it says more than
  * the title.
  */
-function Provenance({ draft }: { draft: LabDraft }) {
+export function Provenance({ draft }: { draft: LabDraft }) {
   const a = draft.from.adaptedFrom
   if (a && draft.quote) {
     return (
@@ -345,7 +345,7 @@ function EditForm({ v, initial, onSave, onCancel }: { v: LabVersion; initial: st
 }
 
 /** What the lab's offer says it noticed (rule-offer.tsx's words; the lab offers on the first edit, the server on the third). */
-function offerQuestion(cls: string) {
+export function offerQuestion(cls: string) {
   if (cls === "hashtag-removed") return "You've taken the hashtags out three times."
   if (cls === "shortened") return "You've cut it much shorter three times."
   return "You've cut a line out three times."
@@ -362,7 +362,7 @@ const ROOM = "@container/kit-stage w-full"
 const PROSE =
   "relative flex w-full flex-col gap-kit-related [--kit-card-pad:0px] @lg/kit-stage:w-[calc(100%-var(--spacing-kit-margin)-var(--spacing-kit-margin-gap))]"
 
-function Lines({ lines }: { lines: Paragraph }) {
+export function Lines({ lines }: { lines: Paragraph }) {
   return (
     <div className="dl-prose">
       {lines.map((l, i) =>
@@ -383,7 +383,7 @@ function Lines({ lines }: { lines: Paragraph }) {
  * case, about the line it sits on (editor-marks.md). It names the missing
  * beat, never fills it in.
  */
-function noteFor(p: Paragraph[]): { at: number | "all"; note: string } | null {
+export function noteFor(p: Paragraph[]): { at: number | "all"; note: string } | null {
   if (p.length <= 1) return null
   if (p.length === 2) return { at: "all", note: "where's the middle beat?" }
   if (p.length === 3) return { at: 1, note: "what happened? no number yet" }
@@ -444,7 +444,7 @@ function Marked({ text, note }: { text: string; note: boolean }) {
 }
 
 /** What Quincy noticed, under the text and above Approve (draft-piece.tsx's four). */
-function Notices({ v, text, twin, hook }: { v: LabVersion; text: string; twin?: string; hook?: string }) {
+export function Notices({ v, text, twin, hook }: { v: LabVersion; text: string; twin?: string; hook?: string }) {
   if (v.state !== "writing") return null
   const { over } = measurePost(text, v.channel)
   const isHook = !!hook && text.trim() === hook.trim()
@@ -471,7 +471,7 @@ function Notices({ v, text, twin, hook }: { v: LabVersion; text: string; twin?: 
   )
 }
 
-function Status({
+export function Status({
   line,
   sending,
   onReopen,
@@ -518,7 +518,7 @@ function Status({
 }
 
 /** Post now, behind the one confirmation the page has: a post can't be unsent. */
-function PostNow({ label, idea, isAction, pending, onPost }: { label: string; idea: string; isAction: boolean; pending: boolean; onPost: () => void }) {
+export function PostNow({ label, idea, isAction, pending, onPost }: { label: string; idea: string; isAction: boolean; pending: boolean; onPost: () => void }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger

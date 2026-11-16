@@ -17,7 +17,11 @@ import type { DraftsStore } from "../use-drafts"
  * `useLetterKeys` listens in the capture phase and ignores keys in a field,
  * with a modifier, and inside an open menu or dialog.
  */
-export function useDraftKeys(store: DraftsStore, searchRef: React.RefObject<HTMLInputElement | null>, { enabled = true } = {}) {
+export function useDraftKeys(
+  store: DraftsStore,
+  searchRef: React.RefObject<HTMLInputElement | null>,
+  { enabled = true, preview = true }: { enabled?: boolean; /** Round 1's Marked up | Preview; round 2 has no toggle. */ preview?: boolean } = {}
+) {
   // Where the open row last stood: when it leaves the view, j / k carry on from there.
   const lastAt = React.useRef(0)
   React.useLayoutEffect(() => {
@@ -51,7 +55,7 @@ export function useDraftKeys(store: DraftsStore, searchRef: React.RefObject<HTML
       "/": () => searchRef.current?.focus(),
       a: { once: true, run: () => (open && firstWriting ? store.approve(open, firstWriting.id) : undefined) },
       e: { once: true, run: () => (firstWriting ? store.setEditing(firstWriting.id) : undefined) },
-      p: { once: true, run: () => (open ? store.togglePreview(open) : undefined) },
+      p: preview ? { once: true, run: () => (open ? store.togglePreview(open) : undefined) } : undefined,
       u: () => {
         const id = store.undo()
         if (id) revealDataListRow(id, document, { recover: true })

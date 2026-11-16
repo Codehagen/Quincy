@@ -91,6 +91,85 @@ limit, and one of each decided state. `?queue=real` repeats older ones up to
   missing-beat note (note or plain), the pane's floor, share and ceiling, and
   Desk's type.
 
+## Round 2: the post is the thing on the right (2026-11-16)
+
+The owner, on the picked Table: "Men posten står jo ikke på høyre side. Bør
+vi se på en helt ny metode … Hvordan gjør X drafts?" The right pane showed
+prose with a toggle to a preview; he wants the post itself there. Round 2
+keeps Table's left side as picked and replaces only the right pane. Round 1
+(1–3) stays selectable; round 2 is 4–6 on the picker.
+
+How a composer does it, and what we take from it: what you edit looks like
+the post (the account line over the words, the words in place, a counter in
+the corner). What we do not take: its UI, logo or colours. The object is the
+kit's (`bg-kit-object`, `shadow-kit-object`, `rounded-kit-object`), the type
+is the kit's, the platform is the existing small glyph.
+
+| # | Layout | Axis | When it is the right choice | Its cost |
+| --- | --- | --- | --- | --- |
+| A | Post | the post object in the pane, edited in place, the fold drawn inside it, the marks outside in the margin | you want to read and edit the thing that will go out, as it will look, with Quincy's reading beside it | at 1440 the post is ~450 wide, not the feed's 598 (the list keeps 580); at 1280 the marks fall under the lines inside the post |
+| B | Stage | the same post, centred on a grey recess at feed width, the marks in the stage margin | the post as a picture of itself, like the showcase | the recess spends 64px of a pane that is already narrower than the feed: the post is ~390 at 1440; true width plus marks needs a ~840 pane, which leaves the list a 100px title column |
+| C | Feed | the post between two blank skeleton posts (no text, no counts), edited in place | judging whether the first line stops a scroll | two placeholders push the verbs a screen down; the blanks say "a feed" and nothing else |
+
+What all three share (parts/post-pane.tsx):
+
+- **One post object per channel version**, stacked, each with its glyph in
+  the account line. **A thread is stacked posts joined by a 2px connector**
+  under the account circle. A three-post thread whose middle post holds the
+  number is bracketed one beat per post (fixture d22).
+- **Edited in place.** A click on the words, E, or Edit puts the caret at
+  the end of the words, which are now the real field (a textarea set as the
+  post's body, growing with the text). The focus ring goes round the post,
+  not a box inside it. One field per post of a thread. Cmd/Ctrl+Enter
+  saves, Escape cancels, and focus goes back to Edit. The marks step away
+  while the words move.
+- **The fold inside the post**, from the same `feedCut` as round 1: the
+  words the feed shows, "…more", a dashed muted line ("The feed cuts here"),
+  then the rest in muted ink. On X, the only cut is the 280 limit.
+- **The marks outside the post**: the beat brackets and the missing-beat
+  note beside the lines they mean, in the margin column. The post sets
+  `--kit-card-pad` to its own padding inside a `kit-stage` room, so the
+  kit's BeatBracket and MarginNote stand past the post's edge with no new
+  mark component. Under 32rem of room they sit under their lines, inside
+  the post: at 1280 (pane 492) and at 390.
+- **Under the post, one quiet row**: Approve (the ink action, A), Edit
+  (ghost, E), and Discard as a hold at the far end. Decided versions get the
+  status line, Give it a time and Post now, as in round 1.
+- **The length is the post's counter**, in its bottom corner, the same
+  place while reading and editing, one per post of a thread. The brief put
+  it in the row under the post. In B the row wrapped (Approve, Edit, the
+  length and Discard need ~430px; the column there is ~390), and a counter
+  in the corner is where a composer keeps it.
+- **No Marked up | Preview toggle, and no P**: the post is both.
+- Every number is a control: what the list keeps (580), the feed width (X
+  598, LinkedIn 555), the avatar (40), the mark column (150), the stage
+  padding (32).
+- **Pane and fold**: round 2's pane takes what the list leaves,
+  `clamp(440px, 100cqi − 580px, 860px)`: 652 at 1440, 492 at 1280. The list
+  keeps a title column of 283, so both stay a table. Under the fold (a
+  workspace under ~1020) it is Lineup, whose open row unfolds into the same
+  post at full width with the marks inline.
+
+Proposed in round 2 (none is a server action):
+
+11. **The post as the editor** (A, B, C), replacing the DraftCard and the
+    round 1 sheet. It edits the same local text and approves with it, as
+    today.
+12. **A thread shape.** Nothing in lib/ holds a thread (a version is one
+    body). The lab splits a body on a line that is only `---`. A real
+    thread needs a decision in the schema (rows per post, or a separator
+    the publisher understands).
+13. **Beats across a thread**: one bracket per post when three posts make
+    the three beats.
+
+Recommendation for round 2: **A**. It is the owner's ask exactly (the post
+on the right, edited where it stands), it keeps the Table's list readable
+at 1440 and 1280, and it is the landing's own register: the product as the
+picture, with the editor's marks on it. B is A with a recess that costs
+width the pane does not have; C answers a real question (does the first
+line stop a scroll) but spends the screen on placeholders, and could be a
+one-press view of A later.
+
 ## On the table
 
 | # | Layout | Axis | When it is the right choice | Its cost |

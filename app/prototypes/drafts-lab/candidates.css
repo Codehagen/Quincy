@@ -41,3 +41,72 @@
   font-size: 1rem;
   line-height: 1.5rem;
 }
+
+/* ── Round 2: the post is the thing on the right ───────────────────────
+   Every number here is on the control panel (lab-options.ts), written as a
+   variable on the pane: --dl-post-x / --dl-post-linkedin (feed width),
+   --dl-avatar, --spacing-kit-margin (the mark column), --dl-stage-pad. */
+
+.dl-room[data-channel="x"] {
+  --dl-post-w: var(--dl-post-x, 598px);
+}
+.dl-room[data-channel="linkedin"] {
+  --dl-post-w: var(--dl-post-linkedin, 555px);
+}
+.dl-room {
+  width: 100%;
+}
+/* B and C: the post and its margin, centred as one picture. */
+.dl-room[data-centred] {
+  max-width: calc(var(--dl-post-w) + var(--spacing-kit-margin) + var(--spacing-kit-margin-gap));
+  margin-inline: auto;
+}
+
+/* Everything that belongs to the post (the object, its notices, its row of
+   verbs) shares one width: the feed width, narrowed by the room. Outside it
+   card padding is 0, so a bracket around a whole post stands past its edge. */
+.dl-col {
+  --kit-card-pad: 0px;
+  width: min(var(--dl-post-w, 598px), 100%);
+}
+@container kit-stage (min-width: 32rem) {
+  .dl-col {
+    width: min(var(--dl-post-w, 598px), calc(100% - var(--spacing-kit-margin) - var(--spacing-kit-margin-gap)));
+  }
+}
+
+/* The object. Its padding is the card pad the marks measure past. */
+.dl-post {
+  --kit-card-pad: 16px;
+  padding: 16px;
+}
+.dl-avatar {
+  width: var(--dl-avatar, 40px);
+  height: var(--dl-avatar, 40px);
+}
+
+/* A thread: the posts joined under the account circle. */
+.dl-connector {
+  display: block;
+  width: 2px;
+  height: 12px;
+  margin-inline-start: calc(16px + var(--dl-avatar, 40px) / 2 - 1px);
+  background: var(--kit-ink-muted);
+  opacity: 0.35;
+}
+
+.dl-stage {
+  padding: var(--dl-stage-pad, 32px);
+}
+
+/* The post's words as the field: grows with what you type. */
+.dl-field {
+  field-sizing: content;
+  min-height: 4.5rem;
+}
+
+/* A blank line between paragraphs, as the feed and the field both show it,
+   so pressing E does not move a word. */
+.dl-paras {
+  gap: 1.5rem;
+}

@@ -8,6 +8,7 @@ import { ControlPanel } from "./control-panel"
 import { DEFAULT_OPTIONS, LabOptionsContext, type LabOptions } from "./lab-options"
 import { DeskLayout } from "./layouts/desk"
 import { LineupLayout } from "./layouts/lineup"
+import { PostEditorLayout, PostFeedLayout, PostStageLayout } from "./layouts/post-layouts"
 import { TableLayout } from "./layouts/table"
 import { useDrafts, type DraftsStore, type Phase } from "./use-drafts"
 import "../picker.css"
@@ -47,6 +48,25 @@ const VARIANTS: Variant[] = [
     bet: "What happens next is the axis: waiting, didn't go, approved with no time, going out by day, sent. Stranded posts are a group you can see, and the draft opens where it stands.",
     givesUp: "Side-by-side reading: an open draft pushes the rest down. With today's data (109 waiting, 0 scheduled) it is one long group and four small ones.",
     View: LineupLayout,
+  },
+  // Round 2 (owner, 2026-11-16: "Men posten står jo ikke på høyre side"): Table's left, the post on the right.
+  {
+    name: "A · Post",
+    bet: "The post is the editor, as a composer works: what you edit looks like the post, the fold is drawn inside it, and Quincy's marks stand outside it in the margin. One object per channel; a thread is stacked posts.",
+    givesUp: "True feed width at 1440: the list keeps 580, so the post is about 450 wide with the marks beside it. At 1280 the marks fall under the lines.",
+    View: PostEditorLayout,
+  },
+  {
+    name: "B · Stage",
+    bet: "The post as a picture of itself: centred on a grey recess, like the showcase, with the marks in the stage margin. The idea and the saved sentence sit above as a strip.",
+    givesUp: "Room: the recess eats 64px of a pane that is already narrower than the feed. True width (598 + marks) needs a ~840px pane, which leaves the list a 100px title column at 1440.",
+    View: PostStageLayout,
+  },
+  {
+    name: "C · Feed",
+    bet: "Judge the first line where it will be judged: the post between two blank posts, so you see whether it stops a scroll. Edited in place as in A.",
+    givesUp: "Height: two placeholder posts push the verbs down, and the blanks only say 'a feed' and nothing about what is in it.",
+    View: PostFeedLayout,
   },
 ]
 

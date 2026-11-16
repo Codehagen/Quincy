@@ -18,6 +18,18 @@ import type { Draft, Version } from "@/lib/drafts"
  * render the way every real draft would.
  */
 
+/**
+ * Proposed: an X thread, as posts split on a line that is only "---". Nothing
+ * in lib/ has a thread shape today (a version is one body); the lab needs
+ * one to draw stacked posts. Round 2's post editor reads it; round 1 shows
+ * the separators as text.
+ */
+export const THREAD_BREAK = /\n[ \t]*---[ \t]*\n/
+
+export function threadPosts(text: string): string[] {
+  return text.split(THREAD_BREAK).map((p) => p.trim())
+}
+
 export type LabVersion = Version & {
   /** Lab only: Post now fails for this one, with this sentence from the platform. */
   failsWith?: string
@@ -247,6 +259,17 @@ export const LAB_DRAFTS: LabDraft[] = [
     ...saved("metric_mo", "2 Nov", 19),
     versions: [
       x("If your customer wouldn't recognise the number, it's your number, not theirs.\n\nWe swapped 'weekly active' for 'invoices sent'. Same data, a sentence a customer could say back to us.\n\nPick the metric they'd brag about."),
+    ],
+  },
+
+  {
+    id: "d22",
+    idea: "A one-question onboarding email, told as a thread: one beat per post.",
+    kind: "Story",
+    ...own("notes", "Notes", "The one-question email, as a thread.", "Today", 0),
+    // A three-post thread (proposed shape): did, happened, meant, one per post.
+    versions: [
+      x("I deleted our nine-paragraph welcome email and sent one line instead: what are you hoping this fixes for you?\n---\nReplies in the first week:\n4 → 31\n---\nPeople answer a question. They skip a brochure. The replies are now the first page of our roadmap."),
     ],
   },
 

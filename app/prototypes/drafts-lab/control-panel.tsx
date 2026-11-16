@@ -85,6 +85,11 @@ export function ControlPanel({
     `marks: ${opts.marks}`,
     `pane: clamp(${opts.detailMin}px, ${opts.detailShare}cqi, ${opts.detailMax}px)`,
     `desk type: ${opts.deskType}`,
+    `list keeps: ${opts.listKeep}`,
+    `post: x ${opts.postX} / linkedin ${opts.postLinkedIn}`,
+    `avatar: ${opts.avatar}`,
+    `marks: ${opts.markCol}`,
+    `stage pad: ${opts.stagePad}`,
   ].join(" · ")
 
   if (closed) {
@@ -121,6 +126,12 @@ export function ControlPanel({
       <Slider label="Pane, min" value={opts.detailMin} min={440} max={640} step={20} unit="px" set={(v) => set("detailMin", v)} why="Table. 440 keeps 1280 a table (title column 282); 552 would put the brackets in the margin there, and fold it" />
       <Slider label="Pane, share" value={opts.detailShare} min={36} max={56} step={1} unit="cqi" set={(v) => set("detailShare", v)} why="Table. Ideas uses 36; a draft is read, not scanned" />
       <Slider label="Pane, max" value={opts.detailMax} min={560} max={800} step={20} unit="px" set={(v) => set("detailMax", v)} why="Table. Raising min or share folds 1280 into Lineup sooner" />
+      <Slider label="Round 2 · list keeps" value={opts.listKeep} min={480} max={720} step={20} unit="px" set={(v) => set("listKeep", v)} why="A–C. The post pane takes the rest (440–860). 580 keeps a 283 title column, so 1280 stays a table" />
+      <Slider label="Post width, X" value={opts.postX} min={440} max={640} step={2} unit="px" set={(v) => set("postX", v)} why="A–C. The feed column; the pane narrows it when it has to" />
+      <Slider label="Post width, LinkedIn" value={opts.postLinkedIn} min={440} max={640} step={5} unit="px" set={(v) => set("postLinkedIn", v)} why="A–C" />
+      <Slider label="Avatar" value={opts.avatar} min={24} max={48} step={2} unit="px" set={(v) => set("avatar", v)} why="A–C. The account circle; the thread connector follows its centre" />
+      <Slider label="Mark column" value={opts.markCol} min={110} max={190} step={10} unit="px" set={(v) => set("markCol", v)} why="A–C. The margin the brackets and notes stand in (the kit's is 170)" />
+      <Slider label="Stage padding" value={opts.stagePad} min={12} max={56} step={4} unit="px" set={(v) => set("stagePad", v)} why="B. The recess around the post" />
       <SegRow label="Desk type" value={opts.deskType} options={[14, 15, 16] as const} set={(v) => set("deskType", v)} why="Desk. The kit's body is 14; a proof reads larger" />
 
       <div className="row">

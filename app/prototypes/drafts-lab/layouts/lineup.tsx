@@ -6,7 +6,7 @@ import { EmptyRegion, PanelBody, SkeletonLines, WorkspacePage } from "@/componen
 import { FOCUS_RING } from "@/components/kit/control-styles"
 
 import { Channels, FromGlyph, NextCell, fromName } from "../parts/cells"
-import { DraftsFilters, DraftsFoot, DraftsToolbar, FilteredEmpty, NothingYet } from "../parts/chrome"
+import { DraftsFilters, DraftsFoot, DraftsToolbar, FilteredEmpty, KEYS_POST, NothingYet } from "../parts/chrome"
 import { DraftSheet } from "../parts/draft-sheet"
 import { useDraftKeys } from "../parts/keys"
 import { BUCKET_LABEL, type Bucket, type DraftsStore, type Row } from "../use-drafts"
@@ -53,9 +53,18 @@ function sections(rows: readonly Row[]): Section[] {
   return out
 }
 
-export function LineupSurface({ store, opts }: { store: DraftsStore; opts: LabOptions }) {
+export function LineupSurface({
+  store,
+  opts,
+  sheet,
+}: {
+  store: DraftsStore
+  opts: LabOptions
+  /** What an open row unfolds into. Round 1: the marked-up sheet; round 2: the post. */
+  sheet?: (row: Row) => React.ReactNode
+}) {
   const searchRef = React.useRef<HTMLInputElement>(null)
-  useDraftKeys(store, searchRef)
+  useDraftKeys(store, searchRef, { preview: !sheet })
   // A row closed by hand stays closed until another opens.
   const [closed, setClosed] = React.useState<string | null>(null)
   const open = store.selected && store.selected.id !== closed ? store.selected : null
@@ -120,7 +129,7 @@ export function LineupSurface({ store, opts }: { store: DraftsStore; opts: LabOp
                               }
                             }}
                           >
-                            <DraftSheet row={r} store={store} />
+                            {sheet ? sheet(r) : <DraftSheet row={r} store={store} />}
                           </InlineRow>
                         ))}
                       </ul>
@@ -132,7 +141,7 @@ export function LineupSurface({ store, opts }: { store: DraftsStore; opts: LabOp
           )}
         </>
       )}
-      {store.phase === "empty" ? null : <DraftsFoot store={store} onUndo={store.undo} />}
+      {store.phase === "empty" ? null : <DraftsFoot store={store} onUndo={store.undo} keys={sheet ? KEYS_POST : undefined} />}
     </>
   )
 }
