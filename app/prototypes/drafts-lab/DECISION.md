@@ -99,6 +99,64 @@ prose with a toggle to a preview; he wants the post itself there. Round 2
 keeps Table's left side as picked and replaces only the right pane. Round 1
 (1–3) stays selectable; round 2 is 4–6 on the picker.
 
+### Round 2 › Picked
+
+- **C · Feed** (owner, 2026-11-16: "So the feed, but we need to make it look
+  more of the actual UI that they have"). This overrides round 2's rule that
+  the post must not copy the platform's look: **inside the feed column** the
+  post now reads as a real X post, and a LinkedIn version as a real LinkedIn
+  post. Everything outside the column stays the kit: the pane, the strip
+  above, the marks, the buttons, the table. parts/feed-pane.tsx; the
+  platform styles live only in candidates.css's "C · Feed, picked" block.
+- **X, as measured:** a 598 column with a hairline on each side and a small
+  "For you | Following" strip. Each post has 12 / 16 padding, a 40 round
+  avatar, a 12 gap, the name at 15/700, then @handle and "· now" in X's
+  secondary grey, and "⋯" at the right. The body is 15/20 with real line
+  breaks, and a blank line between paragraphs. The action row has reply,
+  repost, like, views, and bookmark with share at the end, in secondary
+  grey, 18.75 icons, and **no counts**. Posts are split by a hairline. A
+  thread uses the grey connector from avatar to avatar. Colours track our
+  theme (light: white / #0f1419 / #536471 / #eff3f4; dark: black / #e7e9ea /
+  #71767b / #2f3336; blue #1d9bf0; thread line #cfd9de / #333639). The font
+  is the system stack, not Inter. The icons are drawn here as paths of the
+  same form, with no logo.
+- **LinkedIn, as measured:** a card (radius 8, a 1px ring) on the grey feed
+  (#f4f2ee light, black dark, card #1b1f23). It has a 48 avatar, the name at
+  14/600, a headline from fixture data ("Founder at Fernwood Software"), and
+  "now · globe". The body is 14/20, truncated with "…more" at the existing
+  fold rule. The action bar is Like, Comment, Repost and Send, with no
+  counts.
+- **Neighbours:** one skeleton post above and one below, in the platform's
+  look: an avatar circle, grey bars for the name and the text, and the real
+  action row. There is never fake text.
+- **The cut:** X's blue "Show more" (at the 280 limit) or LinkedIn's
+  "…more" (at the fold), then a dashed line drawn for you only ("The feed
+  cuts here"), then the rest at half strength. The fold notice under the
+  column reads the same `feedCut`.
+- **Editing in place:** the body is the field, set exactly like the post's
+  text, with the caret at the end (X's blue caret). The focus ring is ours,
+  round the post. **The counter is our small mono readout under the
+  column, and only while editing.** X's ring belongs to its composer, not to
+  a post in the feed, and the column must read as the feed. Everything we
+  add stays outside it.
+- **Width, picked: the pane takes the whole column** (option 1):
+  598 + the 150 mark column + 10 + 40 = 798. At 1440 the list keeps 433 as
+  Opening line, a marks cell (channel marks and the status mark, with the
+  words to assistive tech) and Age, with a title column of 253. Scale-to-fit
+  (option 2) was rejected: at 1440 it would draw the post at about 0.75,
+  15px text at about 11px, which defeats "looks like the real thing" and
+  makes editing at that size poor.
+- **1280** folds into Lineup (the title column would be 93 beside a 798
+  pane; the fold is a title column under 200, a workspace under ~1180). The
+  open row there holds the 598 column and its margin at true size.
+- **390:** Lineup, the column at full width, the marks under their lines.
+- Rounds 1 and 2 (A and B) stay in the lab until /drafts moves.
+
+Proposed with the pick: **14. The feed rendering** of a draft (X and
+LinkedIn), read-only around an editable body, with the account's real name,
+handle and headline from the connected channel (the lab uses fixture
+values).
+
 How a composer does it, and what we take from it: what you edit looks like
 the post (the account line over the words, the words in place, a counter in
 the corner). What we do not take: its UI, logo or colours. The object is the

@@ -334,7 +334,7 @@ export const LAB_DRAFTS: LabDraft[] = [
 ]
 
 /** Whose feed the preview draws: the shell's stand-in account (app/prototypes/shell.tsx). */
-export const LAB_ACCOUNT = { name: "Christer Hagen", handle: "christer", initials: "CH" }
+export const LAB_ACCOUNT = { name: "Christer Hagen", handle: "christer", initials: "CH", headline: "Founder at Fernwood Software" }
 
 /** The real queue is 110 deep. This many waiting rows, older ones repeated, for the density check. */
 export const REAL_DEPTH = 110

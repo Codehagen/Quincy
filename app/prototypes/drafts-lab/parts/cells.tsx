@@ -87,7 +87,37 @@ export function RowTitle({ row, use }: { row: Row; use: "opening" | "idea" }) {
   return <DataListTitle quiet={row.bucket === "sent"}>{use === "idea" ? row.draft.idea : row.opening}</DataListTitle>
 }
 
-export function columns(use: "opening" | "idea"): readonly DataListColumn<Row>[] {
+/** C · Feed's narrow list: what it goes to and what happens next, as marks only (the words go to assistive tech). */
+export function CompactCell({ row }: { row: Row }) {
+  const g = row.going
+  const status =
+    g.kind === "writing" ? null : g.kind === "scheduled" ? (
+      <StatusPill status="later" hideWord>{`Goes out ${g.at}`}</StatusPill>
+    ) : g.kind === "sending" ? (
+      <StatusPill status="reading" hideWord>Sending</StatusPill>
+    ) : g.kind === "published" ? (
+      <StatusPill status="drafted" hideWord>Sent</StatusPill>
+    ) : g.kind === "failed" ? (
+      <StatusPill status="failed" hideWord>Didn’t go</StatusPill>
+    ) : (
+      <StatusPill status="drafted" hideWord>Approved, no time</StatusPill>
+    )
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Channels row={row} />
+      {status}
+    </span>
+  )
+}
+
+export function columns(use: "opening" | "idea", compact = false): readonly DataListColumn<Row>[] {
+  if (compact) {
+    return [
+      { id: "title", header: use === "idea" ? "Draft" : "Opening line", width: "minmax(0,1fr)", cell: (r) => <RowTitle row={r} use={use} />, skeleton: "title" },
+      { id: "marks", header: "", width: "4rem", cell: (r) => <CompactCell row={r} /> },
+      { id: "age", header: "Age", width: "3.25rem", align: "end", cell: (r) => <DataListMono>{r.draft.from.at}</DataListMono> },
+    ]
+  }
   return [
     { id: "glyph", header: "", width: "1rem", cell: (r) => <FromGlyph row={r} />, skeleton: "glyph" },
     { id: "title", header: use === "idea" ? "Draft" : "Opening line", width: "minmax(0,1fr)", cell: (r) => <RowTitle row={r} use={use} />, skeleton: "title" },
@@ -103,6 +133,8 @@ export function columns(use: "opening" | "idea"): readonly DataListColumn<Row>[]
  * age 52, five 12px gaps, and the row's 8 inset + 12 padding on each side.
  * The From column is wide-only.
  */
+/** C · Feed's compact row: marks 64, age 52, two 12px gaps, the 8 + 12 on each side. */
+export const COMPACT_FIXED_PX = 64 + 52 + 2 * 12 + 40
 export const ROW_FIXED_PX = 16 + 40 + 88 + 52 + 5 * 12 + 40
 export const FROM_COLUMN_PX = 136 + 12
 export const DATA_WIDE_PX = 736

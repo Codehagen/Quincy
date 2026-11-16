@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import type { LabOptions } from "../lab-options"
+import { FeedPane } from "../parts/feed-pane"
 import { PostPane, type PostLook } from "../parts/post-pane"
 import type { DraftsStore } from "../use-drafts"
 import { TableLayout, type PaneSpec } from "./table"
@@ -28,7 +29,21 @@ function spec(look: PostLook): PaneSpec {
 
 const EDITOR = spec("editor")
 const STAGE = spec("stage")
-const FEED = spec("feed")
+/**
+ * C · Feed, picked: the pane is the whole feed column at its real width
+ * (X 598) plus the mark column, its 10 gap and the pane's 20 + 20. At 1440
+ * that is 798 and the list keeps 433 as Opening line, a marks cell and Age
+ * (title column 253). Under a 200 title column (a workspace under ~1180,
+ * so 1280) it folds into Lineup, whose open row holds the 598 column and
+ * its margin at true size.
+ */
+const FEED: PaneSpec = {
+  width: (o) => `${o.postX + o.markCol + 10 + 40}px`,
+  widthAt: (_w, o) => o.postX + o.markCol + 10 + 40,
+  render: (row, store) => <FeedPane row={row} store={store} />,
+  compact: true,
+  titleMin: 200,
+}
 
 export function PostEditorLayout({ store, opts }: { store: DraftsStore; opts: LabOptions }) {
   return <TableLayout store={store} opts={opts} pane={EDITOR} />

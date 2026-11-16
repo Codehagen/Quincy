@@ -64,8 +64,8 @@ const VARIANTS: Variant[] = [
   },
   {
     name: "C · Feed",
-    bet: "Judge the first line where it will be judged: the post between two blank posts, so you see whether it stops a scroll. Edited in place as in A.",
-    givesUp: "Height: two placeholder posts push the verbs down, and the blanks only say 'a feed' and nothing about what is in it.",
+    bet: "Picked. The post as it reads in the real feed: X's 598 column or LinkedIn's card, their type, colours and action rows (no counts), between two skeleton posts, edited in place. Quincy's marks and the verbs stay outside, in the kit.",
+    givesUp: "List width: the pane is the whole 598 column plus the margin (798), so the list keeps Opening line, a marks cell and Age at 1440, and 1280 folds into Lineup.",
     View: PostFeedLayout,
   },
 ]

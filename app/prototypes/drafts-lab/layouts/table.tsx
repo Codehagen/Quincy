@@ -13,7 +13,7 @@ import {
   WorkspacePanes,
 } from "@/components/kit"
 
-import { DATA_WIDE_PX, FROM_COLUMN_PX, FromGlyph, ROW_FIXED_PX, columns, fromName } from "../parts/cells"
+import { COMPACT_FIXED_PX, DATA_WIDE_PX, FROM_COLUMN_PX, FromGlyph, ROW_FIXED_PX, columns, fromName } from "../parts/cells"
 import { AllDecided, DraftsFilters, DraftsFoot, DraftsToolbar, FilteredEmpty, KEYS_POST, NothingYet } from "../parts/chrome"
 import { DraftSheet } from "../parts/draft-sheet"
 import { useDraftKeys } from "../parts/keys"
@@ -41,6 +41,10 @@ export type PaneSpec = {
   width: (o: LabOptions) => string
   widthAt: (workspace: number, o: LabOptions) => number
   render: (row: Row, store: DraftsStore) => React.ReactNode
+  /** The list drops to Opening line, a marks cell and Age (C · Feed, whose pane is the full feed column). */
+  compact?: boolean
+  /** The narrowest title column before the page folds (default 280). */
+  titleMin?: number
 }
 
 function round1Width(width: number, o: LabOptions) {
@@ -51,8 +55,8 @@ export function shouldFold(width: number, o: LabOptions, pane?: PaneSpec) {
   if (width < FOLD_MIN_WIDTH) return true
   const detail = pane ? pane.widthAt(width, o) : round1Width(width, o)
   const list = width - detail - 1
-  const title = list - ROW_FIXED_PX - (list >= DATA_WIDE_PX ? FROM_COLUMN_PX : 0)
-  return title < TITLE_MIN
+  const title = pane?.compact ? list - COMPACT_FIXED_PX : list - ROW_FIXED_PX - (list >= DATA_WIDE_PX ? FROM_COLUMN_PX : 0)
+  return title < (pane?.titleMin ?? TITLE_MIN)
 }
 
 export function TableLayout({ store, opts, pane }: { store: DraftsStore; opts: LabOptions; pane?: PaneSpec }) {
@@ -84,7 +88,8 @@ function TableSurface({ store, opts, pane }: { store: DraftsStore; opts: LabOpti
   const searchRef = React.useRef<HTMLInputElement>(null)
   useDraftKeys(store, searchRef, { preview: !pane })
   const open = store.selected
-  const cols = React.useMemo(() => columns(opts.title), [opts.title])
+  const compact = pane?.compact ?? false
+  const cols = React.useMemo(() => columns(opts.title, compact), [opts.title, compact])
   const width = pane ? pane.width(opts) : `clamp(${opts.detailMin}px, ${opts.detailShare}cqi, ${opts.detailMax}px)`
   const anyWaiting = store.rows.some((r) => r.bucket === "waiting")
 
