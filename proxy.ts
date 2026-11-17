@@ -98,6 +98,17 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Prototypes run on fixtures and need no session, so on a dev server they
+  // open without signing in to localhost first. Production is unaffected:
+  // there app/prototypes/layout.tsx answers 404 whatever this lets through,
+  // and a preview build still asks for the cookie as before.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    (pathname === "/prototypes" || pathname.startsWith("/prototypes/"))
+  ) {
+    return NextResponse.next()
+  }
+
   if (!hasSession && !AUTH_PAGES.has(pathname)) {
     const url = new URL("/login", request.url)
     // Remember where they were headed so login can send them back rather than
