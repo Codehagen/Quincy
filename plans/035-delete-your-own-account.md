@@ -17,9 +17,12 @@
 - **Risk**: HIGH — it deletes a real person's data in the one production
   database (AGENTS.local.md: there is no staging). Every step is tested on a
   `@quincy.test` account only.
-- **Depends on**: the settings redesign (`app/prototypes/settings-lab`,
-  direction picked from "Sections"). The control lands in its Account section;
-  build the server side first, it does not depend on the layout.
+- **Depends on**: the settings redesign, done: Desk, picked 2026-11-17
+  (docs/design/decisions.md, "Settings, decided"; built in
+  `components/settings/`; the lab folder is deleted). The control lands in
+  the Account pane, where a disabled "Delete the account" hold already sits
+  (`components/settings/settings-pane.tsx`); build the server side first, it
+  does not depend on the layout.
 - **Category**: feature
 - **Planned at**: commit `348c5c3`, 2026-11-17
 

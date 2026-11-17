@@ -162,7 +162,7 @@ export function UploadDrop({
             {paywalled ? (
               <>
                 {" "}
-                <TextLink href="/settings/billing">See plans</TextLink>
+                <TextLink href="/settings?section=plan">See plans</TextLink>
               </>
             ) : null}
           </Text>

@@ -21,7 +21,7 @@ import {
   SearchField,
   Segmented,
   SourceGlyph,
-  StatusPill,
+  StatusMark,
   Tag,
   Text,
   Toolbar,
@@ -125,15 +125,15 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
 
   const setAside = (row: IdeaRow) => {
     const next = ideas.setAside(row)
-    if (next) revealDataListRow(next.key, document, { recover: true })
+    if (next) revealDataListRow(next.key, document, { focus: "recover" })
   }
   const undo = () => {
     const key = ideas.undo()
-    if (key) revealDataListRow(key, document, { recover: true })
+    if (key) revealDataListRow(key, document, { focus: "recover" })
   }
 
   React.useEffect(() => {
-    if (ideas.moved) revealDataListRow(ideas.moved.key, document, { recover: true })
+    if (ideas.moved) revealDataListRow(ideas.moved.key, document, { focus: "recover" })
   }, [ideas.moved])
 
   // A drafted or failed note gives the foot back to the keys after a while;
@@ -529,7 +529,7 @@ function DismissSource({ row, ideas }: { row: IdeaRow; ideas: IdeasState }) {
       variant="ghost"
       onClick={() => {
         const next = ideas.setAsideSource(row.riff)
-        if (next) revealDataListRow(next.key, document, { recover: true })
+        if (next) revealDataListRow(next.key, document, { focus: "recover" })
       }}
     >
       Dismiss source
@@ -868,7 +868,7 @@ function InlineRow({
             >
               {row.title}
             </span>
-            {row.status === "drafted" ? <StatusPill status="drafted" /> : null}
+            {row.status === "drafted" ? <StatusMark status="drafted" /> : null}
           </span>
           {/* On a phone the columns fold into one meta line. */}
           <span className="flex min-w-0 items-center gap-1.5 @[40rem]/kit-workspace:hidden">

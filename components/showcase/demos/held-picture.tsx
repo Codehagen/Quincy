@@ -1,7 +1,6 @@
-import { Mono, Text } from "@/components/kit"
+import { Mono, Perched, Text } from "@/components/kit"
 
 import { DraftActions } from "./desk-and-pocket"
-import { Perched } from "./perched"
 import { POST } from "./the-post"
 
 /* Held for your read: the friend looks at the button. */

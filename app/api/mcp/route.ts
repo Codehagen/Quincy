@@ -166,8 +166,8 @@ const handler = requireMcpAuth(
 
       if (!isEntitled(entitlement)) {
         return entitlement.state === "lapsed"
-          ? "Your subscription is no longer active, so Quincy cannot write anything right now. Reading still works. /settings/billing is where that is fixed."
-          : "Your free day is over, so Quincy cannot write anything right now. Reading still works. /settings/billing is where that is fixed."
+          ? "Your subscription is no longer active, so Quincy cannot write anything right now. Reading still works. /settings?section=plan is where that is fixed."
+          : "Your free day is over, so Quincy cannot write anything right now. Reading still works. /settings?section=plan is where that is fixed."
       }
 
       /**

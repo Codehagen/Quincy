@@ -31,7 +31,7 @@
 import { HugeiconsIcon } from "@hugeicons/react"
 import { GithubIcon } from "@hugeicons/core-free-icons"
 
-import { Highlight, MarginNote, Mono, Text } from "@/components/kit"
+import { Highlight, MarginNote, Mono, Perched, Text } from "@/components/kit"
 import { Friend } from "@/components/mascot"
 
 import { LockScreen, Notification, Phone } from "../phone"
@@ -39,7 +39,6 @@ import { Stage } from "../stage"
 import { Window } from "../window"
 import { QUINCY_MESSAGES } from "./quincy-texts"
 import { POST } from "./the-post"
-import { Perched } from "./perched"
 import { useArrival } from "./use-arrival"
 
 const MORNING = QUINCY_MESSAGES.slice(0, 2)

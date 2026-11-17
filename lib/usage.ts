@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm"
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
@@ -54,10 +54,14 @@ export type UsageSummary = {
  * rather than by pulling rows across the wire — the row count grows with every
  * turn forever, and lib/session.ts's note about ~120ms round trips applies here
  * too.
+ *
+ * `until` (exclusive) closes the window, for a finished period: /settings
+ * states this month against last month, the person's own baseline.
  */
 export async function summariseUsage(
   userId: string,
-  since: Date
+  since: Date,
+  until?: Date
 ): Promise<UsageSummary> {
   // Token sums skip label rows (`x:post`, `deepgram:transcribe`, …). Those
   // never spent a token, and `deepgram:transcribe` puts seconds of audio in
@@ -74,7 +78,13 @@ export async function summariseUsage(
       costMicros: sql<number>`coalesce(sum(${usageEvent.costMicros}), 0)::int`,
     })
     .from(usageEvent)
-    .where(and(eq(usageEvent.userId, userId), gte(usageEvent.createdAt, since)))
+    .where(
+      and(
+        eq(usageEvent.userId, userId),
+        gte(usageEvent.createdAt, since),
+        until ? lt(usageEvent.createdAt, until) : undefined
+      )
+    )
 
   return (
     row ?? {

@@ -20,6 +20,12 @@ export type FieldProps = Omit<
   /** One muted line under the control. It is read with the control. */
   description?: string
   /**
+   * A short fact at the end of the label row, beside the label: a count
+   * ("14/80"), the current time in a zone. Usually a `Mono`. It is not the
+   * label and not read as part of it.
+   */
+  meta?: React.ReactNode
+  /**
    * Return the message to show, or null. Runs on blur until it has once
    * failed, then on every change, so the message leaves the moment it is
    * fixed ("reward early, punish late").
@@ -41,7 +47,8 @@ function failed(r: ValidateResult) {
 }
 
 /**
- * Label, control, description, error: in that order, in one column, and the
+ * Label (with an optional `meta` fact at the end of its row), control,
+ * description, error: in that order, in one column, and the
  * error renders next to its field — never in a summary. On Base UI's Field,
  * so the label is bound to the control (`htmlFor`), the description and error
  * are wired into `aria-describedby`, and the control gets `data-invalid`.
@@ -52,6 +59,7 @@ function failed(r: ValidateResult) {
 export function Field({
   label,
   description,
+  meta,
   validate,
   error,
   children,
@@ -74,6 +82,12 @@ export function Field({
       }
     : undefined
 
+  const labelEl = (
+    <FieldPrimitive.Label className="min-w-0 text-kit-body font-kit-strong text-kit-ink select-none data-disabled:opacity-50">
+      {label}
+    </FieldPrimitive.Label>
+  )
+
   return (
     <FieldPrimitive.Root
       {...props}
@@ -83,9 +97,16 @@ export function Field({
       data-slot="kit-field"
       className="flex w-full min-w-0 flex-col gap-1.5"
     >
-      <FieldPrimitive.Label className="text-kit-body font-kit-strong text-kit-ink select-none data-disabled:opacity-50">
-        {label}
-      </FieldPrimitive.Label>
+      {meta != null ? (
+        <div data-slot="kit-field-head" className="flex min-w-0 items-baseline justify-between gap-kit-related">
+          {labelEl}
+          <span data-slot="kit-field-meta" className="shrink-0">
+            {meta}
+          </span>
+        </div>
+      ) : (
+        labelEl
+      )}
       {children}
       {description ? (
         <FieldPrimitive.Description className="text-kit-small text-kit-ink-muted">

@@ -1,4 +1,4 @@
-# Workspace: Toolbar, DataList, Panel, KeyBar, FilterMenu, StatusPill
+# Workspace: Toolbar, DataList, Panel, KeyBar, FilterMenu, StatusMark
 
 A workspace is a page you work through, not a page you read: a toolbar, a
 dense list with columns, and the open item in a pane beside it. Ideas is
@@ -16,7 +16,7 @@ numbers and the rejected layouts). Live: `/prototypes/kit#toolbar`,
 
 ```
 Is the page a queue the person works through, daily, item by item?
- ├── No (a settings page, a draft to read, a week to plan) → KitPage + Stages (page.md)
+ ├── No (a draft to read, a week to plan) → KitPage + Stages (page.md)
  └── Yes
       ├── Under ~20 items, read more than worked     → KitPage, List + ListRow (lists.md)
       └── Many items, scanned by a column (source, shape, age), worked by key
@@ -27,10 +27,22 @@ A workspace replaces KitPage for that page, whole (README.md: a page moves
 whole). It has no 28px title and no Stage leads: the page's name is a
 `ToolbarTitle` and the first row of work sits under the toolbar.
 
+**Settings is a workspace too, by the owner's choice, though it is no daily
+queue.** /settings is the house frame (Drafts' and Lineup's): every setting,
+browser and agent a row of one grouped DataList, the open row in a pane,
+Quincy's graphite notes on it, billing as its "Plan & billing" section
+(components/settings/). Why: on 2026-11-17 the owner picked the Desk
+direction from /prototypes/settings-lab over the KitPage versions ("Jeg
+liker desk"), after saying the KitPage one "doesn't feel like the rest", and
+asked for more graphite to make it playful ("Jeg ønsker mer grafitt kanskje
+slik at det ser mer playful ut"). The tree above still decides every other
+page; decisions.md, "Settings, decided", has the record.
+<!-- 2026-11-17: "Jeg liker desk" -->
+
 ## The frame
 
 ```
-┌ Toolbar size="bar" divided={false} ─ ToolbarTitle · meta ……… search · Button sm ┐ 52
+┌ Toolbar size="bar" divided={false} ─ ToolbarTitle · ToolbarSummary … search · Button sm ┐ 52
 ├ Toolbar size="filter" ─ FilterMenu FilterMenu Clear ……………… count · Segmented xs ┤ 44
 ├ Panel ─────────────────────────────────┬ Panel width=… edge="start" ───────────┤
 │ DataList head band ……………………………… 32 │ PanelHeader (the open item's source) 32 │
@@ -55,7 +67,7 @@ whole). It has no 28px title and no Stage leads: the page's name is a
 Heights are tokens (spacing.md): `kit-bar` 52, `kit-filter-bar` 44,
 `kit-head` 32, `kit-foot` 36, `kit-row-dense` 36.
 
-## Toolbar, ToolbarGroup, ToolbarDivider, ToolbarTitle
+## Toolbar, ToolbarGroup, ToolbarDivider, ToolbarTitle, ToolbarSummary
 
 `Toolbar` — `label` (required, its group name), `size` `bar` (52, default)
 | `filter` (44), `divided` (hairline under it, default true). A labelled
@@ -68,7 +80,10 @@ scrolls sideways.
 wraps to under a 40rem toolbar: a search beside its button). Controls in a
 group are 6 apart (`kit-controls`). `ToolbarDivider` — a 16px hairline
 between groups. `ToolbarTitle` — the page's name, 15/600, `as` `h1`
-(default) | `h2`.
+(default) | `h2`. `ToolbarSummary` — beside the title, the page's state as
+one muted meta sentence (`children`, `Count` inside as needed): one line,
+truncated, shown only from a 40rem workspace. It does not announce; the
+caller announces a change that matters with `useAnnounce`.
 
 What goes in a toolbar: `Button size="sm"` (32) or `"xs"` (28),
 `variant="ghost"` for every control but one; `SearchField size="sm"
@@ -116,7 +131,7 @@ A column is `{ id, header, width, cell, align?, wide?, skeleton? }`.
 Cells: `DataListTitle` (13/19; the open row's title alone goes to 560 ink;
 `quiet` for a done row; the full title as a hint only when cut and not
 open), `DataListMeta` (12 muted), `DataListMono` (11 mono tabular),
-`Tag look="text"`, `StatusPill`, a glyph with `{...ICON_DENSE}`. A cell
+`Tag look="text"`, `StatusMark`, a glyph with `{...ICON_DENSE}`. A cell
 that is only a glyph says its words in an `sr-only` span.
 
 What it does for you: rows 36 (44 on touch), 1px apart; hover
@@ -151,10 +166,11 @@ The list owns ↑ ↓ Home End and typeahead. Letters that act on the open row
   `components/theme-provider.tsx`) stands down inside it.
 - **Focus after an action.** An action that removes the focused row or the
   pressed button (drafted, set aside, put off) opens the next row and
-  calls `revealDataListRow(nextKey, scope, { recover: true })`, so focus
+  calls `revealDataListRow(nextKey, scope, { focus: "recover" })`, so focus
   lands on the new open row instead of the body. A plain j/k move calls it
-  without `recover`: it follows with focus only when focus was already on
-  a row.
+  with the default `focus: "follow"`: it follows with focus only when focus
+  was already on a row. `focus: "take"` always moves focus to the row, for
+  a return to the list from elsewhere (Esc from a pane).
 - **Say the keys where they act**: `aria-keyshortcuts` on the DataList
   (`"j k d n l u"`), `SearchField shortcut="/"`, `Button shortcut="U"`.
   The KeyBar is the summary, not the only place.
@@ -238,14 +254,18 @@ after a set-aside is a FootBar with the sentence and a `Button size="xs"
 variant="ghost" shortcut="U"`, in the KeyBar's place while it lasts, so
 nothing moves. Nothing in a FootBar wraps; the last hints clip.
 
-## StatusPill
+## StatusMark
 
-`status` `reading` | `drafted` | `later` | `failed`, `children` (the word,
-when the default does not fit), `hideWord` (word to assistive tech only).
-A mark and a word in muted meta text, no fill, no ring. `reading` is the
+Either a preset or a mark of your own, never both: `status` `reading` |
+`drafted` | `later` | `failed` (its own mark and default word), or `icon`
+(a hugeicon at the dense size), or `glyph` (any node, centred in the
+icons' 16px box and hidden from assistive tech). `children` is the word,
+required with `icon` or `glyph`; `tone` `muted` (default) | `ink`;
+`hideWord` (word to assistive tech only). A mark and a word in meta text,
+no fill, no ring. `reading` is the
 friend in its `reading` state at 16px, the only live thing on a row; `failed` is the alert glyph
 in muted ink, not red (nothing was destroyed). Waiting is the default and
-has no pill: render nothing.
+has no mark: render nothing.
 
 ## Announcer
 

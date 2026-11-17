@@ -144,7 +144,7 @@ const STATE_ICON: Partial<Record<ConnectorData["status"]["s"], IconSvgElement>> 
 }
 
 /**
- * The state as a glyph and a word, StatusPill's register: no fill. The
+ * The state as a glyph and a word, StatusMark's register: no fill. The
  * connected mark is the word alone (a connection is permission, not a
  * running ritual, so no live dot). One that needs you says it in ink, never
  * red: nothing was destroyed.

@@ -7,7 +7,7 @@ import {
   DataListMono,
   DataListTitle,
   SourceGlyph,
-  StatusPill,
+  StatusMark,
   type DataListColumn,
 } from "@/components/kit"
 import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-mark"
@@ -58,7 +58,7 @@ export function Channels({ row }: { row: Row }) {
 }
 
 /**
- * What happens next, in two words. Waiting has no pill (StatusPill: the
+ * What happens next, in two words. Waiting has no mark (StatusMark: the
  * default renders nothing); the rest reuse the four marks the kit has:
  * the live dot for sending, the clock for a time, the tick for decided, the
  * alert for what did not go.
@@ -71,15 +71,15 @@ export function NextCell({ row }: { row: Row }) {
       return row.draft.versions.length > 1 ? <DataListMeta>{`${left} of ${row.draft.versions.length} left`}</DataListMeta> : null
     }
     case "scheduled":
-      return <StatusPill status="later">{g.at.replace(/,.*$/, "")}</StatusPill>
+      return <StatusMark status="later">{g.at.replace(/,.*$/, "")}</StatusMark>
     case "sending":
-      return <StatusPill status="reading">Sending</StatusPill>
+      return <StatusMark status="reading">Sending</StatusMark>
     case "published":
-      return <StatusPill status="drafted">Sent</StatusPill>
+      return <StatusMark status="drafted">Sent</StatusMark>
     case "failed":
-      return <StatusPill status="failed">Didn’t go</StatusPill>
+      return <StatusMark status="failed">Didn’t go</StatusMark>
     default:
-      return <StatusPill status="drafted">No time</StatusPill>
+      return <StatusMark status="drafted">No time</StatusMark>
   }
 }
 
@@ -92,15 +92,15 @@ export function CompactCell({ row }: { row: Row }) {
   const g = row.going
   const status =
     g.kind === "writing" ? null : g.kind === "scheduled" ? (
-      <StatusPill status="later" hideWord>{`Goes out ${g.at}`}</StatusPill>
+      <StatusMark status="later" hideWord>{`Goes out ${g.at}`}</StatusMark>
     ) : g.kind === "sending" ? (
-      <StatusPill status="reading" hideWord>Sending</StatusPill>
+      <StatusMark status="reading" hideWord>Sending</StatusMark>
     ) : g.kind === "published" ? (
-      <StatusPill status="drafted" hideWord>Sent</StatusPill>
+      <StatusMark status="drafted" hideWord>Sent</StatusMark>
     ) : g.kind === "failed" ? (
-      <StatusPill status="failed" hideWord>Didn’t go</StatusPill>
+      <StatusMark status="failed" hideWord>Didn’t go</StatusMark>
     ) : (
-      <StatusPill status="drafted" hideWord>Approved, no time</StatusPill>
+      <StatusMark status="drafted" hideWord>Approved, no time</StatusMark>
     )
   return (
     <span className="inline-flex items-center gap-1.5">

@@ -64,7 +64,7 @@ function Mark({ c }: { c: Connector }) {
   )
 }
 
-/** The state in a dense cell: StatusPill's register (mark and word, no fill). */
+/** The state in a dense cell: StatusMark's register (mark and word, no fill). */
 function State({ c, opts }: { c: Connector; opts: LabOptions }) {
   const st = c.status
   const word = (icon: IconSvgElement | null, text: string, ink = false) => (

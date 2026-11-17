@@ -1,10 +1,9 @@
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowDown02Icon, ArrowRight02Icon, Mic01Icon } from "@hugeicons/core-free-icons"
 
-import { BeatBracket, Beats, Card, Highlight, MarginNote, Mono, Text } from "@/components/kit"
+import { BeatBracket, Beats, Card, Highlight, MarginNote, Mono, Perched, Text } from "@/components/kit"
 import { measurePost } from "@/lib/post-length"
 
-import { Perched } from "./perched"
 import { POST } from "./the-post"
 
 /* POST, the LinkedIn draft about the onboarding cut, is in the-post.ts. */

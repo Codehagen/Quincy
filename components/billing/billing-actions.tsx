@@ -5,7 +5,12 @@ import { useEffect, useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Button, Text } from "@/components/kit"
 
-const BILLING_PATH = "/settings/billing"
+/**
+ * Where Stripe sends the person back to: the plan's section of /settings
+ * (billing folded into Settings on 2026-11-17). /settings/billing still
+ * redirects here, so an old Checkout or portal link lands in the same place.
+ */
+const BILLING_PATH = "/settings?section=plan"
 
 /**
  * Checkout and the billing portal, both of which end in a redirect to Stripe.
@@ -25,6 +30,8 @@ export function BillingActions({
   disabled,
   disabledReason,
   variant = "action",
+  size = "lg",
+  label,
 }: {
   mode: "subscribe" | "manage"
   /**
@@ -33,6 +40,14 @@ export function BillingActions({
    * next step is Studio and Manage billing stays reachable beside it.
    */
   variant?: "action" | "quiet"
+  /** `lg` (default) as a page's one action; `sm` in a pane's row of verbs. */
+  size?: "sm" | "lg"
+  /**
+   * The words, when the default ("Subscribe for $49 a month", "Manage
+   * billing") does not say what the press is for: "Update your card" on a
+   * failed charge, where the portal is the way to fix it.
+   */
+  label?: string
   /**
    * The monthly price in dollars, from the page. Passed in rather than
    * imported: `PLAN_PRICE_USD` lives in lib/stripe.ts beside the Stripe SDK,
@@ -70,7 +85,7 @@ export function BillingActions({
               // land before forwarding — without that, arriving back here
               // would race the subscription row and show the paywall to
               // someone who had just paid.
-              successUrl: `${BILLING_PATH}?checkout=done`,
+              successUrl: `${BILLING_PATH}&checkout=done`,
               cancelUrl: BILLING_PATH,
             })
           : await authClient.subscription.billingPortal({
@@ -108,15 +123,16 @@ export function BillingActions({
       <Button
         type="button"
         variant={variant}
-        size="lg"
+        size={size}
         onClick={run}
         disabled={disabled}
         pending={pending}
         pendingLabel="Taking you to Stripe…"
       >
-        {mode === "subscribe"
-          ? `Subscribe for $${price} a month`
-          : "Manage billing"}
+        {label ??
+          (mode === "subscribe"
+            ? `Subscribe for $${price} a month`
+            : "Manage billing")}
       </Button>
 
       {disabled && disabledReason ? (

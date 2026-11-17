@@ -23,9 +23,9 @@ export const workspace: Section[] = [
           <Code>ghost</Code> variant (no surface at rest), and a{" "}
           <Code>shortcut</Code> cap. <Code>Kbd size=&quot;sm&quot;</Code> is the 18px cap,{" "}
           <Code>tone=&quot;on-ink&quot;</Code> on the ink pill. <Code>Tag look=&quot;text&quot;</Code>{" "}
-          is a fact in a column. <Code>StatusPill</Code> is a row&apos;s state as a mark and a word.
+          is a fact in a column. <Code>StatusMark</Code> is a row&apos;s state as a mark and a word.
         </P>
-        <Demo caption="Ghost Clear, quiet Clear filters, sm Record with its icon at stroke 1.75, the ink action with its D cap, ghost Undo with U. Then caps, the text Tag beside the chip, and the four StatusPills.">
+        <Demo caption="Ghost Clear, quiet Clear filters, sm Record with its icon at stroke 1.75, the ink action with its D cap, ghost Undo with U. Then caps, the text Tag beside the chip, and the four StatusMarks.">
           <DenseControls />
         </Demo>
       </>

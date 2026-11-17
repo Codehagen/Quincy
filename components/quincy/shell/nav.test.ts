@@ -28,8 +28,9 @@ describe("isActive", () => {
   })
 
   it("never lights Settings and Billing together", () => {
-    expect(isActive("/settings/billing", "/settings")).toBe(false)
-    expect(isActive("/settings/billing", "/settings/billing")).toBe(true)
+    // Billing opens Settings on its plan section; the path is /settings, so
+    // Settings is the one row lit there.
+    expect(isActive("/settings", "/settings?section=plan")).toBe(false)
     expect(isActive("/settings", "/settings")).toBe(true)
   })
 })
@@ -50,7 +51,7 @@ describe("the route model (Desk)", () => {
 
   it("puts setup and the account in the menu, not the sidebar", () => {
     expect(SETUP_NAV.map((i) => i.href)).toEqual(["/brain", "/rhythm"])
-    expect(ACCOUNT_NAV.map((i) => i.href)).toEqual(["/credits", "/settings/billing", "/settings"])
+    expect(ACCOUNT_NAV.map((i) => i.href)).toEqual(["/credits", "/settings?section=plan", "/settings"])
   })
 
   it("links every route once", () => {
@@ -73,7 +74,6 @@ describe("the route model (Desk)", () => {
       "/c/x",
       "/ideas",
       "/settings",
-      "/settings/billing",
       "/brain",
       "/connectors",
       "/connectors/x",
@@ -90,7 +90,7 @@ describe("the route model (Desk)", () => {
 
   it("names the page a route belongs to", () => {
     expect(navItemFor("/c/x")?.label).toBe("Studio")
-    expect(navItemFor("/settings/billing")?.label).toBe("Billing")
+    expect(navItemFor("/settings")?.label).toBe("Settings")
     // A channel's topics and times live under Connectors (Sources and
     // Channels became one page on 2026-11-17).
     expect(navItemFor("/connectors/linkedin")?.label).toBe("Connectors")
@@ -105,7 +105,12 @@ describe("the route model (Desk)", () => {
  */
 describe("every app route is reachable", () => {
   // Every page has a row now; /cuts joined the sidebar as "Beta" (nav.ts).
-  const UNLINKED = new Set<string>([])
+  const UNLINKED = new Set<string>([
+    // A forward, not a page: billing is the Plan & billing section of
+    // /settings since 2026-11-17. The route stays so old links, mailed
+    // links and Stripe's return addresses keep landing somewhere.
+    "/settings/billing",
+  ])
 
   function pages(dir: string, base = ""): string[] {
     const found: string[] = []

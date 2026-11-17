@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import type { Angle, Riff } from "@/lib/riffs"
-import { Highlight, StatusPill } from "@/components/kit"
+import { Highlight, StatusMark } from "@/components/kit"
 import { FOCUS_RING, HIT_44 } from "@/components/kit/control-styles"
 import { ideasFrom } from "@/components/quincy"
 
@@ -236,7 +236,7 @@ export function MarginIdea({ idea, children }: { idea: MarginItem; children?: Re
         >
           {angle.hook}
         </span>
-        {done ? <StatusPill status="drafted" hideWord /> : null}
+        {done ? <StatusMark status="drafted" hideWord /> : null}
       </button>
       {open && children != null ? (
         <div id={bodyId} className="flex flex-col gap-kit-related px-2.5 pb-2.5 ps-7.5">

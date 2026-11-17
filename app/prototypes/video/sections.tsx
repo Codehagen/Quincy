@@ -1,6 +1,6 @@
 import { Card, FileChip, Highlight, MarginNote, Mono, Text } from "@/components/kit"
 import { Friend } from "@/components/mascot"
-import { Perched } from "@/components/showcase/demos/perched"
+import { Perched } from "@/components/kit"
 
 import { Crop, Sheet } from "@/components/showcase/demos/crop"
 import { Check, ExportChip, Frame, YouSaid } from "./pictures"

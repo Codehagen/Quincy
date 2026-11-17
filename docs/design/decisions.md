@@ -30,6 +30,7 @@ has not looked at anything (lab README, "When not to lab").
 | **Ideas, never riffs** | an angle is an *idea*; a riff is named by its source ("3 ideas from your voice note"); the page is **Ideas** | "riff" is a word nobody outside the codebase uses. Code and schema keep `riff` until a planned rename (one database) | plans/029 "Words", quincy-riffs.md |
 | **Ideas is a working surface — Table** (2026-11-16) | Ideas is a workspace: two toolbar rows (page, filters with counts), a dense DataList with columns (glyph · idea · source · shape · for · age), and the open idea Marked up in a fixed Panel beside it, worked by key (j k D N L U /). Under ~900px of workspace it folds into one column of rows that open in place | the owner, on the three layouts side by side in /prototypes/workspace-lab: "Jeg liker egentlig table veldig godt". Ideas is a queue worked daily; columns read down as well as across, and the open idea sits beside its row without the list moving. Rejected: Three panes (a third scroll region, no columns; the grouped view covers "what did I say in that call?"), Inline (kept as the narrow fold) | workspace.md, `app/prototypes/workspace-lab/DECISION.md` |
 | **Lineup is a calendar — a working surface** (2026-11-16, moved to /lineup 2026-11-17) | a Mon–Sun week of continuous time (00:00–24:00, 15-minute snap), posts as blocks at their exact minute, a slot's occurrence that nothing fills as a dashed block, the approved posts with no time in a tray over the grid, the open post drawn as its feed beside it; moved by pointer or by keys (Enter picks up, arrows, Enter drops, Esc puts back, U undoes); Quincy's handwritten notes on a control; the now line in ink, no green and no blink; touch and phones get the Feed. No counts on a block, a day or the week | the owner, on the Board in /prototypes/lineup-lab: "make this into a calendar that we also can have all the times between also"; "fjern den grønne blinken". A picked block is the well grey and a 1px ink ring all round, never a side bar: "på calender kan du også fjerne det helt til venstre?" (2026-11-17) | `components/kit/week-calendar.tsx`, `components/lineup/`, `app/prototypes/lineup-lab/DECISION.md` |
+| **Settings is a working surface — Desk** (2026-11-17) | /settings is a workspace in the house frame: a toolbar with the title and one sentence from the account, search on `/`; a filter row (Show: All · Needs you, Hide notes, the tally); every setting, browser and agent as a row of one grouped DataList (Profile · Sign-in · Plan & billing · Agents · Account); the open row in a pane in Drafts' order (a strong sentence, a muted provenance line, the object, the verbs); Quincy's graphite notes on the group lines and beside the pane's object. Billing is the "Plan & billing" section; `/settings/billing` forwards to `/settings?section=plan`. Under 900px of workspace a row opens in a Sheet | the owner, on the directions side by side in /prototypes/settings-lab: "Jeg liker desk", and "Jeg ønsker mer grafitt kanskje slik at det ser mer playful ut". Rejected: Today (the old page, prose to read), Sections (right structure, "feels very flat"), Overview, Ledger, Stage, Window, Annotated, Desk by section (below) | `components/settings/`, "Settings, decided" below |
 | **Cuts, not Studio** | the video editor is **Cuts** in visible copy (route `/cuts`) | "Studio" is the chat page; one word for two pages makes both unclear. The component is still `Studio` in code | `app/prototypes/video/name.ts`, plans/031 |
 | **Pixel friend, smooth from 32** | the mark is icon piece 31; under 32px the pixel drawing, from 32 the vector one (piece 20), same beats | whole pixels are the sharpest drawing at 16 (why 31 won); from 32 there is room for curves, and eased moves read as alive where cut frames read as jumps | mascot.md, `components/mascot/friend.tsx` |
 | **Quincy comes to you** | Quincy writes first, a few lines, and every note ends in the person's choice | an agent that only answers is a tool; one that reaches out reads as staff. Ending on a choice keeps "Quincy drafts, you send" | `components/showcase/demos/quincy-texts.tsx` |
@@ -49,6 +50,118 @@ has not looked at anything (lab README, "When not to lab").
 - **2026-11-16 — "Base UI stays the one behaviour layer".** Replaced by the
   ui-sdk rule above: Base UI keeps every existing component, ui-sdk takes the
   behaviours Base UI lacks.
+
+## Settings, decided (2026-11-17)
+
+Copied from `/prototypes/settings-lab/DECISION.md` when the lab was promoted
+and its folder deleted. Built in `components/settings/` and
+`app/(app)/settings/page.tsx`.
+
+**Picked: Desk.** <!-- 2026-11-17: "Jeg liker desk" --> And then: more
+graphite, so it reads as more playful.
+<!-- 2026-11-17: "Jeg ønsker mer grafitt kanskje slik at det ser mer playful ut" -->
+
+### The brief
+
+"The settings page doesn't look right. Prototype the new one based on my
+taste, do it the way we do, best practice, bring in more if needed, look at
+the shell otherwise." Then, during the build: "follow the kit we have". Read
+against the record: airy single-column white cards were what to move away
+from, towards app-grade working surfaces (toolbar, lists, panels).
+
+Found while building the baseline: the old page always said "with a
+password", also to an account that signs in with Google and has none. Desk
+says "Google" there and offers no password form.
+
+### What was on the table, and why each lost
+
+| Round | Direction | Axis | Why it lost |
+| --- | --- | --- | --- |
+| 1 | Today | the old page (KitPage, three Stages, the value in a sentence as the control) | the baseline, never a direction: prose to read, not values to scan; billing and usage were two more pages |
+| 1 | Sections | a section nav beside rows, billing folded in | the best structure: "Sections was the best, but it feels very flat. It doesn't feel like the showcase we have elsewhere or the labs we used before." Kept as the structure the later rounds riffed on |
+| 1 | Overview | six tiles, a Sheet per tile | every edit a sheet away; the nearest thing to a dashboard the product has |
+| 1 | Ledger | a dense DataList of every setting | cut with Overview in round 1; Desk is its idea brought back in the house frame |
+| 2 | Stage | the landing's recess as the frame, lifted objects | "doesn't feel like the rest": two depths on one screen, the recess framing working controls like a picture |
+| 2 | Window | the page as a product picture with chrome | chrome around the app inside the app reads as a picture, not a page |
+| 2 | Annotated | a Card and a margin note per row | the airiest; notes had to stay true per state; still not the house frame |
+| 3 | Desk, by section | Desk with the section as the row | a nearly empty list pane on a tall screen; no search across browsers and agents |
+
+The round 2 verdict that set the frame: "Look at Drafts and Lineup, how we
+use the marks, how we use graphite, and do Sections that way."
+
+### What Desk is
+
+- **The frame** is Drafts' and Lineup's: Toolbar with `ToolbarSummary`
+  ("Paying, renews 3 Dec. 4 browsers, 2 agents."), FilterMenu with counts and
+  Clear, the tally in mono, a DataList with column heads (Setting · Value ·
+  fact · State) grouped under Lineup's day label (the name at 560, a muted
+  qualifier, the count in mono), `Panel edge="start"` with a 32 band, the
+  KeyBar (j k Move · Enter Open · E Edit · / Search · Esc Back), the fold
+  under 900px into a Sheet.
+- **Rows are one height**: titles, values and facts truncate to one line;
+  the full text is in the cell's title and the pane. Facts are Drafts' Age
+  forms in mono ("07:52", "Yesterday", "12 Nov", "19/20", "$8.46").
+- **State is a still glyph and a word** (`StatusMark`), ink only when it
+  needs you (Read-only, Payment needed); the word folds to assistive tech
+  under 36rem of list. No green, no blink.
+- **The pane in Drafts' order**: one strong sentence ("Quincy calls you
+  Christer."), one muted provenance line, the object (a kit `Field` whose
+  `meta` carries the mono fact, "Display name 14/80"; or `Facts` in a
+  `Well`), then one row of verbs: the ink pill, a ghost Reset, a hold
+  pushed to the end. Save is disabled until the value differs.
+- **Plan & billing** keeps the billing page's copy word for word; "$49" as
+  the figure in a Well; Manage billing quiet on a healthy plan so the
+  page's one ink stays an edit, Subscribe and Update your card ink; Cancel a
+  hold, Keep my plan in its place; the friend perched on the Well only on
+  stuck or resting; the confirmation after Checkout in the pane, never a
+  Subscribe while Stripe confirms. This month is one sentence against last
+  month.
+- **Holds** for removing an agent, cancelling the plan and signing every
+  other browser out; one browser is a plain button (signing in again
+  undoes it). The Account pane has "Write to us" and a disabled "Delete the
+  account" hold, the shape plans/035 fills in.
+- **Only what the rows store.** The lab showed browser versions, a place
+  from the IP and an agent's scopes on fixtures; the product shows the
+  user agent as `describeUserAgent` reads it, the session's sign-in and
+  last-used dates, and how an agent came (registered here or introduced
+  itself).
+
+### Quincy's pencil on a settings page
+
+| Mark | Where | Rule it follows |
+| --- | --- | --- |
+| A graphite `Hand` on a group's line ("fix the card first", "writing has stopped", "keep it before it ends?", "one has no name", "others still signed in", "almost full", "some never connected") | the list, at the group's line, hidden under 36rem of list | editor-marks.md › Notes on working surfaces: graphite, on the spot, 2–4 words, leads to an action, never a count, gone when resolved |
+| At most two list notes | the list | at most 3 on a screen: two in the list plus the pane's one |
+| One `MarginNote` beside the pane's object | the pane | one per object |
+| "all quiet here" beside the friend when Needs you is empty | the empty state | the list notes are gone then |
+| Hide notes / Show notes | the filter row | a page that uses them gives them a control |
+
+Asked for and not done, because the docs forbid it: a note in the toolbar
+(never on chrome), a second note in the pane (one per object), counts in
+notes ("3 others still signed in" is said "others still signed in").
+
+### What the pick asked of the kit
+
+| Gap in the lab | Verdict | API |
+| --- | --- | --- |
+| `TimeText` (lineup-marks.tsx, the lab's copy) | not a new component | `Mono` gains `size?: "md" \| "sm"` |
+| A state mark, glyph and word | `StatusPill` renamed and opened | `StatusMark`: a preset `status`, or `icon`, or `glyph` (never two); `children` is the word; `tone`; `hideWord` |
+| Label and value facts in a pane | new, compound | `<Facts><Fact label="Where">…</Fact></Facts>`, a `<dl>` that draws no surface; place it in a `Well` |
+| The toolbar's summary sentence | new part of `Toolbar` | `ToolbarSummary` beside `ToolbarTitle`: meta style, truncation, the 40rem fold |
+| A Field with a mono fact beside the label | extend `Field` | `meta?: React.ReactNode` at the end of the label row |
+| Focus back to a row from a pane | change the option | `revealDataListRow(key, scope, { focus: "follow" \| "recover" \| "take" })` |
+| The friend on an object's edge | promote as is | `Perched` in `components/kit/perched.tsx` |
+
+Deliberately not proposed: a `SettingsRow` or `DeskPane` component (the pane
+is one page's composition of Panel, Field, Facts, Well, MarginRoom and
+HoldButton, and stays in `components/settings/` until a second page needs
+it), and a config-driven settings schema (every row edits differently).
+
+### The shell
+
+The account menu keeps its Billing row, a familiar door, now pointing at
+`/settings?section=plan`; Credits stays its own page for the charge list.
+The billing banner and Stripe's return addresses point at the same place.
 
 ## The onboarding story
 

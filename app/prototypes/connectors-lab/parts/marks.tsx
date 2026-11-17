@@ -50,7 +50,7 @@ export function nameId(c: Connector, scope: string) {
  *
  * Connected is the reference's pill translated: the quiet grey (the well) in
  * place of its pale green, and the live dot in place of its green dot, so
- * live stays a dot and never a fill. Everything else is StatusPill's
+ * live stays a dot and never a fill. Everything else is StatusMark's
  * register: a glyph in muted ink and a word, no fill. Failed and reauth say
  * their word in ink (the one state that should interrupt), never red.
  */

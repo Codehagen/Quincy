@@ -127,24 +127,35 @@ export function focusRestoredDataList(scope: ParentNode = document) {
   })
 }
 
+export type RevealFocus = "follow" | "recover" | "take"
+
 /**
  * After the page moved the selection by key (j/k), or after an action took
  * the open row away (drafted, set aside): keep the new row in view, and
- * follow it with focus when focus is already on a row, so arrow keys and
- * j/k agree about where you are. Runs on the next frame, after React has
+ * decide whether focus goes with it. Runs on the next frame, after React has
  * drawn the new selection.
  *
- * `recover`: also focus the row when focus has fallen to the body, which
- * it does when the action removed the focused row or the button pressed.
- * Pass it after an action, never after a plain move.
+ * `focus`:
+ * - `follow` (default): focus the row only when focus is already on a row,
+ *   so arrow keys and j/k agree about where you are. After a plain move.
+ * - `recover`: also when focus has fallen to the body, which it does when
+ *   the action removed the focused row or the button pressed. After an
+ *   action, never after a plain move.
+ * - `take`: always, wherever focus is. When the person asked to go back to
+ *   the list from elsewhere (Esc from a pane).
  */
-export function revealDataListRow(key: string, scope: ParentNode = document, { recover = false }: { recover?: boolean } = {}) {
+export function revealDataListRow(
+  key: string,
+  scope: ParentNode = document,
+  { focus = "follow" }: { focus?: RevealFocus } = {},
+) {
   requestAnimationFrame(() => {
     const el = scope.querySelector<HTMLElement>(`[data-kit-row="${CSS.escape(key)}"]`)
     if (!el) return
     const active = document.activeElement
     const lost = active == null || active === document.body
-    if (active?.closest(DATA_LIST_ROW) || (recover && lost)) el.focus({ preventScroll: true })
+    const onRow = Boolean(active?.closest(DATA_LIST_ROW))
+    if (focus === "take" || onRow || (focus === "recover" && lost)) el.focus({ preventScroll: true })
     el.scrollIntoView({ block: "nearest" })
   })
 }

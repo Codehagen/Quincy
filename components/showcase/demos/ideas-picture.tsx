@@ -1,5 +1,6 @@
+import { Perched } from "@/components/kit"
+
 import { Crop, Sheet } from "./crop"
-import { Perched } from "./perched"
 
 /* It brings you ideas: three from one merge, the one with a number picked. */
 

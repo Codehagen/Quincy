@@ -1,6 +1,4 @@
-import { MarginNote, Mono } from "@/components/kit"
-
-import { Perched } from "./perched"
+import { MarginNote, Mono, Perched } from "@/components/kit"
 
 /* Against your own median: never a follower count. */
 

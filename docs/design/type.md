@@ -27,7 +27,7 @@ exist only there: never in a Card page, where body and small stay the scale.
 | --- | --- | --- | --- |
 | `text-kit-heading` | 15 / 1.2, −0.012em | 600 | the page's name in a Toolbar (`ToolbarTitle`), in place of the 28px title |
 | `text-kit-dense` | 13 / 19, −0.006em | 460 | a DataList row title (`DataListTitle`; 560 ink on the open row), an `xs`/`sm` control's label |
-| `text-kit-meta` | 12 / 16, −0.003em | 460, tabular | column heads (560), the facts beside a title, a toolbar's count line, KeyBar words, `Tag look="text"`, `StatusPill` |
+| `text-kit-meta` | 12 / 16, −0.003em | 460, tabular | column heads (560), the facts beside a title, a toolbar's count line, KeyBar words, `Tag look="text"`, `StatusMark` |
 | `text-kit-mono-sm` | mono 11 / 16, 0 | —, tabular | ages and counts in a column (`DataListMono`), FilterMenu counts |
 
 Meta carries counts, so every component that uses it adds `tabular-nums`;
@@ -38,7 +38,7 @@ because the system mono's x-height sits a step above Inter's.
 14 at 1.75 (`ICON_DENSE_CHEVRON`). Stroke 2 reads bold next to 460 type at
 13. Spread it: `<HugeiconsIcon icon={X} {...ICON_DENSE} aria-hidden />`.
 Button `xs`/`sm`, SearchField `sm`, Segmented `xs`, FilterMenu and
-StatusPill already do. Beside 14px body, icons stay 16–18 at 2.
+StatusMark already do. Beside 14px body, icons stay 16–18 at 2.
 
 Weights: `font-kit-regular` (460) and `font-kit-strong` (560). 600 lives only
 inside `text-kit-figure` and `text-kit-title`. Inter is loaded variable, so 460 and 560 are real
@@ -111,7 +111,8 @@ Is it a number that changes because of something the person did? → Count
 Mono is for times and days, absolute or relative ("Thu 07:45", "Today",
 "Yesterday", "2d"), file names, durations and counts. Muted by default;
 `tone="ink"` when the time is the news ("Goes out <Mono tone="ink">Thu
-07:45</Mono>"). A day inside a sentence of prose ("Dismissed the note from
+07:45</Mono>"). `size="sm"` (`text-kit-mono-sm`) inside a dense block or a
+feed row, as Lineup's times are. A day inside a sentence of prose ("Dismissed the note from
 today.") is just a word, not Mono.
 
 `Count` takes the size of the text around it: inside `Text variant="figure"`
@@ -128,7 +129,7 @@ tall, Tags 6px apart.
 `look` `chip` (default, the above) | `text`: muted 12px meta text with no
 ring, for a fact in a named column (DataList's Shape) or a dense row's meta
 line. A ring on twenty rows is twenty objects louder than the titles. Not
-pressable, not a filter (Segmented), not a status (StatusPill, Checklist), and
+pressable, not a filter (Segmented), not a status (StatusMark, Checklist), and
 never more than three on one item. A sentence about the item ("writes 2
 posts, for LinkedIn") is `Text variant="small" tone="muted"`, not a Tag.
 

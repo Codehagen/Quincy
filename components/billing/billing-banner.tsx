@@ -48,7 +48,7 @@ export function BillingBanner({ entitlement }: { entitlement: Entitlement }) {
           : "Everything you made is still here. Quincy has just stopped writing."}
       </Text>
 
-      {/* Not on /settings/billing itself, which has its own (see there). */}
+      {/* Not on /settings itself, whose plan row has its own (see there). */}
       <BillingBannerAction recoverable={recoverable} />
     </div>
   )

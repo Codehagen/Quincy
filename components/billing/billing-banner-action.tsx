@@ -6,11 +6,12 @@ import { usePathname } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { Button, ButtonLink, Text } from "@/components/kit"
 
-const BILLING_HREF = "/settings/billing"
+/** The plan's section of /settings, where billing lives since 2026-11-17. */
+const BILLING_HREF = "/settings?section=plan"
 
 /**
- * The banner's way out, except on the page it leads to. On /settings/billing
- * the page holds its own action, and a second ink pill above it would be two
+ * The banner's way out, except on the page it leads to. On /settings the
+ * plan's row opens first when it needs you and holds its own action, and a second ink pill above it would be two
  * actions for one decision (docs/design/actions.md). The words stay: they say
  * why the page matters.
  *
@@ -22,7 +23,9 @@ const BILLING_HREF = "/settings/billing"
  */
 export function BillingBannerAction({ recoverable }: { recoverable: boolean }) {
   const pathname = usePathname()
-  if (pathname === BILLING_HREF) return null
+  // The path alone: usePathname carries no query, and every section of
+  // /settings can reach the plan's own button in one press.
+  if (pathname === "/settings") return null
 
   if (recoverable) return <FixBillingButton />
 

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { SourceGlyph, StatusPill } from "@/components/kit"
+import { SourceGlyph, StatusMark } from "@/components/kit"
 
 import { CHANNEL_LABEL, type Channel } from "../data"
 import { openingOf, type Item } from "../use-lineup"
@@ -42,15 +42,15 @@ export function StateMark({ item, hideWord = false }: { item: Item; hideWord?: b
   }
   if (item.kind === "stranded") {
     return (
-      <StatusPill status="later" hideWord={hideWord}>
+      <StatusMark status="later" hideWord={hideWord}>
         No time
-      </StatusPill>
+      </StatusMark>
     )
   }
   const s = item.post.state
-  if (s === "sending") return <StatusPill status="reading" hideWord={hideWord}>Sending</StatusPill>
-  if (s === "published") return <StatusPill status="drafted" hideWord={hideWord}>Sent</StatusPill>
-  if (s === "failed") return <StatusPill status="failed" hideWord={hideWord}>{"Didn't go"}</StatusPill>
+  if (s === "sending") return <StatusMark status="reading" hideWord={hideWord}>Sending</StatusMark>
+  if (s === "published") return <StatusMark status="drafted" hideWord={hideWord}>Sent</StatusMark>
+  if (s === "failed") return <StatusMark status="failed" hideWord={hideWord}>{"Didn't go"}</StatusMark>
   return null
 }
 

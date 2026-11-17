@@ -9,7 +9,9 @@ export { Card, type CardProps, type CardWidth, type Crop } from "./card"
 export { List, ListHeading, type ListProps, type ListHeadingProps } from "./list"
 export { Window } from "./window"
 export { Text, Muted, Lead, type TextProps, type TextTone } from "./text"
-export { Mono } from "./mono"
+export { Mono, type MonoProps } from "./mono"
+export { Facts, Fact, type FactsProps, type FactProps } from "./facts"
+export { Perched, type PerchedProps } from "./perched"
 export { Code } from "./code"
 export { Rule } from "./rule"
 export { Well, type WellProps } from "./well"
@@ -218,10 +220,12 @@ export {
   ToolbarGroup,
   ToolbarDivider,
   ToolbarTitle,
+  ToolbarSummary,
   type ToolbarProps,
   type ToolbarSize,
   type ToolbarGroupProps,
   type ToolbarTitleProps,
+  type ToolbarSummaryProps,
 } from "./toolbar"
 export { KeyBar, FootBar, type KeyBarProps, type KeyBarItem, type FootBarProps } from "./key-bar"
 export { FilterMenu, type FilterMenuProps, type FilterOption } from "./filter-menu"
@@ -233,6 +237,7 @@ export {
   DataListEmpty,
   DATA_LIST_ROW,
   revealDataListRow,
+  type RevealFocus,
   focusRestoredDataList,
   type DataListProps,
   type DataListColumn,
@@ -250,7 +255,7 @@ export {
   type PanelHeaderProps,
   type PanelBodyProps,
 } from "./panel"
-export { StatusPill, type StatusPillProps, type StatusPillStatus } from "./status-pill"
+export { StatusMark, type StatusMarkProps, type StatusMarkStatus } from "./status-mark"
 export { Announcer, useAnnounce, type AnnouncerProps } from "./announcer"
 export { WorkspacePage, WorkspacePanes, type WorkspacePageProps } from "./workspace-page"
 export { useLetterKeys, type LetterKeyHandler, type LetterKeyMap } from "./use-letter-keys"

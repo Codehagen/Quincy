@@ -16,6 +16,7 @@ import {
   Switch,
   Toolbar,
   ToolbarGroup,
+  ToolbarSummary,
   ToolbarTitle,
   useAnnounce,
   type KeyBarItem,
@@ -48,7 +49,7 @@ export function Summary({ store, baseline }: { store: LineupStore; baseline?: nu
   if (store.nothingAtAll) return null
   const thisWeek = store.week.week === store.week.thisWeek
   return (
-    <p className="hidden truncate text-kit-meta text-kit-ink-muted @[40rem]/kit-workspace:block">
+    <ToolbarSummary>
       <Count value={s.going} /> {s.going === 1 ? "post" : "posts"} {thisWeek ? "this week" : "that week"}
       {baseline != null ? `; you usually post ${baseline}` : ""}.
       {s.openAhead > 0 ? (
@@ -71,7 +72,7 @@ export function Summary({ store, baseline }: { store: LineupStore; baseline?: nu
           <Count value={s.waiting} /> approved with no time.
         </>
       ) : null}
-    </p>
+    </ToolbarSummary>
   )
 }
 

@@ -65,9 +65,11 @@ export const SETUP_NAV: NavItem[] = [
 /** The account menu's account rows, above Why and Sign out. */
 export const ACCOUNT_NAV: NavItem[] = [
   { href: "/credits", label: "Credits", icon: Coins01Icon },
-  // Billing beside Settings, not inside it: "why has this stopped" and
-  // "cancel this" should not have to guess, and the banner links here.
-  { href: "/settings/billing", label: "Billing", icon: CreditCardIcon },
+  // Billing is a section of Settings since 2026-11-17 (decisions.md, "Settings
+  // is a working surface"), but the row stays: "why has this stopped" and
+  // "cancel this" should not have to guess. It opens Settings on the plan.
+  // Never lit on its own: isActive reads the path, and the path is /settings.
+  { href: "/settings?section=plan", label: "Billing", icon: CreditCardIcon },
   { href: "/settings", label: "Settings", icon: Settings01Icon },
 ]
 
@@ -91,7 +93,8 @@ export function isActive(pathname: string, href: string): boolean {
   if (href === "/studio") {
     return pathname === "/studio" || pathname.startsWith("/c/")
   }
-  // Settings is exact-only, because /settings/billing is its own row.
+  // Settings is exact-only: /settings/billing only redirects to it, and
+  // lighting it from a path under it would claim a page that is not there.
   if (href === "/settings") {
     return pathname === "/settings"
   }

@@ -1,5 +1,5 @@
 import { REFUSALS } from "@/app/(marketing)/pricing/copy"
-import { Perched } from "@/components/showcase/demos/perched"
+import { Perched } from "@/components/kit"
 
 /**
  * What Quincy will never do, read from the pricing page's REFUSALS so the

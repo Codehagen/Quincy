@@ -36,9 +36,19 @@ see: a second Highlight in one Card or Window, a Highlight inside a heading,
 a MarginNote in a `crop="corner"` or full-width Card, a second MarginNote in
 one object. A warning is a bug in the page, not noise.
 
-Never on: navigation, settings, buttons, empty chrome, or anything the person
-wrote that Quincy has not read. The marks are Quincy's reading, so they appear
-only where Quincy has read something.
+Never on: navigation, buttons, empty chrome, or anything the person wrote
+that Quincy has not read. The marks are Quincy's reading, so they appear only
+where Quincy has read something.
+
+**Settings is the exception, as a working surface.** /settings is a
+workspace in the house frame (workspace.md), and its notes follow "Notes on
+working surfaces" below: graphite, 2–4 words in lower case, never a count,
+at most two in the list (on a group's line) and one beside the open pane's
+object, gone when resolved, and a Hide notes control in the filter row.
+Why: on 2026-11-17 the owner picked the Desk direction for settings ("Jeg
+liker desk") and asked for more graphite to make it playful ("Jeg ønsker mer
+grafitt kanskje slik at det ser mer playful ut").
+<!-- 2026-11-17: "Jeg liker desk"; "Jeg ønsker mer grafitt kanskje slik at det ser mer playful ut" -->
 
 ## Notes on working surfaces
 

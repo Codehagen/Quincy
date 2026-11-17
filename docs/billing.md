@@ -203,7 +203,7 @@ new surface is gated by calling it rather than by remembering the rule.
 **Video ingest follows the rule.** `POST /api/editor/uploads` and
 `POST /api/editor/assets/:id/ingest` both resolve entitlement before anything
 is stored or spent and answer a non-entitled account with the same 402 body;
-the drop zone shows the sentence and a link to `/settings/billing`. Entitlement
+the drop zone shows the sentence and a link to `/settings?section=plan`. Entitlement
 says who may spend, not how much — the per-recording and per-day Deepgram
 ceilings and the one-a-minute cooldown are in `lib/editor/ingest-limits.ts`,
 described in `docs/video-ingest.md`, and metered on `usage_event` as
@@ -355,7 +355,7 @@ So:
   the app is fine, but a bare `stripe` CLI call is not — pass
   `--stripe-version`.
 
-The pricing page, the home page and /settings/billing say "plus VAT where it
+The pricing page, the home page and the plan on /settings say "plus VAT where it
 applies" only while the flag is on, because only then is it true.
 
 Before setting the flag in an environment:
@@ -386,9 +386,13 @@ so no Stripe.js ever loads in the browser and there is no key to expose.
 
 ## The billing surface
 
-`/settings/billing`. `/settings` today is a placeholder that says it grows "when
-there is more than one thing to set" — a subscription is that second thing, and
-a paywall needs a stable route to be the `successUrl` and `cancelUrl`.
+The "Plan & billing" section of `/settings`, reached as
+`/settings?section=plan` (since 2026-11-17; docs/design/decisions.md,
+"Settings, decided"). That address is Checkout's `successUrl` (with
+`&checkout=done`) and `cancelUrl` and the portal's `returnUrl`.
+`/settings/billing` still exists and forwards there, keeping `checkout=done`,
+so a Checkout or a portal session started before the move comes back to the
+same confirmation.
 
 `/credits` stays where it is. It is about usage, not entitlement, and its own
 placeholder already promises a meter.
@@ -430,8 +434,8 @@ account:
 | `/api/chat` while trialing | `200`, model streamed |
 | `/api/chat` once expired | `402 {"state":"expired"}` |
 | `/studio`, `/brain` once expired | `200` — shell renders, no redirect |
-| Read-only banner | present, links to `/settings/billing` |
-| `/settings/billing` once expired | "Read-only", "Your free day is over" |
+| Read-only banner | present, links to `/settings?section=plan` |
+| `/settings?section=plan` once expired | "Read-only", "Your free day is over" |
 | Heartbeat cron, entitled | `users:1 captures:1 facts:2` in 3965ms |
 | Heartbeat cron, expired | `users:0 unentitled:1` in 256ms, no model call |
 | `subscription/upgrade` | `200`, Checkout session for $49.00, customer created |

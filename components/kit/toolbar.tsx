@@ -96,3 +96,26 @@ export function ToolbarTitle({ children, as: Tag = "h1" }: ToolbarTitleProps) {
     </Tag>
   )
 }
+
+export type ToolbarSummaryProps = React.ComponentProps<"p">
+
+/**
+ * The page's state as one muted meta sentence beside `ToolbarTitle`
+ * ("3 waiting on you, the oldest from Tuesday."). One line, truncated, and
+ * shown only from a 40rem workspace: on a narrow one the rows say it.
+ *
+ * The sentence is the caller's (`Count` inside it as needed). It does not
+ * announce: a change that matters is announced by the caller with
+ * `useAnnounce`.
+ */
+export function ToolbarSummary({ children, className, ...props }: ToolbarSummaryProps) {
+  return (
+    <p
+      data-slot="kit-toolbar-summary"
+      {...props}
+      className={`hidden truncate text-kit-meta text-kit-ink-muted @[40rem]/kit-workspace:block ${className ?? ""}`}
+    >
+      {children}
+    </p>
+  )
+}

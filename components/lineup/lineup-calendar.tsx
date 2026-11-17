@@ -5,6 +5,7 @@ import * as React from "react"
 import {
   Button,
   ButtonLink,
+  Mono,
   Panel,
   PanelBody,
   PanelHeader,
@@ -19,7 +20,7 @@ import type { FeedAccounts } from "@/lib/feed-accounts"
 import { weekdayLabel } from "@/lib/slots"
 
 import { LineupFilters, NothingOpen, WeekSwitch } from "./lineup-chrome"
-import { ChannelGlyph, ScheduleMark, TimeText } from "./lineup-marks"
+import { ChannelGlyph, ScheduleMark } from "./lineup-marks"
 import { blocksOf, isMovable, isPastAt, quoted, stripOf, type CalBlock, type Item } from "./lineup-model"
 import { CHANNEL_LABELS } from "./slot-composer"
 import { FeedPicture, ItemPicture } from "./post-feed"
@@ -212,7 +213,9 @@ export function PostBlockBody({ item, block, start, focused, channelMark = true 
     <span className="lineup-block-inner" data-focused={focused || undefined}>
       <span className="flex min-w-0 items-center gap-1">
         {channelMark ? <ChannelGlyph channel={block.channel} label={channelLabel} /> : null}
-        <TimeText ink={block.variant === "post" && block.state !== "published"}>{hhmm(start)}</TimeText>
+        <Mono size="sm" tone={block.variant === "post" && block.state !== "published" ? "ink" : "muted"}>
+          {hhmm(start)}
+        </Mono>
         {item?.kind === "post" ? (
           <span className="ms-auto">
             <ScheduleMark item={item} hideWord />

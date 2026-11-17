@@ -19,6 +19,7 @@ import {
   Tag,
   Toolbar,
   ToolbarGroup,
+  ToolbarSummary,
   ToolbarTitle,
   WorkspacePage,
   WorkspacePanes,
@@ -134,7 +135,7 @@ function useDraftKeys(store: DraftsStore, searchRef: React.RefObject<HTMLInputEl
   // An action moved the selection (an approval that finished the piece, a
   // discard): follow it with focus, since the pressed button is gone.
   React.useEffect(() => {
-    if (store.moved) revealDataListRow(store.moved.id, document, { recover: true })
+    if (store.moved) revealDataListRow(store.moved.id, document, { focus: "recover" })
   }, [store.moved])
 
   const open = store.selected
@@ -149,7 +150,7 @@ function useDraftKeys(store: DraftsStore, searchRef: React.RefObject<HTMLInputEl
     e: { once: true, run: () => (firstWriting ? store.setEditing(firstWriting.id) : undefined) },
     u: () => {
       const id = store.undo()
-      if (id) revealDataListRow(id, document, { recover: true })
+      if (id) revealDataListRow(id, document, { focus: "recover" })
     },
   })
 }
@@ -168,7 +169,7 @@ function Summary({ store }: { store: DraftsStore }) {
   if (store.rows.length === 0) return null
   const oldest = waiting.reduce<Row | null>((o, r) => (!o || r.order < o.order ? r : o), null)
   return (
-    <p className="hidden truncate text-kit-meta text-kit-ink-muted @[40rem]/kit-workspace:block">
+    <ToolbarSummary>
       {waiting.length === 0 ? (
         "Nothing is waiting on you."
       ) : (
@@ -188,7 +189,7 @@ function Summary({ store }: { store: DraftsStore }) {
           <Count value={noTime} /> approved with no time.
         </>
       ) : null}
-    </p>
+    </ToolbarSummary>
   )
 }
 
@@ -322,7 +323,7 @@ function DraftsFoot({ store }: { store: DraftsStore }) {
           shortcut="U"
           onClick={() => {
             const id = store.undo()
-            if (id) revealDataListRow(id, document, { recover: true })
+            if (id) revealDataListRow(id, document, { focus: "recover" })
           }}
         >
           Undo

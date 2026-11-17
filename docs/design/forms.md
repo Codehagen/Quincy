@@ -30,7 +30,8 @@ renders label, control, description, error, in that order, and wires the
 label and the messages to the control (`aria-describedby`, `data-invalid`).
 
 Props: `label` (required, always visible: a placeholder is not a label),
-`description` (one muted line), `validate` (returns the message or `null`,
+`meta` (a short fact at the end of the label row, usually a `Mono`:
+"14/80", "GMT+1 · 17:20"), `description` (one muted line), `validate` (returns the message or `null`,
 may be async), `error` (a message from outside, such as the server), `name`,
 `disabled`.
 

@@ -22,8 +22,8 @@ the Stageshow rules are showcase.md; the friend's states are mascot.md.
 | You ship; Quincy finds the idea | `IdeasCard` (`ideas-card.tsx`) in a FeatureCard | scripted, no cursor |
 | Five claims as one grid | `BentoDemo` (`bento.tsx`) | Bento, five tiles |
 
-Helpers: `Perched` (`perched.tsx`, the friend on an object's top edge,
-lower body behind it), `Crop` (`crop.tsx`, a grey stage cropping its object
+Helpers: `Perched` (from the kit, `components/kit/perched.tsx`: the friend
+on an object's top edge, lower body behind it), `Crop` (`crop.tsx`, a grey stage cropping its object
 at the foot, `role="img"`), `useArrival` (`use-arrival.ts`, one more item
 every `gapMs` once seen, first item in the server HTML), `POST`
 (`the-post.ts`).

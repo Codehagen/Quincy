@@ -11,7 +11,7 @@ import { stripeClient } from "@/lib/stripe"
 import { GOOD_STATUSES } from "@/lib/subscription-status"
 
 /**
- * Cancel at period end, and undo it, from the billing page.
+ * Cancel at period end, and undo it, from the plan's pane on /settings.
  *
  * Not the Stripe plugin's `/subscription/cancel`: that one sends the person
  * through the billing portal to press cancel a second time, and the hold on
@@ -123,7 +123,7 @@ export async function cancelPlan(): Promise<PlanActionResult> {
     }
   }
 
-  revalidatePath("/settings/billing")
+  revalidatePath("/settings")
   return { ok: true }
 }
 
@@ -156,6 +156,6 @@ export async function keepPlan(): Promise<PlanActionResult> {
     }
   }
 
-  revalidatePath("/settings/billing")
+  revalidatePath("/settings")
   return { ok: true }
 }

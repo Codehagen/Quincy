@@ -8,8 +8,8 @@ import { Button, ButtonLink, Card, Text } from "@/components/kit"
 import { Friend } from "@/components/mascot"
 
 /**
- * What the billing page shows on the way back from Checkout
- * (`/settings/billing?checkout=done`). Two states, both chosen by the server
+ * What the plan's pane on /settings shows on the way back from Checkout
+ * (`/settings?section=plan&checkout=done`). Two states, both chosen by the server
  * from the snapshot, so this file never decides whether somebody has paid:
  *
  * - CheckoutConfirmed: the snapshot already says active. Normally the case,

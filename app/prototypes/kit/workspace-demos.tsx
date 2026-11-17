@@ -22,7 +22,7 @@ import {
   PanelHeader,
   SearchField,
   Segmented,
-  StatusPill,
+  StatusMark,
   Tag,
   Text,
   Toolbar,
@@ -33,7 +33,7 @@ import {
   useAnnounce,
   type DataListColumn,
   type FilterOption,
-  type StatusPillStatus,
+  type StatusMarkStatus,
 } from "@/components/kit"
 
 /*
@@ -49,7 +49,7 @@ type Idea = {
   sourceLabel: string
   shape: string
   age: string
-  status?: StatusPillStatus
+  status?: StatusMarkStatus
 }
 
 const IDEAS: Idea[] = [
@@ -85,7 +85,7 @@ const COLUMNS: DataListColumn<Idea>[] = [
     cell: (i) => (
       <span className="flex min-w-0 items-center gap-2">
         <DataListTitle quiet={i.status === "drafted" || i.status === "reading"}>{i.title}</DataListTitle>
-        {i.status === "drafted" || i.status === "later" ? <StatusPill status={i.status} /> : null}
+        {i.status === "drafted" || i.status === "later" ? <StatusMark status={i.status} /> : null}
       </span>
     ),
   },
@@ -94,7 +94,7 @@ const COLUMNS: DataListColumn<Idea>[] = [
     id: "shape",
     header: "Shape",
     width: "5.5rem",
-    cell: (i) => (i.status === "reading" ? <StatusPill status="reading" /> : <Tag look="text">{i.shape}</Tag>),
+    cell: (i) => (i.status === "reading" ? <StatusMark status="reading" /> : <Tag look="text">{i.shape}</Tag>),
   },
   { id: "age", header: "Age", width: "3rem", align: "end", cell: (i) => <DataListMono>{i.age}</DataListMono> },
 ]
@@ -129,10 +129,10 @@ export function DenseControls() {
         <Tag>Story</Tag>
       </div>
       <div className="flex flex-wrap items-center gap-x-kit-group gap-y-kit-controls">
-        <StatusPill status="reading" />
-        <StatusPill status="drafted" />
-        <StatusPill status="later" />
-        <StatusPill status="failed" />
+        <StatusMark status="reading" />
+        <StatusMark status="drafted" />
+        <StatusMark status="later" />
+        <StatusMark status="failed" />
       </div>
     </div>
   )
@@ -267,7 +267,7 @@ function WorkspaceDemoInner() {
     setOpen(next?.id ?? null)
     announce(`Set aside “${idea.title}”. Press U to undo.`)
     // Focus follows to the open row, so it never falls to the body.
-    if (next && root.current) revealDataListRow(next.id, root.current, { recover: true })
+    if (next && root.current) revealDataListRow(next.id, root.current, { focus: "recover" })
   }
 
   const undo = () => {

@@ -7,7 +7,7 @@ import {
   DataListMono,
   DataListTitle,
   SourceGlyph,
-  StatusPill,
+  StatusMark,
   Tag,
   type DataListColumn,
 } from "@/components/kit"
@@ -55,8 +55,8 @@ export function IdeaChannels({ channels }: { channels: IdeaRow["channels"] }) {
  */
 export function IdeaShape({ row }: { row: IdeaRow }) {
   if (row.angle) return <Tag look="text">{row.angle.shape}</Tag>
-  if (row.status === "reading") return <StatusPill status="reading" />
-  if (row.status === "failed") return <StatusPill status="failed" />
+  if (row.status === "reading") return <StatusMark status="reading" />
+  if (row.status === "failed") return <StatusMark status="failed" />
   return <DataListMeta>No ideas left</DataListMeta>
 }
 
@@ -65,7 +65,7 @@ export function IdeaTitle({ row }: { row: IdeaRow }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       <DataListTitle quiet={row.status !== "waiting"}>{row.title}</DataListTitle>
-      {row.status === "drafted" ? <StatusPill status="drafted" /> : null}
+      {row.status === "drafted" ? <StatusMark status="drafted" /> : null}
     </span>
   )
 }

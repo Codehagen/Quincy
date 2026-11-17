@@ -42,7 +42,7 @@ export function useDraftKeys(
   // An action moved the selection (an approval that finished the piece, a
   // discard): follow it with focus, since the pressed button is gone.
   React.useEffect(() => {
-    if (store.moved) revealDataListRow(store.moved.id, document, { recover: true })
+    if (store.moved) revealDataListRow(store.moved.id, document, { focus: "recover" })
   }, [store.moved])
 
   const open = store.selected
@@ -59,7 +59,7 @@ export function useDraftKeys(
       p: preview ? { once: true, run: () => (open ? store.togglePreview(open) : undefined) } : undefined,
       u: () => {
         const id = store.undo()
-        if (id) revealDataListRow(id, document, { recover: true })
+        if (id) revealDataListRow(id, document, { focus: "recover" })
       },
     },
     { enabled }

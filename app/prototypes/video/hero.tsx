@@ -16,7 +16,7 @@
 import { Mono } from "@/components/kit"
 import { Friend } from "@/components/mascot"
 import { Stage, Window } from "@/components/showcase"
-import { Perched } from "@/components/showcase/demos/perched"
+import { Perched } from "@/components/kit"
 import { useArrival } from "@/components/showcase/demos/use-arrival"
 
 import { PRODUCT } from "./name"

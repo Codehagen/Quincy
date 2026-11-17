@@ -555,7 +555,7 @@ function AnglePanel({
               <Text>{refusal.message}</Text>
               <div className="flex flex-wrap gap-kit-controls">
                 {refusal.reason === "entitlement" ? (
-                  <ButtonLink href="/settings/billing">See plans</ButtonLink>
+                  <ButtonLink href="/settings?section=plan">See plans</ButtonLink>
                 ) : refusal.reason === "no-channel" ? (
                   <ButtonLink href="/connectors?show=channels">Connect a channel</ButtonLink>
                 ) : null}

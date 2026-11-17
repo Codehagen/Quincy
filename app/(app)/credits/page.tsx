@@ -62,7 +62,7 @@ async function Credits() {
   const session = await getSession()
 
   // The layout already gates on a session; this is the narrowing, not the
-  // gate — the same pattern as /settings/billing.
+  // gate — the same pattern as /settings.
   if (!session) {
     redirect("/login?next=/credits")
   }

@@ -3,13 +3,13 @@
 import * as React from "react"
 import { Linkedin01Icon, NewTwitterIcon } from "@hugeicons/core-free-icons"
 
-import { PanelBody, Segmented } from "@/components/kit"
+import { Mono, PanelBody, Segmented } from "@/components/kit"
 import { Hand } from "@/components/kit/bracket"
 import { FeedColumn } from "@/components/drafts/feed/feed"
 import type { FeedAccounts } from "@/lib/feed-accounts"
 
 import { LineupFilters } from "./lineup-chrome"
-import { ScheduleMark, TimeText } from "./lineup-marks"
+import { ScheduleMark } from "./lineup-marks"
 import { closeBehind, isPastAt, titleOf, type Item } from "./lineup-model"
 import { ItemPicture, platformOf } from "./post-feed"
 import { CHANNEL_LABELS } from "./slot-composer"
@@ -150,7 +150,7 @@ export function LineupFeed({ store, accounts, notes, weekSwitch }: { store: Line
                   <li key={`now-${n}`} className="lineup-row lineup-now" aria-label={`Now, ${store.clock.time}`}>
                     <span className="lineup-rail">
                       {/* Ink, still: no dot and no pulse on Lineup. */}
-                      <TimeText ink>{`Now ${store.clock.time}`}</TimeText>
+                      <Mono size="sm" tone="ink">{`Now ${store.clock.time}`}</Mono>
                     </span>
                     <FeedColumn platform={platform} className="lineup-slice">
                       <span className="lineup-now-line" aria-hidden />
@@ -187,7 +187,7 @@ export function LineupFeed({ store, accounts, notes, weekSwitch }: { store: Line
                       className="lineup-rail-btn"
                       onClick={() => store.select(item.key)}
                     >
-                      {item.kind === "unplaced" ? null : <TimeText ink={picked}>{item.time}</TimeText>}
+                      {item.kind === "unplaced" ? null : <Mono size="sm" tone={picked ? "ink" : "muted"}>{item.time}</Mono>}
                       <ScheduleMark item={item} />
                     </button>
                   </span>
