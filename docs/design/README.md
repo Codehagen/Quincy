@@ -48,6 +48,18 @@ and `components/quincy/` (`@/components/quincy`). Live examples:
 - **Examples are what a user would get**: a before→after number from their
   own work, one story, never a currency example (marketing.md).
 - **Page titles are `${title} · Quincy`** (Copy, below).
+- **Quincy's handwriting lives on working surfaces too**: a few short graphite
+  notes on the spot they are about ("next open slot", "close behind 09:00"),
+  at most 3 a screen, one per object, gone when resolved (editor-marks.md ›
+  Notes on working surfaces; the Lineup calendar is the model).
+- **The friend is a participant**: every EmptyState, the chat avatar, the
+  working line, the lockup; in films it turns into the product (mascot.md).
+- **Work in progress is the friend's working state plus words**, never a
+  pulsing green dot; green is not a status colour (states.md › Working).
+- **Never a side stripe on anything selected**: rows are the grey plus an
+  ink 560 title, objects the grey plus a 1px ink ring (colour.md › Rows).
+- **The open draft is the post, in the platform's own look**, edited in
+  place; everything outside the feed column stays kit (quincy-drafts.md).
 
 ## Never
 
@@ -127,8 +139,14 @@ that fails names the doc it came from.
 - **E. Every EmptyState shows the friend.** `components/kit/empty-state.test.ts`
   (quincy-chat.md, "EmptyState").
 - **F. Titles end in " · Quincy", never an em dash.** `lib/metadata.test.ts`.
+- **G. No pulsing live dot.** ESLint `quincy-design/no-live-pulse`: a `pulse`
+  prop on `LiveDot` outside `components/showcase/` (states.md › Working).
+  Error.
+- **H. No side stripe on a selected thing.** ESLint
+  `quincy-design/no-side-stripe`: `SELECTION_BAR` or `kit-selection-bar`
+  outside `components/showcase/` (colour.md › Rows). Error.
 
-A, B and C skip `app/prototypes/` (frozen lab records) and test files.
+A, B, C, G and H skip `app/prototypes/` (frozen lab records) and test files.
 
 Open hits for B (2026-11-16), each a warning: `bg-kit-ground` in
 `components/editor/studio-chat.tsx`, `components/editor/studio-frame.tsx`

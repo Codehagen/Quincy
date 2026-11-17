@@ -91,9 +91,19 @@ the workspace lab caught it, and both now go up from the ground:
 
 On a dark object (0.235: a menu panel, a List in a Card) hover reads as a
 slight recess (1.07:1) and selected still lifts (1.22:1). Because the grey
-alone is ~1.1:1, a DataList's open row adds a **3px ink bar** at its start
-(`SELECTION_BAR`: `bg-kit-ink`, 8px in from top and foot) and its title at
-560. Not a shadow: a lifted row says "raised object", and a row is not one.
+alone is ~1.1:1, a DataList's open row also sets its title at 560 in ink
+(the rest of the row stays muted). Not a shadow: a lifted row says "raised
+object", and a row is not one.
+
+- **Never a side stripe on a selected row, block, card or chip.** No ink
+  bar at the start (the old `SELECTION_BAR`, `kit-selection-bar`). A
+  selected row is `kit-selected` plus its title at 560 in ink; a selected
+  object (a calendar block, a card, a chip) is `kit-selected` plus a 1px ink
+  ring all round.
+  Why: the owner asked for it to go, first on a calendar block and then on
+  rows too; a coloured bar on one edge is a stock "selected" marker.
+  <!-- 2026-11-17: "på calender kan du også fjerne det helt til venstre?" … "Sidestreken kan du også fjerne fra rader." -->
+  Check: ESLint `quincy-design/no-side-stripe` (README › Checks).
 
 ## Contrast (WCAG 2, against the surface the text paints on)
 

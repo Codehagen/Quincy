@@ -100,8 +100,16 @@ What is Quincy doing that the person can see the result of?
 - **One-shots hand back to idle.** `found` and `sent` play once and the
   engine carries the time on into `idle`. Set `state` back when the event
   passes; never hold `found` on screen.
-- **Loops are the second motion exception** after `LiveDot pulse`
-  (motion.md), for the same reason: a state that lasts. They are slow (a
+- **The friend is a participant, not decoration.** It is in every
+  EmptyState, it is the chat avatar, it is the working line (states.md ›
+  Working: `listening`, `reading`, `writing` beside the words), and it is
+  the lockup. In films and marketing it is the lead and it turns into the
+  product itself; the camera never flies through it.
+  Why: the owner wants the figures there; a friend in the places where
+  Quincy is present makes the product read as a colleague.
+  <!-- 2026-11-17: "jeg ønsker figurer skal være der" … "Friend ha det slik du sier" -->
+- **Loops are the motion exception** for a state that lasts (motion.md);
+  the pulsing live dot they used to sit beside is gone (states.md). They are slow (a
   change every 1–3s at rest) and hold a pose under reduced motion.
 
 ```tsx

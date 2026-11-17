@@ -13,6 +13,21 @@ says it, with the time apart for Mono. Never write that sentence by hand: the
 three hand-written copies drifted, and one said "Approved" for writing that
 had no time.
 
+## The open draft is the post, in the feed
+
+- **An open draft is shown as the post itself, in the platform's own look,
+  and edited where it stands.** On /drafts and /lineup the open draft is
+  drawn in a feed column (`components/drafts/feed`): X at its real 598px
+  column, LinkedIn as its card, system type and the platform's own icon
+  shapes, blank skeleton neighbours, the fold drawn where the feed cuts.
+  Never engagement counts, never fake neighbours' text. Everything outside
+  the column stays kit: Quincy's beat brackets and notes in the margin, the
+  verbs, the pane. No separate Marked up / Preview toggle: the post is the
+  editor (E puts the caret in it).
+  Why: the owner wants to see the post the way the feed shows it, not
+  prose with a preview beside it.
+  <!-- 2026-11-16: "Men posten står jo ikke på høyre side … Hvordan gjør X drafts?" … "So the feed, but we need to make it look more of the actual UI that they have" -->
+
 ## DraftCard
 
 One channel version of a draft, up to Approve and after. Use it wherever a

@@ -120,8 +120,8 @@ open), `DataListMeta` (12 muted), `DataListMono` (11 mono tabular),
 that is only a glyph says its words in an `sr-only` span.
 
 What it does for you: rows 36 (44 on touch), 1px apart; hover
-`kit-row-hover`, pressed and selected `kit-selected`, plus the 3px ink bar
-(colour.md, "Rows"); the sticky head band, hidden from assistive tech
+`kit-row-hover`, pressed and selected `kit-selected`, with the open row's
+title at 560 in ink and never a side stripe (colour.md, "Rows"); the sticky head band, hidden from assistive tech
 (each row reads as one sentence); `scroll-margin` of the head band + 8,
 so a row moved into view never parks under the heads; one persistent
 `role="status"` that says `loadingLabel`; loading as eight static skeleton

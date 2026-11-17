@@ -40,6 +40,30 @@ Never on: navigation, settings, buttons, empty chrome, or anything the person
 wrote that Quincy has not read. The marks are Quincy's reading, so they appear
 only where Quincy has read something.
 
+## Notes on working surfaces
+
+- **Quincy writes short handwritten notes on working surfaces, not only on
+  drafts.** Calendars, tables and dashboards get a few notes in graphite
+  (the kit's `Hand`, never the blue pen), written on the spot they are about:
+  "next open slot" under a free slot, "close behind 09:00" under a post that
+  sits too near the last one, "quiet day" on a day with nothing in it.
+  - **What they say:** something Quincy noticed that leads to an action.
+    Use 2–4 words in lower case. Never a count, a metric or praise; numbers
+    stay in the page's own text, against the person's usual.
+  - **How many:** at most 3 on a screen, and one per object (a block, a row,
+    a tile). They go away when the thing they point at is resolved: the
+    slot is filled or the post is moved.
+  - **Where:** on the grid or in the margin beside the object, never over
+    text and never on chrome (toolbars, filters, navigation).
+  - **Control:** a page that uses them gives them a control to turn them
+    off.
+
+  Why: the owner wants Quincy's handwriting "a bit around" the app, so the
+  tool reads as a person working beside you, not a dashboard. The Lineup
+  calendar is the model. A note on a working surface is a fact with a
+  direction, like an editor's pencil in the margin of a schedule.
+  <!-- 2026-11-17: "for teksten som er i calenderen er det noe jeg ønsker å ta med i taste. Jeg ønsker at det skal være litt slik rundt omkring. Calenderen var et god plass å ha det i." -->
+
 ## Highlight
 
 The yellow sweep under the one sentence that matters. Sweeps once (700ms) the

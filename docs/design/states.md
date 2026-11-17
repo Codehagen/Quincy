@@ -5,25 +5,42 @@ land. No spinners, no skeleton shimmer, no banners, no toasts.
 
 ## Working (loading)
 
-The pattern is a pulsing `LiveDot` with words that say what Quincy is doing
-and how long it usually takes. There is no Working component: the two pieces
-are the whole pattern.
+The pattern is the friend in its working state beside words that say what
+Quincy is doing and how long it usually takes. There is no Working
+component: the two pieces are the whole pattern.
+
+- **Work in progress is the friend's working state plus words, never a
+  pulsing green dot.** `listening` while it takes something in, `reading`
+  while it reads, `writing` while it drafts (mascot.md › The nine states).
+  When the work ends the friend hands back to `idle` or the line is replaced
+  by the result. Green is not a status colour in the app; "connected" is
+  said in words.
+  Why: a pulsing green "live" dot is the stock status marker of every
+  product; the friend's states exist to say that Quincy is working, and
+  they are the product's own sign.
+  <!-- 2026-11-17: "fjern den grønne blinken" … "Men er ikke denne ai slop? LiveDot pulse" … "Jeg ønsker det samme som du anbefaler" -->
+  Check: ESLint `quincy-design/no-live-pulse` (README › Checks).
 
 ```tsx
 // Correct — in the object where the angles will appear
-<Text as="div" role="status">
-  <LiveDot pulse>Reading it. Angles usually land within a minute.</LiveDot>
+<Text as="div" role="status" className="flex items-center gap-2">
+  <Friend size={20} state="reading" />
+  Reading it. Angles usually land within a minute.
 </Text>
+
+// Incorrect — the stock live dot
+<LiveDot pulse>Reading it. Angles usually land within a minute.</LiveDot>
 
 // Incorrect — Skeleton is filler for content nobody needs to read, never a loading state
 <SkeletonLines widths={["86%", "70%", "78%"]} />
 ```
 
-- `role="status"` on the line, so the words are announced once.
-- `pulse` only while it is actually running. When it finishes, the line is
-  replaced by the result (Arrive), not by "Done".
+- `role="status"` on the line, so the words are announced once; the friend
+  stays decorative (`aria-hidden`).
+- The state lasts only while the work is actually running. When it
+  finishes, the line is replaced by the result (Arrive), not by "Done".
 - A button that started the work shows its own `pendingLabel` (buttons.md);
-  the LiveDot line is for work that outlives the press.
+  the working line is for work that outlives the press.
 - A route-level `<Suspense>` fallback is `null` or this line. Never bars.
 
 ## Empty
