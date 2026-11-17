@@ -403,6 +403,13 @@ export async function connectKeySource(
     return { ok: false, message: `Connecting ${name} failed on our side. Try again.` }
   })
 
+  // A throw can come after the update committed. If the row now holds a secret,
+  // the store landed and the webhook is in use: keep it, and say it worked.
+  if (!stored.ok && (await getSourceConnection(userId, source))?.verified && !existing) {
+    revalidatePath("/connectors")
+    return { ok: true }
+  }
+
   if (!stored.ok) {
     // The vendor now holds a webhook Quincy cannot verify. Take it back down.
     if (source === "fathom") await deleteFathomWebhook(key, created.id)
