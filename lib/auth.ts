@@ -525,29 +525,38 @@ export const auth = betterAuth({
          * off, never 100%.
          */
         getCheckoutSessionParams: async () => ({
-          params: {
-            allow_promotion_codes: true,
-            payment_method_collection: "if_required",
-            /**
-             * Stripe as merchant of record (lib/billing-flags.ts). Three
-             * settings that only mean something together:
-             *
-             * - `managed_payments` makes Link the seller, so the tax on top
-             *   of $49 is calculated, collected and paid by Stripe.
-             * - `tax_id_collection` lets a business enter its VAT number and
-             *   pay $49 flat, which is most of who buys this.
-             * - `adaptive_pricing` off keeps the charge in US dollars. It is
-             *   on by default under Managed Payments and would show a local
-             *   price instead, at Stripe's exchange rate.
-             */
-            ...(MANAGED_PAYMENTS
-              ? {
-                  managed_payments: { enabled: true },
-                  tax_id_collection: { enabled: true },
-                  adaptive_pricing: { enabled: false },
-                }
-              : {}),
-          },
+          params: MANAGED_PAYMENTS
+            ? /**
+               * Stripe as merchant of record (lib/billing-flags.ts). Link is
+               * the seller, and Stripe adds, collects and pays the tax on top
+               * of $49. Checkout then shows its own "I'm purchasing as a
+               * business" box with a VAT number field, which is how a
+               * business pays $49 flat.
+               *
+               * Managed Payments refuses a session that carries any of
+               * `payment_method_collection`, `tax_id_collection`,
+               * `customer_update[name|address]` or `adaptive_pricing` off.
+               * Three consequences, each checked against a live session:
+               *
+               * - `customer_update: {}` is load-bearing. The plugin sets
+               *   name and address to "auto" whenever it is not given one,
+               *   and an empty object encodes to nothing at all.
+               * - No `payment_method_collection: "if_required"`, so a 100%
+               *   comp code still asks for a card here.
+               * - Adaptive pricing stays on: a visitor abroad may be offered a
+               *   local price. Stripe's docs put the 2–4% conversion fee on
+               *   the customer, who can still choose to pay in dollars, and
+               *   the session records the US-dollar amount either way.
+               */
+              {
+                allow_promotion_codes: true,
+                managed_payments: { enabled: true },
+                customer_update: {},
+              }
+            : {
+                allow_promotion_codes: true,
+                payment_method_collection: "if_required",
+              },
         }),
       },
     }),

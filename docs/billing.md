@@ -331,28 +331,44 @@ applies on top of $49, files it and pays it to each country, and the account
 receives $49 less fees. Norway is a supported business location, and an AI
 tool sold as a service is an eligible product.
 
-`STRIPE_MANAGED_PAYMENTS=1` (lib/billing-flags.ts) turns it on. Three things
-change, all in `getCheckoutSessionParams` in lib/auth.ts:
+`STRIPE_MANAGED_PAYMENTS=1` (lib/billing-flags.ts) turns it on, and the
+Checkout params in `getCheckoutSessionParams` (lib/auth.ts) switch to the
+Managed Payments set: `managed_payments: { enabled: true }`, promotion codes,
+and `customer_update: {}`.
 
-- `managed_payments: { enabled: true }` on the Checkout session.
-- `tax_id_collection` — a business that enters its VAT number pays $49 flat
-  and accounts for the VAT itself (reverse charge).
-- `adaptive_pricing: { enabled: false }` — the charge stays in US dollars.
-  Managed Payments turns local-currency prices on by default.
+Managed Payments refuses a session carrying `payment_method_collection`,
+`tax_id_collection`, `customer_update[name|address]`, or adaptive pricing
+turned off — each found by creating a live session, not from the docs alone.
+So:
+
+- **Businesses** tick "I'm purchasing as a business" on Stripe's own page and
+  enter a VAT number there. No `tax_id_collection` needed.
+- **`customer_update: {}` must stay.** The plugin sets name and address to
+  "auto" whenever it is not given a value; an empty object encodes to nothing.
+- **100% comp codes ask for a card** under Managed Payments, since
+  `payment_method_collection: "if_required"` is not allowed.
+- **Adaptive pricing stays on.** A visitor abroad may be offered a local price;
+  the 2–4% conversion is paid by them, they can choose dollars instead, and the
+  session records the US-dollar amount.
+- **The API version** has to be `2025-03-31.basil` or later per request. The
+  account default is `2022-11-15`; lib/stripe.ts pins `2026-07-29.dahlia`, so
+  the app is fine, but a bare `stripe` CLI call is not — pass
+  `--stripe-version`.
 
 The pricing page, the home page and /settings/billing say "plus VAT where it
 applies" only while the flag is on, because only then is it true.
 
 Before setting the flag in an environment:
 
-1. The account is approved for Managed Payments (Settings in the dashboard).
+1. The account has finished the Managed Payments setup in the dashboard.
+   Done for Codebase AS on 2026-11-17.
 2. The Quincy product carries tax code `txcd_10105002` (AI as a service,
-   cloud, business use). Managed Payments refuses a product without an
-   eligible code.
-3. One test-mode Checkout has gone through end to end with the flag on,
-   including a VAT number, since the combination with promotion codes and
-   `payment_method_collection: "if_required"` is not covered by Stripe's
-   docs.
+   cloud, business use) and the price is `tax_behavior: exclusive`, so tax
+   lands on top of $49. Both set in live on 2026-11-17.
+3. A live session with exactly these params was created and expired on
+   2026-11-17: it showed $49 + 25% VAT = $61.25 for a Norwegian buyer, "Sold
+   through Link", and a VAT number field behind the business box. A paid
+   purchase through the app has not been run yet.
 
 Two things change for the customer: the card statement reads
 `LINK.COM* QUINCY`, and receipts, refunds and payment support come from Link.
