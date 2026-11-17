@@ -72,6 +72,10 @@ export type Node =
   // — a node is drawn on the rhythm diagram, and "Granola" on a diagram nobody
   // has connected to Granola is a picture of a thing that does not happen.
   | "circleback"
+  // The other two note takers, live beside Circleback. Each is a node because
+  // each is a thing you can go and connect.
+  | "fathom"
+  | "granola"
   | "notes"
   | "voice"
   /**
@@ -190,7 +194,8 @@ export const RHYTHMS: Rhythm[] = [
    *
    * `isRunnable` is false for it and stays false: an event rhythm has no
    * switch to offer, since there is no hour to choose and nothing to fire. Its
-   * on and off is connecting or disconnecting Circleback on /sources, and a
+   * on and off is connecting or disconnecting a note taker (Circleback, Fathom
+   * or Granola) on /connectors, and a
    * second control over that one fact is how two surfaces come to disagree.
    */
   {
@@ -200,7 +205,7 @@ export const RHYTHMS: Rhythm[] = [
     how: "After a recorded call, Quincy reads your own half of the transcript, keeps the passage worth publishing, and leaves the angles in it.",
     family: "capture",
     trigger: { kind: "event", label: "on transcript" },
-    from: ["circleback"],
+    from: ["circleback", "fathom", "granola"],
     makes: "drafts",
     to: ["drafts"],
   },
@@ -645,6 +650,7 @@ export const NODE_LABEL: Record<string, string> = {
   // The vendor, not "Meetings". This label sits on a diagram of where material
   // comes from, and a node has to name a thing you can go and connect.
   circleback: "Circleback",
+  fathom: "Fathom",
   granola: "Granola",
   notes: "Photos",
   voice: "Voice",

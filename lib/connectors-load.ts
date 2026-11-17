@@ -25,6 +25,7 @@ import {
 } from "./channels"
 import { corpusSummary } from "./corpus-x"
 import { db } from "./db"
+import { MEETING_SOURCE_IDS, type KeySource } from "./meeting-sources"
 import { formatConversationDate } from "./format-date"
 import { metricFor, WINDOW_DAYS } from "./connector-metric"
 import { defaultRhythmState, describeCadence, getRhythmStates } from "./rhythms"
@@ -115,6 +116,25 @@ export async function loadConnectors(
           status: circlebackStatus(row, circleback, date),
           metric: row ? metric(`Ideas from ${calls} ${calls === 1 ? "call" : "calls"}`, events.riffs.circleback, row.createdAt) : undefined,
           detail: { id: "circleback", url: circleback?.url ?? null, verified: circleback?.verified ?? false },
+        })
+        break
+      }
+      case "fathom":
+      case "granola": {
+        const id = entry.id as KeySource
+        const row = sourceRow(id)
+        const calls = events.items[id].filter((d) => now.getTime() - d.getTime() < WINDOW_DAYS * DAY).length
+        const meta = (row?.meta ?? {}) as { accountEmail?: unknown }
+        out.push({
+          ...entry,
+          status: keySourceStatus(entry.name, row, date),
+          metric: row ? metric(`Ideas from ${calls} ${calls === 1 ? "call" : "calls"}`, events.riffs[id], row.createdAt) : undefined,
+          detail: {
+            id: "key-source",
+            source: id,
+            connected: Boolean(row?.verified),
+            account: typeof meta.accountEmail === "string" ? meta.accountEmail : "",
+          },
         })
         break
       }
@@ -234,6 +254,30 @@ function circlebackStatus(
   return { s: "connected", last: `Last call ${lowerDay(date(row.lastItemAt))}` }
 }
 
+/**
+ * Fathom and Granola. No `setup` state: the key goes in and the webhook is
+ * made in the same press, so there is no half-connected step to stand in. A
+ * row without a secret is a connect that failed halfway, and reads as one.
+ */
+function keySourceStatus(name: string, row: SafeSourceConnection | null, date: DateFmt): ConnectorStatus {
+  if (!row) return { s: "available" }
+  if (!row.verified) {
+    return { s: "failed", why: `Connecting ${name} didn't finish. Paste your API key again.`, fix: "Paste the key" }
+  }
+  if (row.state === "broken") {
+    return {
+      s: "failed",
+      why: row.lastError?.trim() || `${name} refused your API key. It may have been revoked.`,
+      fix: "Paste a new key",
+    }
+  }
+  if (row.state === "paused") {
+    return { s: "paused", last: row.lastItemAt ? `Last call ${lowerDay(date(row.lastItemAt))}` : "No calls yet" }
+  }
+  if (row.state === "waiting" || !row.lastItemAt) return { s: "waiting", since: date(row.createdAt) }
+  return { s: "connected", last: `Last call ${lowerDay(date(row.lastItemAt))}` }
+}
+
 function bookmarksStatus({
   xActive,
   scopeOk,
@@ -324,19 +368,23 @@ function lowerDay(s: string) {
 /* ── Metrics ──────────────────────────────────────────────────────── */
 
 /** Four SELECTs of timestamps over the history window. Bounded by the window, never by all time. */
+/** The sources whose arrivals and ideas the rows count: GitHub and every note taker. */
+const READ_SOURCES = ["github", ...MEETING_SOURCE_IDS] as const
+type ReadSource = (typeof READ_SOURCES)[number]
+
 async function readEvents(userId: string, since: Date) {
   const [riffs, items, adapted, firstAdapted, published] = await Promise.all([
     db
       .select({ sourceId: riff.sourceId, at: riff.createdAt })
       .from(riff)
-      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, ["github", "circleback"]), gte(riff.createdAt, since))),
+      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, [...READ_SOURCES]), gte(riff.createdAt, since))),
     db
       .select({ source: sourceItem.source, at: sourceItem.createdAt })
       .from(sourceItem)
       .where(
         and(
           eq(sourceItem.userId, userId),
-          inArray(sourceItem.source, ["github", "circleback"]),
+          inArray(sourceItem.source, [...READ_SOURCES]),
           gte(sourceItem.createdAt, since)
         )
       ),
@@ -372,15 +420,12 @@ async function readEvents(userId: string, since: Date) {
     ;(publishedBy[p.channel] ??= []).push(p.at)
   }
 
+  const perSource = <T extends { at: Date | null }>(rows: T[], key: (r: T) => string) =>
+    Object.fromEntries(READ_SOURCES.map((id) => [id, bySource(rows, key, id)])) as Record<ReadSource, Date[]>
+
   return {
-    riffs: {
-      github: bySource(riffs, (r) => r.sourceId, "github"),
-      circleback: bySource(riffs, (r) => r.sourceId, "circleback"),
-    },
-    items: {
-      github: bySource(items, (r) => r.source, "github"),
-      circleback: bySource(items, (r) => r.source, "circleback"),
-    },
+    riffs: perSource(riffs, (r) => r.sourceId),
+    items: perSource(items, (r) => r.source),
     adapted: adapted.map((r) => r.at),
     firstAdapted: firstAdapted[0]?.at ?? null,
     published: publishedBy,

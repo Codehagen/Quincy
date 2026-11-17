@@ -709,6 +709,14 @@ export const SOURCE_ITEM_SOURCES = [
    */
   "circleback",
   /**
+   * The same material as `circleback`, from the other two note takers, and
+   * the same standing on both rules: never read by `compileVoice`, never cited
+   * as `proof`. Separate values rather than one "meeting" so the dedup key
+   * (user, source, external_id) cannot collide across vendors' id spaces.
+   */
+  "fathom",
+  "granola",
+  /**
    * A pull request you merged — the title and the description you wrote, never
    * the diff. See plans/021.
    *
@@ -951,10 +959,12 @@ export type SourceConnectionState = (typeof SOURCE_CONNECTION_STATES)[number]
  * table has instead: a routing token that appears in a URL, and a signing
  * secret the *provider* minted rather than one we were granted.
  *
- * Only what Circleback needs is here. The next source that wants an access
- * token adds the column then, having learned the shape from a real provider
- * rather than from an imagined one — the same reason `rhythm_subscription`
- * models a wall clock instead of a cron string.
+ * Only what a real provider needed is here. Circleback brought the signing
+ * secret, GitHub brought `meta`, and Fathom and Granola brought `apiKey`: a
+ * personal key, not an OAuth grant, so still no refresh token or expiry. The
+ * next source that wants one adds the column then, having learned the shape
+ * from a real provider rather than from an imagined one — the same reason
+ * `rhythm_subscription` models a wall clock instead of a cron string.
  */
 export const sourceConnection = pgTable(
   "source_connection",
@@ -993,6 +1003,21 @@ export const sourceConnection = pgTable(
      * lib/source-connections.ts.
      */
     signingSecret: text("signing_secret"),
+    /**
+     * The user's own API key at the provider, for the sources Quincy has to
+     * call back. Added for Fathom and Granola.
+     *
+     * Circleback and GitHub never needed one: the first pushes everything it
+     * has, the second is an App with a deployment-level key. Granola pushes
+     * only a note id and has to be asked for the note, and both register their
+     * webhook through their API, so the key is how Quincy creates it on
+     * connect and removes it on disconnect.
+     *
+     * Encrypted the way `signingSecret` is, and kept out of
+     * `SafeSourceConnection` the same way: nothing outside
+     * lib/source-connections.ts reads it except through `withApiKey`.
+     */
+    apiKey: text("api_key"),
     state: text("state", { enum: SOURCE_CONNECTION_STATES })
       .notNull()
       .default("waiting"),

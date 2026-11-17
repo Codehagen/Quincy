@@ -6,7 +6,9 @@ import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 
 import {
   answerMergeQuestion,
+  connectKeySource,
   disconnectCircleback,
+  disconnectKeySource,
   disconnectGithub,
   importFromX,
   readLastMergedPull,
@@ -34,7 +36,10 @@ import { QuincyAsks } from "@/components/quincy"
 import { disconnectSentence, isConnected, type ConnectorDetail } from "@/lib/connectors"
 import { isSettled, MAX_ANSWER_CHARS, sayOutcome } from "@/lib/shipped-outcome"
 
+import { MEETING_SOURCES } from "@/lib/meeting-sources"
+
 import { useConnector } from "./connector-context"
+import { PasteForm } from "./paste-form"
 
 /**
  * Every verb a connector has, each through the server action or route that
@@ -57,6 +62,8 @@ export function ConnectorVerbs() {
       return <GithubVerbs detail={c.detail} />
     case "circleback":
       return <CirclebackVerbs detail={c.detail} />
+    case "key-source":
+      return <KeySourceVerbs detail={c.detail} />
     case "x-posts":
       return <XPostsVerbs detail={c.detail} />
     case "x-bookmarks":
@@ -239,22 +246,6 @@ function GithubVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "githu
     }
   }, [awaiting, router])
 
-  /* The username, on an organisation install. */
-  const [login, setLogin] = React.useState("")
-  const [loginError, setLoginError] = React.useState<string | undefined>()
-  const [saving, startSaving] = React.useTransition()
-  const save = () => {
-    setLoginError(undefined)
-    startSaving(async () => {
-      const result = await saveGithubLogin(login)
-      if (!result.ok) {
-        setLoginError(result.message)
-        return
-      }
-      setLogin("")
-    })
-  }
-
   const working = reading || awaiting !== null
 
   return (
@@ -323,44 +314,19 @@ function GithubVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "githu
           )}
 
           {detail.isOrganisation ? (
-            // A real form, so Enter submits (forms.md).
-            <form
-              noValidate
-              className="flex flex-col gap-kit-related"
-              onSubmit={(event) => {
-                event.preventDefault()
-                save()
-              }}
-            >
-              <Field label="Your GitHub username" error={loginError}>
-                <Input
-                  value={login}
-                  onValueChange={(value: string) => {
-                    setLogin(value)
-                    if (loginError) setLoginError(undefined)
-                  }}
-                  placeholder={detail.login || "octocat"}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </Field>
-              <div className="flex flex-wrap items-center gap-kit-related">
-                <Button
-                  type="submit"
-                  variant={needsLogin && isAction ? "action" : "quiet"}
-                  disabled={!login.trim()}
-                  pending={saving}
-                  pendingLabel="Saving…"
-                >
+            <PasteForm action={saveGithubLogin}>
+              <PasteForm.Field label="Your GitHub username" mono={false} placeholder={detail.login || "octocat"} />
+              <PasteForm.Footer>
+                <PasteForm.Submit variant={needsLogin && isAction ? "action" : "quiet"} pendingLabel="Saving…">
                   {detail.login ? "Replace" : "Save"}
-                </Button>
+                </PasteForm.Submit>
                 <Text variant="small" tone="muted">
                   {detail.login
                     ? `Merges by ${detail.login} are being read.`
                     : "Until this is set, every merge is skipped. I won't guess which of your organisation is you."}
                 </Text>
-              </div>
-            </form>
+              </PasteForm.Footer>
+            </PasteForm>
           ) : null}
         </Section>
       ) : null}
@@ -412,8 +378,6 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
   const { connector: c, isAction } = useConnector()
   const [pending, startTransition] = React.useTransition()
   const [error, setError] = React.useState<string | null>(null)
-  const [secret, setSecret] = React.useState("")
-  const [secretError, setSecretError] = React.useState<string | undefined>()
   const [copied, setCopied] = React.useState(false)
 
   const begin = () => {
@@ -435,18 +399,6 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
       // A refused clipboard is not worth a line: the URL is on screen and selectable.
       setCopied(false)
     }
-  }
-
-  const save = () => {
-    setSecretError(undefined)
-    startTransition(async () => {
-      const result = await saveCirclebackSecret(secret)
-      if (!result.ok) {
-        setSecretError(result.message)
-        return
-      }
-      setSecret("")
-    })
   }
 
   if (c.status.s === "available" || !detail.url) {
@@ -482,48 +434,78 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
         <Text variant="small" tone="muted">
           Treat it like a password. Anyone who has it can send me a meeting, which is why the secret below is required.
         </Text>
-        <form
-          noValidate
-          className="flex flex-col gap-kit-related"
-          onSubmit={(event) => {
-            event.preventDefault()
-            save()
-          }}
-        >
-          <Field label="2. Paste the signing secret Circleback showed you" error={secretError}>
-            <Input
-              value={secret}
-              onValueChange={(value: string) => {
-                setSecret(value)
-                if (secretError) setSecretError(undefined)
-              }}
-              mono
-              placeholder="whsec_…"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <div className="flex flex-wrap items-center gap-kit-related">
-            <Button
-              type="submit"
-              variant={asking && isAction ? "action" : "quiet"}
-              disabled={!secret.trim()}
-              pending={pending}
-              pendingLabel="Saving…"
-            >
+        <PasteForm action={saveCirclebackSecret}>
+          <PasteForm.Field label="2. Paste the signing secret Circleback showed you" placeholder="whsec_…" />
+          <PasteForm.Footer>
+            <PasteForm.Submit variant={asking && isAction ? "action" : "quiet"} pendingLabel="Saving…">
               {detail.verified ? "Replace" : "Save"}
-            </Button>
+            </PasteForm.Submit>
             <Text variant="small" tone="muted">
               {detail.verified ? "Signed deliveries are coming in." : "Until this is saved, I drop every delivery unread."}
             </Text>
-          </div>
-        </form>
+          </PasteForm.Footer>
+        </PasteForm>
       </Section>
       <Disconnect
         label="Disconnect Circleback"
         note="The URL stops working at once. Connecting again gives you a new one."
         onConfirm={() => orThrow(disconnectCircleback())}
       />
+    </>
+  )
+}
+
+/* ── Fathom and Granola ───────────────────────────────────────────── */
+
+/**
+ * One paste. The key goes in, Quincy registers the webhook at the vendor and
+ * keeps the secret it returns, so there is no second step to come back for
+ * (connectKeySource). Connected, the same field replaces the key.
+ */
+function KeySourceVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "key-source" }> }) {
+  const { connector: c, isAction } = useConnector()
+  /** Where the vendor keeps the key, said the way their settings say it. */
+  const help = MEETING_SOURCES[detail.source].key
+  const fixing = c.status.s === "failed"
+
+  return (
+    <>
+      <Section>
+        <PasteForm action={(key) => connectKeySource(detail.source, key)}>
+          <PasteForm.Field
+            label={detail.connected ? `Replace your ${c.name} API key` : `Your ${c.name} API key`}
+            type="password"
+          />
+          <PasteForm.Hint>
+            Find it in{" "}
+            <TextLink href={help.href} target="_blank" rel="noreferrer noopener">
+              {help.where}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </TextLink>
+            . {help.note}
+          </PasteForm.Hint>
+          <PasteForm.Footer>
+            <PasteForm.Submit
+              variant={(!detail.connected || fixing) && isAction ? "action" : "quiet"}
+              pendingLabel="Connecting…"
+            >
+              {detail.connected ? "Replace" : "Connect"}
+            </PasteForm.Submit>
+            {detail.connected && detail.account ? (
+              <Text variant="small" tone="muted">
+                Connected as {detail.account}.
+              </Text>
+            ) : null}
+          </PasteForm.Footer>
+        </PasteForm>
+      </Section>
+      {isConnected(c) ? (
+        <Disconnect
+          label={`Disconnect ${c.name}`}
+          note={`I remove the webhook from ${c.name} too.`}
+          onConfirm={() => orThrow(disconnectKeySource(detail.source))}
+        />
+      ) : null}
     </>
   )
 }

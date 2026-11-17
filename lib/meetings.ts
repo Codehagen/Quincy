@@ -191,7 +191,9 @@ export function ownSegments(
    * the likeliest real failure is mundane: the address on somebody's calendar
    * invite is not the address they signed up to Quincy with.
    */
-  displayName = ""
+  displayName = "",
+  /** Who transcribed the call, for the one message that names them. */
+  vendor = "Circleback"
 ): SpeakerMatch {
   const wanted = new Set(emails.map(normalise).filter(Boolean))
 
@@ -221,7 +223,7 @@ export function ownSegments(
     return {
       ok: false,
       message:
-        "Circleback did not name you on that call, so Quincy could not tell which voice was yours.",
+        `${vendor} did not name you on that call, so Quincy could not tell which voice was yours.`,
     }
   }
 
@@ -242,6 +244,26 @@ export function ownSegments(
 }
 
 /* ── Ceilings ─────────────────────────────────────────────────────────────── */
+
+/**
+ * How many meetings one user may turn into work in 24 hours, **across every
+ * note taker**.
+ *
+ * Six, the number plans/019 set for Circleback. Counted over all three
+ * sources rather than per source: the rate is set by somebody's calendar, and
+ * connecting a second note taker to the same calendar must not double what a
+ * Tuesday with eight calls can spend.
+ */
+export const MAX_MEETINGS_PER_DAY = 6
+
+/**
+ * Whether a meeting is past the day's ceiling, given the count of meeting rows
+ * in the last 24 hours **including its own**. The sixth is drafted; the
+ * seventh is not.
+ */
+export function overDailyCeiling(rowsIncludingThis: number): boolean {
+  return rowsIncludingThis > MAX_MEETINGS_PER_DAY
+}
 
 /**
  * The most transcript one selection prompt reads.

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   assemblePassage,
   MAX_MEETING_CHARS,
+  MAX_MEETINGS_PER_DAY,
+  overDailyCeiling,
   ownSegments,
   parseMeetingPayload,
   trimSegments,
@@ -294,5 +296,19 @@ describe("assemblePassage", () => {
     for (const word of passage.split(" ")) {
       expect(vocabulary.has(word)).toBe(true)
     }
+  })
+})
+
+describe("overDailyCeiling", () => {
+  it("counts the meeting itself, so the sixth is drafted and the seventh is not", () => {
+    expect(MAX_MEETINGS_PER_DAY).toBe(6)
+    expect(overDailyCeiling(1)).toBe(false)
+    expect(overDailyCeiling(6)).toBe(false)
+    expect(overDailyCeiling(7)).toBe(true)
+  })
+
+  it("refuses both of two deliveries that race past the ceiling together", () => {
+    // Five already today; two arrive at once, each inserts, each counts both.
+    expect(overDailyCeiling(5 + 2)).toBe(true)
   })
 })

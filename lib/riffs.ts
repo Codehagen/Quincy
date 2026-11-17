@@ -879,8 +879,16 @@ export async function claimVoiceRiff(
  */
 export const MEETING_SOURCE = { id: "circleback", label: "Meeting" } as const
 
-export async function startMeetingRiff(userId: string): Promise<string> {
-  return startSpokenRiff(userId, MEETING_SOURCE)
+/**
+ * The vendor rides on `sourceId` for Fathom and Granola exactly as it does for
+ * Circleback; the label stays "Meeting" for all three, because the card is
+ * about the call, not about which note taker heard it.
+ */
+export async function startMeetingRiff(
+  userId: string,
+  sourceId: string = MEETING_SOURCE.id
+): Promise<string> {
+  return startSpokenRiff(userId, { id: sourceId, label: MEETING_SOURCE.label })
 }
 
 /**
