@@ -585,7 +585,7 @@ export const RUNS_ELSEWHERE: Record<string, ElsewhereRun> = {
   },
   "meeting-notes": {
     kind: "event",
-    runs: "app/api/webhooks/circleback/[token]/route.ts",
+    runs: "lib/meeting-intake.ts",
     switchedAt: "/connectors?open=circleback",
   },
   "shipped-work": {

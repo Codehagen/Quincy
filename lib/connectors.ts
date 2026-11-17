@@ -72,6 +72,8 @@ export type ConnectorDetail =
       question: { sourceItemId: string; text: string; about: string; url: string } | null
     }
   | { id: "circleback"; url: string | null; verified: boolean }
+  /** Fathom and Granola: one API key, and Quincy registers the webhook. */
+  | { id: "key-source"; source: "fathom" | "granola"; connected: boolean; account: string }
   | { id: "x-posts"; items: number; handle: string | null }
   | { id: "x-bookmarks"; enabled: boolean; cadence: string; scopeOk: boolean }
   | {
@@ -143,6 +145,30 @@ export const LIVE: readonly CatalogueEntry[] = [
     tags: ["Your half", "Transcripts"],
     setup: "two steps, a URL out and a secret back",
     short: "Two steps",
+  },
+  {
+    id: "fathom",
+    glyph: "fathom",
+    name: "Fathom",
+    kind: "source",
+    line: "Reads calls",
+    gives:
+      "Each call you record as it ends. I read your half of the transcript, keep the passage worth posting, and store nothing anyone else said.",
+    tags: ["Your half", "Transcripts"],
+    setup: "your API key, pasted once",
+    short: "One key",
+  },
+  {
+    id: "granola",
+    glyph: "granola",
+    name: "Granola",
+    kind: "source",
+    line: "Reads calls",
+    gives:
+      "Each note as Granola finishes it. I read what you said in the transcript, keep the passage worth posting, and store nothing anyone else said.",
+    tags: ["Your half", "Transcripts"],
+    setup: "your API key, pasted once, on a Business or Enterprise plan",
+    short: "One key",
   },
   {
     id: "x-posts",

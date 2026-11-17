@@ -6,7 +6,9 @@ import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 
 import {
   answerMergeQuestion,
+  connectKeySource,
   disconnectCircleback,
+  disconnectKeySource,
   disconnectGithub,
   importFromX,
   readLastMergedPull,
@@ -57,6 +59,8 @@ export function ConnectorVerbs() {
       return <GithubVerbs detail={c.detail} />
     case "circleback":
       return <CirclebackVerbs detail={c.detail} />
+    case "key-source":
+      return <KeySourceVerbs detail={c.detail} />
     case "x-posts":
       return <XPostsVerbs detail={c.detail} />
     case "x-bookmarks":
@@ -524,6 +528,108 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
         note="The URL stops working at once. Connecting again gives you a new one."
         onConfirm={() => orThrow(disconnectCircleback())}
       />
+    </>
+  )
+}
+
+/* ── Fathom and Granola ───────────────────────────────────────────── */
+
+/** Where each vendor keeps the key, said the way their settings say it. */
+const KEY_HELP: Record<"fathom" | "granola", { where: string; href: string; note: string }> = {
+  fathom: {
+    where: "Fathom → Settings → API Access → Generate API key",
+    href: "https://fathom.video/customize#api-access-header",
+    note: "I make the webhook with it, for calls you record. Nothing else in your Fathom changes.",
+  },
+  granola: {
+    where: "Granola → Settings → API → Create new key, as a personal key",
+    href: "https://docs.granola.ai/help-center/sharing/integrations/granola-api",
+    note: "I make the webhook with it and read each note it tells me about. The API needs a Business or Enterprise plan.",
+  },
+}
+
+/**
+ * One paste. The key goes in, Quincy registers the webhook at the vendor and
+ * keeps the secret it returns, so there is no second step to come back for
+ * (connectKeySource). Connected, the same field replaces the key.
+ */
+function KeySourceVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "key-source" }> }) {
+  const { connector: c, isAction } = useConnector()
+  const [pending, startTransition] = React.useTransition()
+  const [key, setKey] = React.useState("")
+  const [error, setError] = React.useState<string | undefined>()
+  const help = KEY_HELP[detail.source]
+  const fixing = c.status.s === "failed"
+
+  const save = () => {
+    setError(undefined)
+    startTransition(async () => {
+      const result = await connectKeySource(detail.source, key)
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
+      setKey("")
+    })
+  }
+
+  return (
+    <>
+      <Section>
+        <form
+          noValidate
+          className="flex flex-col gap-kit-related"
+          onSubmit={(event) => {
+            event.preventDefault()
+            save()
+          }}
+        >
+          <Field label={detail.connected ? `Replace your ${c.name} API key` : `Your ${c.name} API key`} error={error}>
+            <Input
+              type="password"
+              value={key}
+              onValueChange={(value: string) => {
+                setKey(value)
+                if (error) setError(undefined)
+              }}
+              mono
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Text variant="small" tone="muted">
+            Find it in{" "}
+            <TextLink href={help.href} target="_blank" rel="noreferrer noopener">
+              {help.where}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </TextLink>
+            . {help.note}
+          </Text>
+          <div className="flex flex-wrap items-center gap-kit-related">
+            <Button
+              type="submit"
+              variant={(!detail.connected || fixing) && isAction ? "action" : "quiet"}
+              disabled={!key.trim()}
+              pending={pending}
+              pendingLabel="Connecting…"
+            >
+              {detail.connected ? "Replace" : "Connect"}
+            </Button>
+            {detail.connected && detail.account ? (
+              <Text variant="small" tone="muted">
+                Connected as {detail.account}.
+              </Text>
+            ) : null}
+          </div>
+        </form>
+      </Section>
+      {isConnected(c) ? (
+        <Disconnect
+          label={`Disconnect ${c.name}`}
+          note={`I remove the webhook from ${c.name} too.`}
+          onConfirm={() => orThrow(disconnectKeySource(detail.source))}
+        />
+      ) : null}
     </>
   )
 }

@@ -71,8 +71,8 @@ export type Connection =
  * seam that has to grow a parameter later is a seam every call site has to be
  * revisited for, and `timezone` is the second field it already needed.
  *
- * **Only Circleback can produce a row today**, so every other source still
- * resolves to nothing. That is the true answer rather than a value we have not
+ * **Only Circleback, Fathom, Granola and GitHub can produce a row today**, so
+ * every other source still resolves to nothing. That is the true answer rather than a value we have not
  * fetched, and it is why `/sources` still renders one group for most people.
  *
  * These same states are exercised in `app/prototypes/sources`, which mounts the
@@ -142,17 +142,16 @@ export const SOURCES: Source[] = [
   // hands over. Identical copy on adjacent rows reads as a copy-paste bug even
   // when it is true.
   //
-  // Circleback leads them because it is the only one that works (plans/019),
-  // and its line says what Quincy does with a call rather than what the vendor
-  // stores — the other two describe a product, this one describes an outcome,
-  // and that difference is the whole reason it is first.
+  // All three work now: Circleback first (plans/019), then Fathom and Granola,
+  // which connect with one API key. Each line says what the vendor actually
+  // hands over, because identical copy on adjacent rows reads as a bug.
   {
     id: "circleback",
     label: "Circleback",
     gives: "The moment worth quoting from a call",
   },
-  { id: "granola", label: "Granola", gives: "Notes and transcripts from calls" },
-  { id: "fathom", label: "Fathom", gives: "Recordings and transcripts from calls" },
+  { id: "fathom", label: "Fathom", gives: "The transcript of each call you record" },
+  { id: "granola", label: "Granola", gives: "The transcript behind each note" },
   { id: "photos", label: "Photos", gives: "Screenshots and camera roll" },
   { id: "notion", label: "Notion", gives: "Docs you already wrote" },
   { id: "calendar", label: "Google Calendar", gives: "What is on this week" },

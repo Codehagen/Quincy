@@ -35,6 +35,7 @@ const NODE_ICON: Record<string, IconSvgElement> = {
   // that changes drawing between /sources and /rhythm reads as two sources.
   circleback: ConversationIcon,
   granola: Message01Icon,
+  fathom: ConversationIcon,
   notes: Image01Icon,
   voice: Mic01Icon,
   // Hacker News has a wordmark rather than a symbol, and a two-letter "Y" in a

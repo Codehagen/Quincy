@@ -34,6 +34,10 @@ function row(overrides: Partial<SourceConnection> = {}): SourceConnection {
     source: "circleback",
     token: "a-routing-token",
     signingSecret: "encrypted-blob-standing-in-for-a-whsec",
+    // Added for Fathom and Granola: the `apiKey` the comment above named
+    // before it existed. Not forwarded, and the shape assertion below would
+    // catch it if it were.
+    apiKey: "encrypted-blob-standing-in-for-an-api-key",
     state: "arriving",
     lastItemAt: new Date("2026-08-09T10:00:00.000Z"),
     lastErrorAt: null,
@@ -56,6 +60,13 @@ describe("toSafeSourceConnection", () => {
 
     expect("signingSecret" in safe).toBe(false)
     expect(JSON.stringify(safe)).not.toContain("encrypted-blob")
+  })
+
+  it("drops the API key", () => {
+    const safe = toSafeSourceConnection(row())
+
+    expect("apiKey" in safe).toBe(false)
+    expect(JSON.stringify(safe)).not.toContain("api-key")
   })
 
   it("carries no key that looks like a credential, whatever it is called", () => {

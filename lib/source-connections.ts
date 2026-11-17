@@ -5,6 +5,11 @@ import { and, eq } from "drizzle-orm"
 
 import { db } from "./db"
 import { sourceConnection } from "./schema-app"
+import {
+  isStandardWebhookSecret,
+  verifyStandardWebhook as verifyStandard,
+  type StandardWebhookHeaders,
+} from "./standard-webhooks"
 
 /**
  * The write API for `source_connection`. See plans/019.
@@ -69,7 +74,7 @@ export type SourceConnection = typeof sourceConnection.$inferSelect
  * safe type makes that column *required* in the object built below, so this
  * function is part of the cost of every future column.
  */
-export type SafeSourceConnection = Omit<SourceConnection, "signingSecret"> & {
+export type SafeSourceConnection = Omit<SourceConnection, "signingSecret" | "apiKey"> & {
   /** Whether the provider's secret has been pasted back yet. Not the secret. */
   verified: boolean
 }
@@ -670,4 +675,101 @@ export async function disconnectSource(
         eq(sourceConnection.source, source)
       )
     )
+}
+
+/* ── Sources that register their own webhook (Fathom, Granola) ───────────
+   Circleback asks the user to carry a URL out and a secret back. Fathom and
+   Granola both have an API that creates the webhook and returns its secret in
+   the same response, so the user hands over one thing, their API key, and
+   Quincy does the rest. The functions below are that, and they keep both the
+   key and the secret inside this module the way `verifySignature` does.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Store what the provider handed back when Quincy created the webhook.
+ *
+ * Both values arrive in one go and are stored in one statement, so there is no
+ * moment where a row has a secret and no key or the other way round. The state
+ * goes back to `waiting` and the error clears: a new key is a new connection,
+ * and an error about the old one is about something that no longer exists.
+ */
+export async function storeProviderWebhook(
+  userId: string,
+  source: string,
+  input: { apiKey: string; signingSecret: string; meta: Record<string, unknown> }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isStandardWebhookSecret(input.signingSecret)) {
+    // The provider answered with something that is not a secret we can verify
+    // with. Storing it would leave a connection that refuses every delivery.
+    return { ok: false, message: "The webhook was created but came back without a usable secret." }
+  }
+
+  const key = encryptionKey()
+  const [apiKey, signingSecret] = await Promise.all([
+    symmetricEncrypt({ key, data: input.apiKey }),
+    symmetricEncrypt({ key, data: input.signingSecret }),
+  ])
+
+  const updated = await db
+    .update(sourceConnection)
+    .set({
+      apiKey,
+      signingSecret,
+      meta: input.meta,
+      state: "waiting",
+      lastItemAt: null,
+      lastErrorAt: null,
+      lastError: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(sourceConnection.userId, userId), eq(sourceConnection.source, source)))
+    .returning({ id: sourceConnection.id })
+
+  if (updated.length === 0) return { ok: false, message: "That source is not connected." }
+  return { ok: true }
+}
+
+/**
+ * Run `fn` with the decrypted API key, and never return the key itself.
+ *
+ * The caller gets whatever `fn` returns, which is the provider's answer, not
+ * the credential: the same discipline as `verifySignature` answering a
+ * boolean rather than handing out the secret. Null when no key is stored.
+ */
+export async function withApiKey<T>(
+  connection: SourceConnection,
+  fn: (apiKey: string) => Promise<T>
+): Promise<T | null> {
+  if (!connection.apiKey) return null
+  const apiKey = await symmetricDecrypt({ key: encryptionKey(), data: connection.apiKey })
+  return fn(apiKey)
+}
+
+/** The webhook half of `withApiKey` for a signed-in user's own row, by source. */
+export async function withSourceApiKey<T>(
+  userId: string,
+  source: string,
+  fn: (apiKey: string, meta: Record<string, unknown>) => Promise<T>
+): Promise<T | null> {
+  const row = await readConnection(userId, source)
+  if (!row) return null
+  return withApiKey(row, (apiKey) => fn(apiKey, row.meta))
+}
+
+/**
+ * Is this body from the provider? The Standard Webhooks scheme.
+ *
+ * The same contract as `verifySignature` above: the row in, a boolean out, the
+ * secret never leaving. The scheme itself lives in lib/standard-webhooks.ts,
+ * where it can be tested without a database.
+ */
+export async function verifyStandardSignature(
+  connection: SourceConnection,
+  rawBody: string,
+  headers: StandardWebhookHeaders
+): Promise<boolean> {
+  if (!connection.signingSecret) return false
+
+  const secret = await symmetricDecrypt({ key: encryptionKey(), data: connection.signingSecret })
+  return verifyStandard(secret, headers, rawBody)
 }

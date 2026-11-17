@@ -38,7 +38,11 @@ import {
   recordArrival,
   setGithubLogin,
   setSigningSecret,
+  storeProviderWebhook,
+  withSourceApiKey,
 } from "@/lib/source-connections"
+import { createFathomWebhook, deleteFathomWebhook } from "@/lib/fathom"
+import { createGranolaWebhook, deleteGranolaWebhook } from "@/lib/granola"
 import { compileVoice } from "@/lib/voice"
 import { spendCooldown } from "@/lib/usage"
 import { start } from "workflow/api"
@@ -286,6 +290,173 @@ export async function disconnectCircleback(): Promise<
   if (!session) return { ok: false, message: "Not signed in." }
 
   await disconnectSource(session.user.id, "circleback")
+  revalidatePath("/connectors")
+
+  return { ok: true }
+}
+
+/* ── Fathom and Granola ───────────────────────────────────────────────────
+   One paste, where Circleback takes two steps. Both vendors have an API that
+   creates a webhook and returns its signing secret in the same response, so
+   the user hands over their API key and Quincy does the rest: makes the
+   per-user URL, registers it at the vendor, keeps the secret. Nothing to carry
+   back by hand, and no interval in which deliveries arrive unverifiable.
+
+   The key is kept (encrypted, lib/source-connections.ts) because both need it
+   again: Granola to fetch every note, since its delivery is only an id, and
+   both to remove the webhook on disconnect.
+
+   No entitlement gate, for the reason Circleback's setup has none: connecting
+   spends nothing, and the webhook decides money when a meeting arrives.
+   ──────────────────────────────────────────────────────────────────────── */
+
+export type KeySource = "fathom" | "granola"
+
+export type KeySourceSetup = {
+  /** The vendor account the key belongs to, when the vendor says. */
+  account: string
+}
+
+function keySourceUrl(source: KeySource, token: string): string {
+  const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "")
+  return `${base}/api/webhooks/${source}/${token}`
+}
+
+function isKeySource(value: string): value is KeySource {
+  return value === "fathom" || value === "granola"
+}
+
+/**
+ * Connect with an API key, or replace the key of a connection that has one.
+ *
+ * Replacing removes the old webhook first (best effort, with the old key), so
+ * a vendor never holds two webhooks pointed at Quincy for one person, which
+ * would deliver every meeting twice. The dedup key would absorb the second,
+ * but a doubled delivery is still a doubled fetch against the user's key.
+ *
+ * If the vendor refuses, a row this call created is removed again, so a typo
+ * in a key does not leave a half-connected source on the page.
+ */
+export async function connectKeySource(
+  source: string,
+  apiKey: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+  if (!isKeySource(source)) return { ok: false, message: "That source does not connect with a key." }
+
+  const key = apiKey.trim()
+  const name = source === "fathom" ? "Fathom" : "Granola"
+  if (!key) return { ok: false, message: `Paste your ${name} API key.` }
+  if (/\s/.test(key) || key.length > 512) return { ok: false, message: `That does not look like a ${name} API key.` }
+
+  if (!process.env.BETTER_AUTH_URL) {
+    return { ok: false, message: "Webhooks are not configured on this deployment." }
+  }
+
+  const userId = session.user.id
+  const existing = await getSourceConnection(userId, source)
+
+  // The old webhook's removal, closed over the key it was made with, and run
+  // only once the new one is stored. Removing it first would leave a refused
+  // new key with nothing delivering at all.
+  const removeOld = existing ? await vendorWebhookRemover(userId, source) : null
+
+  const connection = await connectSource(userId, source)
+  const url = keySourceUrl(source, connection.token)
+
+  const created =
+    source === "fathom"
+      ? await createFathomWebhook(key, url).then((r) =>
+          r.ok ? { ok: true as const, id: r.value.id, secret: r.value.secret, meta: { webhookId: r.value.id } } : r
+        )
+      : await createGranolaWebhook(key, url).then((r) =>
+          r.ok
+            ? {
+                ok: true as const,
+                id: r.value.id,
+                secret: r.value.secret,
+                meta: {
+                  webhookId: r.value.id,
+                  accountEmail: r.value.account.email,
+                  accountName: r.value.account.name,
+                },
+              }
+            : r
+        )
+
+  if (!created.ok) {
+    if (!existing) await disconnectSource(userId, source)
+    revalidatePath("/connectors")
+    return { ok: false, message: created.message }
+  }
+
+  const stored = await storeProviderWebhook(userId, source, {
+    apiKey: key,
+    signingSecret: created.secret,
+    meta: created.meta,
+  })
+
+  if (!stored.ok) {
+    // The vendor now holds a webhook Quincy cannot verify. Take it back down.
+    if (source === "fathom") await deleteFathomWebhook(key, created.id)
+    else await deleteGranolaWebhook(key, created.id)
+    if (!existing) await disconnectSource(userId, source)
+  } else if (removeOld) {
+    await removeOld()
+  }
+
+  revalidatePath("/connectors")
+  return stored
+}
+
+/**
+ * A function that removes the webhook the stored key made. Returned rather
+ * than run, so the caller decides when, and the key stays closed over rather
+ * than handed out. Best effort when it runs: a revoked key cannot delete
+ * anything, and disconnecting has to work anyway, because the row going is
+ * what makes the URL answer 404.
+ */
+async function vendorWebhookRemover(userId: string, source: KeySource): Promise<() => Promise<void>> {
+  const remover = await withSourceApiKey(userId, source, async (apiKey, meta) => {
+    const webhookId = typeof meta.webhookId === "string" ? meta.webhookId : ""
+    return async () => {
+      if (!webhookId) return
+      const removed =
+        source === "fathom"
+          ? await deleteFathomWebhook(apiKey, webhookId)
+          : await deleteGranolaWebhook(apiKey, webhookId)
+      if (!removed) console.error(`[${source}] could not remove webhook ${webhookId}`)
+    }
+  }).catch((cause) => {
+    console.error(`[${source}] could not read the stored key:`, cause)
+    return null
+  })
+  return remover ?? (async () => {})
+}
+
+export async function getKeySourceSetup(source: KeySource): Promise<KeySourceSetup | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const connection = await getSourceConnection(session.user.id, source)
+  if (!connection) return null
+
+  const meta = connection.meta as { accountEmail?: unknown }
+  return { account: typeof meta.accountEmail === "string" ? meta.accountEmail : "" }
+}
+
+/** Remove the vendor's webhook, then the row. Behind a hold at the call site. */
+export async function disconnectKeySource(
+  source: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Not signed in." }
+  if (!isKeySource(source)) return { ok: false, message: "That source does not connect with a key." }
+
+  const remove = await vendorWebhookRemover(session.user.id, source)
+  await remove()
+  await disconnectSource(session.user.id, source)
   revalidatePath("/connectors")
 
   return { ok: true }

@@ -191,7 +191,9 @@ export function ownSegments(
    * the likeliest real failure is mundane: the address on somebody's calendar
    * invite is not the address they signed up to Quincy with.
    */
-  displayName = ""
+  displayName = "",
+  /** Who transcribed the call, for the one message that names them. */
+  vendor = "Circleback"
 ): SpeakerMatch {
   const wanted = new Set(emails.map(normalise).filter(Boolean))
 
@@ -221,7 +223,7 @@ export function ownSegments(
     return {
       ok: false,
       message:
-        "Circleback did not name you on that call, so Quincy could not tell which voice was yours.",
+        `${vendor} did not name you on that call, so Quincy could not tell which voice was yours.`,
     }
   }
 

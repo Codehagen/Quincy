@@ -118,6 +118,25 @@ export async function loadConnectors(
         })
         break
       }
+      case "fathom":
+      case "granola": {
+        const id = entry.id as "fathom" | "granola"
+        const row = sourceRow(id)
+        const calls = events.items[id].filter((d) => now.getTime() - d.getTime() < WINDOW_DAYS * DAY).length
+        const meta = (row?.meta ?? {}) as { accountEmail?: unknown }
+        out.push({
+          ...entry,
+          status: keySourceStatus(entry.name, row, date),
+          metric: row ? metric(`Ideas from ${calls} ${calls === 1 ? "call" : "calls"}`, events.riffs[id], row.createdAt) : undefined,
+          detail: {
+            id: "key-source",
+            source: id,
+            connected: Boolean(row?.verified),
+            account: typeof meta.accountEmail === "string" ? meta.accountEmail : "",
+          },
+        })
+        break
+      }
       case "x-posts": {
         const items = corpus?.items ?? 0
         const status: ConnectorStatus = !xActive
@@ -234,6 +253,30 @@ function circlebackStatus(
   return { s: "connected", last: `Last call ${lowerDay(date(row.lastItemAt))}` }
 }
 
+/**
+ * Fathom and Granola. No `setup` state: the key goes in and the webhook is
+ * made in the same press, so there is no half-connected step to stand in. A
+ * row without a secret is a connect that failed halfway, and reads as one.
+ */
+function keySourceStatus(name: string, row: SafeSourceConnection | null, date: DateFmt): ConnectorStatus {
+  if (!row) return { s: "available" }
+  if (!row.verified) {
+    return { s: "failed", why: `Connecting ${name} didn't finish. Paste your API key again.`, fix: "Paste the key" }
+  }
+  if (row.state === "broken") {
+    return {
+      s: "failed",
+      why: row.lastError?.trim() || `${name} refused your API key. It may have been revoked.`,
+      fix: "Paste a new key",
+    }
+  }
+  if (row.state === "paused") {
+    return { s: "paused", last: row.lastItemAt ? `Last call ${lowerDay(date(row.lastItemAt))}` : "No calls yet" }
+  }
+  if (row.state === "waiting" || !row.lastItemAt) return { s: "waiting", since: date(row.createdAt) }
+  return { s: "connected", last: `Last call ${lowerDay(date(row.lastItemAt))}` }
+}
+
 function bookmarksStatus({
   xActive,
   scopeOk,
@@ -329,14 +372,14 @@ async function readEvents(userId: string, since: Date) {
     db
       .select({ sourceId: riff.sourceId, at: riff.createdAt })
       .from(riff)
-      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, ["github", "circleback"]), gte(riff.createdAt, since))),
+      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, ["github", "circleback", "fathom", "granola"]), gte(riff.createdAt, since))),
     db
       .select({ source: sourceItem.source, at: sourceItem.createdAt })
       .from(sourceItem)
       .where(
         and(
           eq(sourceItem.userId, userId),
-          inArray(sourceItem.source, ["github", "circleback"]),
+          inArray(sourceItem.source, ["github", "circleback", "fathom", "granola"]),
           gte(sourceItem.createdAt, since)
         )
       ),
@@ -376,10 +419,14 @@ async function readEvents(userId: string, since: Date) {
     riffs: {
       github: bySource(riffs, (r) => r.sourceId, "github"),
       circleback: bySource(riffs, (r) => r.sourceId, "circleback"),
+      fathom: bySource(riffs, (r) => r.sourceId, "fathom"),
+      granola: bySource(riffs, (r) => r.sourceId, "granola"),
     },
     items: {
       github: bySource(items, (r) => r.source, "github"),
       circleback: bySource(items, (r) => r.source, "circleback"),
+      fathom: bySource(items, (r) => r.source, "fathom"),
+      granola: bySource(items, (r) => r.source, "granola"),
     },
     adapted: adapted.map((r) => r.at),
     firstAdapted: firstAdapted[0]?.at ?? null,
