@@ -25,6 +25,7 @@ import {
 } from "./channels"
 import { corpusSummary } from "./corpus-x"
 import { db } from "./db"
+import { MEETING_SOURCE_IDS } from "./meeting-sources"
 import { formatConversationDate } from "./format-date"
 import { metricFor, WINDOW_DAYS } from "./connector-metric"
 import { defaultRhythmState, describeCadence, getRhythmStates } from "./rhythms"
@@ -367,19 +368,23 @@ function lowerDay(s: string) {
 /* ── Metrics ──────────────────────────────────────────────────────── */
 
 /** Four SELECTs of timestamps over the history window. Bounded by the window, never by all time. */
+/** The sources whose arrivals and ideas the rows count: GitHub and every note taker. */
+const READ_SOURCES = ["github", ...MEETING_SOURCE_IDS] as const
+type ReadSource = (typeof READ_SOURCES)[number]
+
 async function readEvents(userId: string, since: Date) {
   const [riffs, items, adapted, firstAdapted, published] = await Promise.all([
     db
       .select({ sourceId: riff.sourceId, at: riff.createdAt })
       .from(riff)
-      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, ["github", "circleback", "fathom", "granola"]), gte(riff.createdAt, since))),
+      .where(and(eq(riff.userId, userId), inArray(riff.sourceId, [...READ_SOURCES]), gte(riff.createdAt, since))),
     db
       .select({ source: sourceItem.source, at: sourceItem.createdAt })
       .from(sourceItem)
       .where(
         and(
           eq(sourceItem.userId, userId),
-          inArray(sourceItem.source, ["github", "circleback", "fathom", "granola"]),
+          inArray(sourceItem.source, [...READ_SOURCES]),
           gte(sourceItem.createdAt, since)
         )
       ),
@@ -415,19 +420,12 @@ async function readEvents(userId: string, since: Date) {
     ;(publishedBy[p.channel] ??= []).push(p.at)
   }
 
+  const perSource = <T extends { at: Date | null }>(rows: T[], key: (r: T) => string) =>
+    Object.fromEntries(READ_SOURCES.map((id) => [id, bySource(rows, key, id)])) as Record<ReadSource, Date[]>
+
   return {
-    riffs: {
-      github: bySource(riffs, (r) => r.sourceId, "github"),
-      circleback: bySource(riffs, (r) => r.sourceId, "circleback"),
-      fathom: bySource(riffs, (r) => r.sourceId, "fathom"),
-      granola: bySource(riffs, (r) => r.sourceId, "granola"),
-    },
-    items: {
-      github: bySource(items, (r) => r.source, "github"),
-      circleback: bySource(items, (r) => r.source, "circleback"),
-      fathom: bySource(items, (r) => r.source, "fathom"),
-      granola: bySource(items, (r) => r.source, "granola"),
-    },
+    riffs: perSource(riffs, (r) => r.sourceId),
+    items: perSource(items, (r) => r.source),
     adapted: adapted.map((r) => r.at),
     firstAdapted: firstAdapted[0]?.at ?? null,
     published: publishedBy,

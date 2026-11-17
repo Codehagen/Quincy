@@ -41,8 +41,8 @@ import {
   storeProviderWebhook,
   withSourceApiKey,
 } from "@/lib/source-connections"
-import { createFathomWebhook, deleteFathomWebhook } from "@/lib/fathom"
-import { createGranolaWebhook, deleteGranolaWebhook } from "@/lib/granola"
+import { isKeySource, MEETING_SOURCES, type KeySource } from "@/lib/meeting-sources"
+import { KEY_SOURCE_API } from "@/lib/meeting-sources-server"
 import { compileVoice } from "@/lib/voice"
 import { spendCooldown } from "@/lib/usage"
 import { start } from "workflow/api"
@@ -310,20 +310,9 @@ export async function disconnectCircleback(): Promise<
    spends nothing, and the webhook decides money when a meeting arrives.
    ──────────────────────────────────────────────────────────────────────── */
 
-export type KeySource = "fathom" | "granola"
-
-export type KeySourceSetup = {
-  /** The vendor account the key belongs to, when the vendor says. */
-  account: string
-}
-
 function keySourceUrl(source: KeySource, token: string): string {
   const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "")
   return `${base}/api/webhooks/${source}/${token}`
-}
-
-function isKeySource(value: string): value is KeySource {
-  return value === "fathom" || value === "granola"
 }
 
 /**
@@ -346,7 +335,7 @@ export async function connectKeySource(
   if (!isKeySource(source)) return { ok: false, message: "That source does not connect with a key." }
 
   const key = apiKey.trim()
-  const name = source === "fathom" ? "Fathom" : "Granola"
+  const name = MEETING_SOURCES[source].vendor
   if (!key) return { ok: false, message: `Paste your ${name} API key.` }
   if (/\s/.test(key) || key.length > 512) return { ok: false, message: `That does not look like a ${name} API key.` }
 
@@ -365,31 +354,15 @@ export async function connectKeySource(
   const connection = await connectSource(userId, source)
   const url = keySourceUrl(source, connection.token)
 
-  const created =
-    source === "fathom"
-      ? await createFathomWebhook(key, url).then((r) =>
-          r.ok ? { ok: true as const, id: r.value.id, secret: r.value.secret, meta: { webhookId: r.value.id } } : r
-        )
-      : await createGranolaWebhook(key, url).then((r) =>
-          r.ok
-            ? {
-                ok: true as const,
-                id: r.value.id,
-                secret: r.value.secret,
-                meta: {
-                  webhookId: r.value.id,
-                  accountEmail: r.value.account.email,
-                  accountName: r.value.account.name,
-                },
-              }
-            : r
-        )
+  const api = KEY_SOURCE_API[source]
+  const result = await api.create(key, url)
 
-  if (!created.ok) {
+  if (!result.ok) {
     await dropIfUnfinished(userId, source, existing !== null)
     revalidatePath("/connectors")
-    return { ok: false, message: created.message }
+    return { ok: false, message: result.message }
   }
+  const created = result.value
 
   // A throw here (the key cannot be encrypted, the database is unreachable)
   // is handled like a refusal: the action still holds the key and the id, so
@@ -412,8 +385,7 @@ export async function connectKeySource(
 
   if (!stored.ok) {
     // The vendor now holds a webhook Quincy cannot verify. Take it back down.
-    if (source === "fathom") await deleteFathomWebhook(key, created.id)
-    else await deleteGranolaWebhook(key, created.id)
+    await api.remove(key, created.id)
     await dropIfUnfinished(userId, source, existing !== null)
   } else if (removeOld) {
     await removeOld()
@@ -447,10 +419,7 @@ async function vendorWebhookRemover(userId: string, source: KeySource): Promise<
     const webhookId = typeof meta.webhookId === "string" ? meta.webhookId : ""
     return async () => {
       if (!webhookId) return
-      const removed =
-        source === "fathom"
-          ? await deleteFathomWebhook(apiKey, webhookId)
-          : await deleteGranolaWebhook(apiKey, webhookId)
+      const removed = await KEY_SOURCE_API[source].remove(apiKey, webhookId)
       if (!removed) console.error(`[${source}] could not remove webhook ${webhookId}`)
     }
   }).catch((cause) => {
@@ -458,17 +427,6 @@ async function vendorWebhookRemover(userId: string, source: KeySource): Promise<
     return null
   })
   return remover ?? (async () => {})
-}
-
-export async function getKeySourceSetup(source: KeySource): Promise<KeySourceSetup | null> {
-  const session = await getSession()
-  if (!session) return null
-
-  const connection = await getSourceConnection(session.user.id, source)
-  if (!connection) return null
-
-  const meta = connection.meta as { accountEmail?: unknown }
-  return { account: typeof meta.accountEmail === "string" ? meta.accountEmail : "" }
 }
 
 /** Remove the vendor's webhook, then the row. Behind a hold at the call site. */

@@ -10,6 +10,7 @@ import {
   trimSegments,
   type MeetingPayload,
 } from "@/lib/meetings"
+import { MEETING_SOURCE_IDS, MEETING_SOURCES, type MeetingSource } from "@/lib/meeting-sources"
 import { failSpokenRiff, startMeetingRiff } from "@/lib/riffs"
 import { user } from "@/lib/schema"
 import { sourceItem } from "@/lib/schema-app"
@@ -35,17 +36,6 @@ import { runMeetingRiffWorkflow } from "@/workflows/run-meeting-riff"
  * Runs only after the route has verified the delivery. Nothing here checks a
  * signature, and nothing here may be reached without one.
  */
-
-export type MeetingSource = "circleback" | "fathom" | "granola"
-
-/** Every meeting source, for the ceiling. One calendar, one ceiling. */
-export const MEETING_SOURCES: readonly MeetingSource[] = ["circleback", "fathom", "granola"]
-
-const VENDOR: Record<MeetingSource, string> = {
-  circleback: "Circleback",
-  fathom: "Fathom",
-  granola: "Granola",
-}
 
 /**
  * How many meetings one user may turn into work in 24 hours, **across every
@@ -118,7 +108,7 @@ export async function ingestMeeting({
   // particular call was worth publishing.
   await recordArrival(connection.id)
 
-  const match = ownSegments(payload, [owner.email, ...aliases], owner.name, VENDOR[source])
+  const match = ownSegments(payload, [owner.email, ...aliases], owner.name, MEETING_SOURCES[source].vendor)
 
   const { segments, dropped } = match.ok
     ? trimSegments(match.segments, MAX_MEETING_CHARS)
@@ -134,7 +124,7 @@ export async function ingestMeeting({
     .where(
       and(
         eq(sourceItem.userId, owner.id),
-        inArray(sourceItem.source, [...MEETING_SOURCES]),
+        inArray(sourceItem.source, [...MEETING_SOURCE_IDS]),
         gte(sourceItem.createdAt, new Date(Date.now() - DAY_MS))
       )
     )
