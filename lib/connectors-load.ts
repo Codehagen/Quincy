@@ -25,7 +25,7 @@ import {
 } from "./channels"
 import { corpusSummary } from "./corpus-x"
 import { db } from "./db"
-import { MEETING_SOURCE_IDS } from "./meeting-sources"
+import { MEETING_SOURCE_IDS, type KeySource } from "./meeting-sources"
 import { formatConversationDate } from "./format-date"
 import { metricFor, WINDOW_DAYS } from "./connector-metric"
 import { defaultRhythmState, describeCadence, getRhythmStates } from "./rhythms"
@@ -121,7 +121,7 @@ export async function loadConnectors(
       }
       case "fathom":
       case "granola": {
-        const id = entry.id as "fathom" | "granola"
+        const id = entry.id as KeySource
         const row = sourceRow(id)
         const calls = events.items[id].filter((d) => now.getTime() - d.getTime() < WINDOW_DAYS * DAY).length
         const meta = (row?.meta ?? {}) as { accountEmail?: unknown }

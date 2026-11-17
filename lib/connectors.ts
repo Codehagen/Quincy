@@ -8,6 +8,8 @@
  * client draws it, and lib/connectors.test.ts pins it.
  */
 
+import type { KeySource } from "./meeting-sources"
+
 export type ConnectorKind = "source" | "channel"
 
 /** Every connector the page lists. The live ones first, then the register. */
@@ -73,7 +75,7 @@ export type ConnectorDetail =
     }
   | { id: "circleback"; url: string | null; verified: boolean }
   /** Fathom and Granola: one API key, and Quincy registers the webhook. */
-  | { id: "key-source"; source: "fathom" | "granola"; connected: boolean; account: string }
+  | { id: "key-source"; source: KeySource; connected: boolean; account: string }
   | { id: "x-posts"; items: number; handle: string | null }
   | { id: "x-bookmarks"; enabled: boolean; cadence: string; scopeOk: boolean }
   | {
