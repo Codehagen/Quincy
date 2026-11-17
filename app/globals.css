@@ -1097,6 +1097,14 @@
     @apply bg-background text-foreground;
   }
 
+  /* A heading takes focus only from code (tabIndex -1), so a screen reader
+     lands on the result of an action: the auth "check your inbox" title, the
+     billing confirmation. It is not a control, nothing can be pressed there,
+     and the ring read as a stray input box around the words. */
+  :is(h1, h2, h3)[tabindex="-1"]:focus {
+    outline: none;
+  }
+
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
