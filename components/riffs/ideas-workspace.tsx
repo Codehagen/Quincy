@@ -15,7 +15,6 @@ import {
   FilterMenu,
   FootBar,
   KeyBar,
-  LiveDot,
   Panel,
   PanelBody,
   PanelHeader,
@@ -37,6 +36,7 @@ import {
   useLetterKeys,
   type DataListGroup,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { FOCUS_RING } from "@/components/kit/control-styles"
 import { writesSentence } from "@/components/quincy"
 
@@ -634,9 +634,12 @@ function SourceState({ row, onSetAside }: { row: IdeaRow; onSetAside: (row: Idea
   if (riff.state === "working") {
     return (
       <p className="text-kit-dense text-kit-ink-muted">
-        <LiveDot pulse>
-          {riff.stuck ? "This is taking longer than usual." : "Reading it. Ideas usually land within a minute."}
-        </LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            {riff.stuck ? "This is taking longer than usual." : "Reading it. Ideas usually land within a minute."}
+          </span>
+        </span>
       </p>
     )
   }

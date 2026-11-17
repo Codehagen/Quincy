@@ -23,8 +23,8 @@ import { SourceGlyph } from "@/components/sources/source-glyph"
  * hold their own controls (Connect, Manage, a form). So the object is a Card
  * with a list in it, as the landing's panel is.
  *
- * **Nothing here is live in the kit's sense.** `LiveDot` means a rhythm is
- * running, and material arriving is not that, so no row carries one.
+ * **Nothing here is live in the kit's sense.** A row says its state in
+ * words; working is the friend beside the words while a read runs.
  */
 
 export function SourceList({ children }: { children: React.ReactNode }) {

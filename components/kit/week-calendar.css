@@ -295,9 +295,11 @@
 .wc-chip:hover {
   background: var(--kit-row-hover);
 }
+/* Picked: as a block, the well grey and a 1px ink ring all round, never a
+   side stripe (colour.md, "Rows"). */
 .wc-chip[data-picked] {
   background: var(--kit-selected);
-  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+  box-shadow: 0 0 0 1px var(--kit-ink);
 }
 .wc-chip:focus-visible {
   outline: 2px solid var(--color-kit-focus);

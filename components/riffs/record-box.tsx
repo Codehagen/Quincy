@@ -821,7 +821,7 @@ export function RecordBox({
             className={
               // Transform only, so a moving bar never lays anything out.
               "h-full w-[3px] origin-center rounded-full transition-transform duration-75 motion-reduce:transition-none " +
-              (recording ? "bg-kit-live" : "bg-kit-track")
+              (recording ? "bg-kit-ink" : "bg-kit-track")
             }
           />
         ))}

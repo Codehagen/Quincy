@@ -66,8 +66,8 @@ export function NodeChip({
       title={labelled ? undefined : (NODE_LABEL[node] ?? node)}
       // A 24px tile at the inner control radius with the inset ring. Live is
       // ink on the object, idle is the muted grey: the colour of the glyph
-      // says "running", never a fill (the kit has no live surface; LiveDot is
-      // the only thing painted --kit-live).
+      // says "running", never a fill (the kit has no live surface, and green
+      // is not a status colour).
       className={`grid size-6 shrink-0 place-items-center rounded-kit-control-inner shadow-kit-inset transition-[color] duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none ${
         live ? "bg-kit-object text-kit-ink" : "text-kit-ink-muted"
       }`}

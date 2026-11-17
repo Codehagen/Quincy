@@ -9,13 +9,13 @@ import {
   EmptyRegion,
   EmptyState,
   KitPage,
-  LiveDot,
   SearchField,
   Sheet,
   SheetPanel,
   Text,
   useLetterKeys,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { isConnected } from "../data"
 import type { LabOptions } from "../lab-options"
@@ -88,7 +88,12 @@ export function GridLayout({
               {store.phase === "loading" ? (
                 <>
                   <Text as="div" role="status" tone="muted" variant="small">
-                    <LiveDot pulse>Reading your connections.</LiveDot>
+                    <span className="inline-flex items-center gap-2">
+                      <Friend size={20} state="reading" className="shrink-0" />
+                      <span className="min-w-0">
+                        Reading your connections.
+                      </span>
+                    </span>
                   </Text>
                   <div
                     className="cl-grid mt-kit-related"

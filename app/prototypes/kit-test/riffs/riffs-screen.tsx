@@ -11,11 +11,11 @@ import {
   KitRoot,
   Lead,
   ListRow,
-  LiveDot,
   Mono,
   Stage,
   Text,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { readTake } from "./actions"
 import { MEDIAN_DECIDED_PER_WEEK, NEW_TAKES, type AngleStatus, type Riff } from "./data"
@@ -264,7 +264,7 @@ function RiffRow({
       id={`row-${riff.id}`}
       selected={selected}
       onClick={onOpen}
-      leading={riff.state === "working" ? <LiveDot pulse /> : undefined}
+      leading={riff.state === "working" ? <Friend size={20} state="reading" className="shrink-0" /> : undefined}
       description={description}
       meta={<Mono>{riff.capturedAt}</Mono>}
     >

@@ -11,11 +11,11 @@ import {
   AlertDialogTrigger,
   Button,
   HoldButton,
-  LiveDot,
   MarginRoom,
   Mono,
   TextLink,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import type { Version } from "@/lib/drafts"
 import type { GoingOut, GoingOutKind, GoingOutLine } from "@/lib/going-out"
 import { CHANNEL_RULES, countGraphemes, feedCut, measurePost } from "@/lib/post-length"
@@ -205,7 +205,12 @@ export function Status({ line, sending, onReopen }: { line: GoingOutLine; sendin
   if (sending) {
     return (
       <p className="text-kit-dense">
-        <LiveDot pulse>{line.text}</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            {line.text}
+          </span>
+        </span>
       </p>
     )
   }

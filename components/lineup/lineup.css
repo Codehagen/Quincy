@@ -172,8 +172,12 @@
   min-width: 0;
   position: relative;
 }
+/* The picked post is an object: the well grey and a 1px ink ring all round,
+   inset so it never crosses the neighbours. Never a side stripe (colour.md,
+   "Rows"). */
 .lineup-row[data-picked] > .lineup-slice {
-  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+  background: var(--kit-selected);
+  box-shadow: inset 0 0 0 1px var(--kit-ink);
 }
 .lineup-row-top > .lineup-slice {
   position: sticky;

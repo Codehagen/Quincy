@@ -929,8 +929,6 @@
   /* A row's scroll-margin under the sticky head band: the band + 8, so j/k
      never park the open row under the heads or flush against them. */
   --spacing-kit-head-clear: 2.5rem; /* 40 */
-  /* The ink bar at a selected DataList row's start (3). */
-  --spacing-kit-selection-bar: 0.1875rem;
   /* DataList's optional columns appear once the list itself is this wide
      (@kit-data-wide/kit-data-list), and a ToolbarGroup with grow stops
      taking a whole row once the toolbar is this wide. */
@@ -1039,25 +1037,9 @@
   --ease-kit-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-kit-move: cubic-bezier(0.45, 0, 0.2, 1);
 
-  /* LiveDot's optional pulse: a ring leaves the dot and fades. The one loop
-     in the kit, because "running" is a state that lasts. Reduced motion
-     drops it (motion-reduce:animate-none in live-dot.tsx). */
-  --animate-kit-live-pulse: kit-live-pulse 1.8s var(--ease-kit-out) infinite;
-  @keyframes kit-live-pulse {
-    0% {
-      scale: 1;
-      opacity: 0.55;
-    }
-    70%,
-    100% {
-      scale: 2.6;
-      opacity: 0;
-    }
-  }
-
   /* Progress with no value yet: a third of the bar slides across and back
-     in, for as long as the work has no count. The second loop in the kit,
-     for the same reason as the pulse. Reduced motion parks it in the middle
+     in, for as long as the work has no count. The one loop in the kit,
+     because "running" is a state that lasts. Reduced motion parks it in the middle
      (motion-reduce:animate-none in progress.tsx). */
   --animate-kit-progress-slide: kit-progress-slide 1.4s var(--ease-kit-move) infinite;
   @keyframes kit-progress-slide {

@@ -128,7 +128,7 @@ function LivePlayhead({
       <div
         className={cn(
           "absolute -top-0.5 -left-[3px] size-[7px] rounded-full",
-          live ? "bg-kit-live" : "bg-kit-ink-muted"
+          live ? "bg-kit-ink" : "bg-kit-ink-muted"
         )}
       />
     </div>

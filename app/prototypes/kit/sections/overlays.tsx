@@ -255,7 +255,7 @@ export const overlays: Section[] = [
         <P>
           Not new this round: a divider inside an object is <Code>Rule</Code>{" "}
           (there is no Separator), and a label is <Code>Tag</Code> (there is no
-          Badge; a status is a sentence, with a LiveDot when it is running).
+          Badge; a status is a sentence, with the friend beside it while it runs).
         </P>
       </>
     ),

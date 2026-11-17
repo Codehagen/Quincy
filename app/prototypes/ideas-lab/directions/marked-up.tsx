@@ -9,13 +9,13 @@ import {
   Card,
   Highlight,
   KitPage,
-  LiveDot,
   Mono,
   Rule,
   Stage,
   Text,
   UndoBar,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { ProvenanceMark, dismissedSentence, ideasFrom, pickAngle } from "@/components/quincy"
 
 import { WRITES, readingsFor } from "../fixtures"
@@ -175,7 +175,12 @@ function Page({
           <Text>{prose}</Text>
           {riff.state === "working" ? (
             <Text as="div" role="status">
-              <LiveDot pulse>Reading it. Marks usually land within a minute.</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="reading" className="shrink-0" />
+                <span className="min-w-0">
+                  Reading it. Marks usually land within a minute.
+                </span>
+              </span>
             </Text>
           ) : riff.state === "failed" ? (
             <Text role="status" tone="muted">

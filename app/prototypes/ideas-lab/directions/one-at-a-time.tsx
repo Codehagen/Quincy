@@ -12,7 +12,6 @@ import {
   KitPage,
   List,
   ListRow,
-  LiveDot,
   Mono,
   Stage,
   Tag,
@@ -20,6 +19,7 @@ import {
   Text,
   Well,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { ProvenanceMark } from "@/components/quincy"
 
 import { WRITES, readingsFor } from "../fixtures"
@@ -203,7 +203,12 @@ export function OneAtATime({ q, c }: { q: Queue; frame: FrameId; c: Controls }) 
                   <Kbd keys={["J"]} /> <Kbd keys={["K"]} /> to move without deciding.{" "}
                 </span>
                 {reading.length > 0 ? (
-                  <LiveDot pulse>{`Still reading ${reading.length === 1 ? "one note" : `${reading.length} notes`}.`}</LiveDot>
+                  <span className="inline-flex items-center gap-2">
+                    <Friend size={20} state="reading" className="shrink-0" />
+                    <span className="min-w-0">
+                      {`Still reading ${reading.length === 1 ? "one note" : `${reading.length} notes`}.`}
+                    </span>
+                  </span>
                 ) : null}{" "}
                 {failed.length > 0
                   ? `${failed.length === 1 ? "One source" : `${failed.length} sources`} had no post in ${failed.length === 1 ? "it" : "them"}.`

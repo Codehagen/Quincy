@@ -12,14 +12,14 @@
 import * as React from "react"
 import { Listbox, ListboxGroup, ListboxGroupLabel, ListboxItem } from "@ui-sdk/react/listbox"
 
-import { FOCUS_RING, SELECTION_BAR } from "./control-styles"
+import { FOCUS_RING } from "./control-styles"
 import { EmptyRegion } from "./empty-state"
 
 /**
  * DataList: a dense, keyboard-first list with columns, for a workspace
  * (docs/design/workspace.md). One row per item, 36px (44 on touch), a
  * sticky 32px band of column heads, the open row in the selected grey with
- * a 3px ink bar and its title at 560.
+ * its title at 560 in ink and the rest muted (no side stripe).
  *
  * A listbox, not a grid: a row is one choice (open this item), it holds no
  * control of its own, and its verbs live in the detail pane, as ListRow's
@@ -163,9 +163,9 @@ const ROW =
   // (as calendar-month.tsx notes), so the selected row never painted.
   // Hover is a lighter step than selected in both themes (colour.md); a
   // press is one step past hover, with no scale: a full-width row that
-  // shrinks reads as the list moving.
-  "hover:not-data-[selected]:bg-kit-row-hover active:not-data-[selected]:bg-kit-selected data-[selected]:bg-kit-selected " +
-  SELECTION_BAR
+  // shrinks reads as the list moving. Selected is the grey plus the title
+  // at 560 in ink (DataListTitle), never a side stripe (colour.md, "Rows").
+  "hover:not-data-[selected]:bg-kit-row-hover active:not-data-[selected]:bg-kit-selected data-[selected]:bg-kit-selected"
 
 const WIDE = "hidden @kit-data-wide/kit-data-list:flex"
 

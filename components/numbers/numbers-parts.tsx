@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { ButtonLink, EmptyRegion, EmptyState, LiveDot, Segmented, TextLink, Toolbar, ToolbarGroup, ToolbarTitle } from "@/components/kit"
+import { ButtonLink, EmptyRegion, EmptyState, Segmented, TextLink, Toolbar, ToolbarGroup, ToolbarTitle } from "@/components/kit"
 import { Friend } from "@/components/mascot"
 import { MIN_WEEKS, PERIOD_OPTIONS, dayLabel, isStale, type NumbersData, type Period } from "@/lib/numbers-read"
 
@@ -80,7 +80,12 @@ export function NumbersToolbar({
 export function ReadingLine() {
   return (
     <div role="status" className="text-kit-dense text-kit-ink">
-      <LiveDot pulse>Reading your numbers. This usually takes a few seconds.</LiveDot>
+      <span className="inline-flex items-center gap-2">
+        <Friend size={20} state="reading" className="shrink-0" />
+        <span className="min-w-0">
+          Reading your numbers. This usually takes a few seconds.
+        </span>
+      </span>
     </div>
   )
 }

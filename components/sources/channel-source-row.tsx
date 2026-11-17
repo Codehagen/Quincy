@@ -6,7 +6,8 @@ import {
   importFromX,
   type ImportFromXReceipt,
 } from "@/app/(app)/sources/actions"
-import { Button, LiveDot, TextLink } from "@/components/kit"
+import { Button, TextLink } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { SourceRowFrame, sourceNameId } from "@/components/sources/source-row"
 
 /**
@@ -19,9 +20,9 @@ import { SourceRowFrame, sourceNameId } from "@/components/sources/source-row"
  * and it should still be on the page when the eye comes back.
  *
  * The read takes a while, so while it runs the status line is the kit's
- * working state (states.md): a pulsing LiveDot with words, in the row where
+ * working state (states.md): the friend reading, with words, in the row where
  * the receipt will land. That is Quincy working right now, which is what the
- * dot means; it goes the moment the receipt arrives.
+ * friend says; it goes the moment the receipt arrives.
  */
 
 export function ChannelSourceRow({
@@ -59,7 +60,12 @@ export function ChannelSourceRow({
         // its end the same way the repaint does to everyone else.
         <div aria-live="polite">
           {pending ? (
-            <LiveDot pulse>Reading your posts.</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="reading" className="shrink-0" />
+              <span className="min-w-0">
+                Reading your posts.
+              </span>
+            </span>
           ) : receipt?.ok ? (
             <>
               Read{" "}

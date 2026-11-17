@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { Disclosure, LiveDot, Muted, Text } from "@/components/kit"
+import { Disclosure, Muted, Text } from "@/components/kit"
 import type { WorkStep } from "@/lib/studio-turn"
 
 /**
@@ -10,11 +10,12 @@ import type { WorkStep } from "@/lib/studio-turn"
  * step, the way the landing's hero shows it ("Read #212 → 6 screens
  * removed"). The chatbot template's Trace, in Quincy's words.
  *
- * - **Thinking** is a Disclosure. Open with a pulsing LiveDot while it is
+ * - **Thinking** is a Disclosure. Open, and saying "Thinking", while it is
  *   live (`step.live`: streaming, or nothing visible has landed after it
  *   yet); it folds to "Thought about this" the moment the card or the words
  *   land. A person who opened or shut it keeps their choice.
- * - **A step running** is a pulsing LiveDot and the present tense.
+ * - **A step running** is the present tense, in words. The friend that says
+ *   Quincy is working is the byline's, one per reply (docs/design/mascot.md).
  * - **A step done** is a filled check and the past tense.
  * - **A step that failed** is one sentence in ink with the tool's own words
  *   in grey after it. No red, no icon (docs/design/states.md).
@@ -44,7 +45,7 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
     <Disclosure
       open={open}
       onOpenChange={setChosen}
-      summary={live ? <LiveDot pulse>Thinking</LiveDot> : <span className="text-kit-ink-muted">Thought about this</span>}
+      summary={live ? "Thinking" : <span className="text-kit-ink-muted">Thought about this</span>}
     >
       <Text variant="small" tone="muted">
         <span className="whitespace-pre-wrap">{text || "…"}</span>
@@ -74,7 +75,7 @@ function Step({ step }: { step: Extract<WorkStep, { kind: "step" }> }) {
     return (
       <Text as="div" role="status">
         <span className="flex min-h-7 items-center">
-          <LiveDot pulse>{step.label}</LiveDot>
+          {step.label}
         </span>
       </Text>
     )

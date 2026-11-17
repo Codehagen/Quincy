@@ -11,6 +11,8 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons"
 
+import { Friend } from "@/components/mascot"
+
 import type { Riff } from "@/lib/riffs"
 import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-mark"
 
@@ -91,7 +93,7 @@ export function Age({ riff }: { riff: Pick<Riff, "capturedAt"> }) {
 
 /**
  * A row's state as a mark and a word. Reading is the only live thing (the
- * green dot, pulsing); failed is the alert glyph in ink-muted, not red,
+ * friend reading); failed is the alert glyph in ink-muted, not red,
  * because nothing was destroyed. Waiting shows nothing: it is the default.
  */
 export function StatusPill({ status, withWord = true }: { status: RowStatus; withWord?: boolean }) {
@@ -100,10 +102,8 @@ export function StatusPill({ status, withWord = true }: { status: RowStatus; wit
   return (
     <span className="ws-meta inline-flex items-center gap-1.5 whitespace-nowrap text-kit-ink-muted">
       {status === "reading" ? (
-        <span aria-hidden className="relative grid size-(--ws-icon) place-items-center">
-          <span className="relative size-2 rounded-full bg-kit-live">
-            <span className="absolute inset-0 animate-kit-live-pulse rounded-full bg-kit-live motion-reduce:hidden motion-reduce:animate-none" />
-          </span>
+        <span className="grid size-(--ws-icon) place-items-center">
+          <Friend size={16} state="reading" className="shrink-0" />
         </span>
       ) : (
         <HugeiconsIcon

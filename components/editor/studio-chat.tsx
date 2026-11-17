@@ -9,12 +9,12 @@ import {
   Choices,
   Composer,
   Kbd,
-  LiveDot,
   MessageList,
   MessageListItem,
   Text,
   type ComposerSubmit,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import type { MascotState } from "@/components/mascot"
 import { QuincyReply, ReplyFailed } from "@/components/quincy"
 import { QuincyByline, StudioTurn } from "@/components/studio/studio-turn"
@@ -174,7 +174,7 @@ export function StudioChat({
        * is about to occupy: it appears under an already-ticked step and reads
        * as another step rather than as "still going". Up here it competes with
        * nothing and does not move as the transcript grows. The receipt below
-       * carries the running step itself (a pulsing LiveDot).
+       * carries the running step itself, in words under the byline's friend.
        */}
       <div className="flex h-12 shrink-0 items-center gap-kit-related border-b border-kit-hairline px-kit-row-x">
         <Text as="span" weight="strong">
@@ -182,7 +182,12 @@ export function StudioChat({
         </Text>
         {isBusy ? (
           <Text as="span" variant="small" tone="muted" role="status">
-            <LiveDot pulse>Cutting</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="reading" className="shrink-0" />
+              <span className="min-w-0">
+                Cutting
+              </span>
+            </span>
           </Text>
         ) : null}
       </div>
@@ -330,7 +335,7 @@ const Transcript = React.memo(function Transcript({
           <QuincyReply streaming>
             <QuincyByline mood="reading" />
             <Text as="div" role="status">
-              <LiveDot pulse>Thinking</LiveDot>
+              Thinking
             </Text>
           </QuincyReply>
         </MessageListItem>

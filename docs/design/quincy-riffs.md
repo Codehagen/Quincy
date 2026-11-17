@@ -40,7 +40,7 @@ Key it by the riff (`key={riff.id}`).
 - A scrap over 600 characters shows the passage around the highlighted
   sentence, with "Show all of it".
 
-States, from `Riff.state`: `working` (pulsing LiveDot: "Reading it. Ideas
+States, from `Riff.state`: `working` (the friend reading: "Reading it. Ideas
 usually land within a minute."; `stuck` says it is slower than usual) ·
 `ready` (tabs) · `failed` (`failure` in grey after "I couldn't find a post in
 this one.", Try again when `onRetry`) · all drafted ("Every idea here is

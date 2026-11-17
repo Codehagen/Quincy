@@ -26,7 +26,6 @@ import {
   List,
   ListHeading,
   ListRow,
-  LiveDot,
   Menu,
   MenuItem,
   MenuPanel,
@@ -47,6 +46,7 @@ import {
   Text,
   Textarea,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 /*
  * Client demos for the controls section. They live here, not in the section
@@ -153,7 +153,7 @@ export function RowsAndChecks() {
           <ListRow
             selected={open === "walk"}
             onClick={() => setOpen("walk")}
-            leading={<span className="grid size-6 place-items-center"><LiveDot pulse /></span>}
+            leading={<span className="grid size-6 place-items-center"><Friend size={20} state="reading" className="shrink-0" /></span>}
             description="Recording now"
             meta={<Mono>0:42</Mono>}
           >

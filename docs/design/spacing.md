@@ -34,7 +34,6 @@ a page never writes them.
 | `kit-foot` | 36 | the KeyBar and the Undo note, the same height so swapping them moves nothing (plus the home indicator) | `KeyBar`, `FootBar` |
 | `kit-row-dense` | 36 | a DataList row (44 on touch), 1px apart | `DataList` |
 | `kit-head-clear` | 40 | a DataList row's scroll-margin under the head band (32 + 8) | `DataList` |
-| `kit-selection-bar` | 3 | the ink bar at the open row's start | `DataList` |
 
 One left edge, 20 (`kit-group`), in every region of a workspace: toolbars
 pad 20; DataList rows are 8 inset + 12 padding. Containers:

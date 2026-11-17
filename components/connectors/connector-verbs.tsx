@@ -25,11 +25,11 @@ import {
   Field,
   HoldButton,
   Input,
-  LiveDot,
   Switch,
   Text,
   TextLink,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { QuincyAsks } from "@/components/quincy"
 import { disconnectSentence, isConnected, type ConnectorDetail } from "@/lib/connectors"
 import { isSettled, MAX_ANSWER_CHARS, sayOutcome } from "@/lib/shipped-outcome"
@@ -372,7 +372,7 @@ function GithubVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "githu
               // What the read said, in place: most answers are "nothing came of
               // it, and here is why", which somebody may want to read twice.
               <Text as="div" role="status" variant="small" tone="muted">
-                {awaiting ? <LiveDot pulse>{said}</LiveDot> : said}
+                {awaiting ? <span className="inline-flex items-center gap-2"><Friend size={20} state="reading" className="shrink-0" /><span className="min-w-0">{said}</span></span> : said}
               </Text>
             ) : null
           }
@@ -533,7 +533,8 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
 /**
  * The read-back (plans/011): a person pressing a button, not a rhythm.
  * `importFromX` holds the gate, the 10-minute cooldown and the 100-post
- * ceiling. While it runs the line is Quincy working (a pulsing LiveDot).
+ * ceiling. While it runs the line is Quincy working (the friend reading,
+ * beside the words).
  */
 function XPostsVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "x-posts" }> }) {
   const { connector: c, isAction } = useConnector()
@@ -554,7 +555,12 @@ function XPostsVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "x-pos
         <div aria-live="polite">
           {pending ? (
             <Text as="div" variant="small" tone="muted">
-              <LiveDot pulse>Reading your posts.</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="reading" className="shrink-0" />
+                <span className="min-w-0">
+                  Reading your posts.
+                </span>
+              </span>
             </Text>
           ) : receipt?.ok ? (
             <Text variant="small" tone="muted">
@@ -658,7 +664,12 @@ function BookmarksVerbs() {
         below={
           running ? (
             <Text as="div" variant="small" tone="muted">
-              <LiveDot pulse>Reading your bookmarks.</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="reading" className="shrink-0" />
+                <span className="min-w-0">
+                  Reading your bookmarks.
+                </span>
+              </span>
             </Text>
           ) : (
             receipt

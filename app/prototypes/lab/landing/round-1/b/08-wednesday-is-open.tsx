@@ -13,9 +13,9 @@
 
 import type * as React from "react"
 
-import { LiveDot } from "@/components/kit"
 
 import { Frame, InviteButton, TopLine } from "./frame"
+import { Friend } from "@/components/mascot"
 
 const COL = 300
 const GAP = 14
@@ -82,9 +82,12 @@ export function WednesdayIsOpen() {
         <div style={{ width: COL }} className="flex flex-col gap-3 pt-5">
           <div className="pl-1 font-kit-mono text-kit-mono text-kit-ink-muted">Thu</div>
           <div className="rounded-kit-object bg-kit-object p-kit-pad shadow-kit-object">
-            <LiveDot pulse>
-              <span className="font-kit-strong">Drafting</span>
-            </LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="writing" className="shrink-0" />
+              <span className="min-w-0">
+                <span className="font-kit-strong">Drafting</span>
+              </span>
+            </span>
             <p className="mt-1.5 text-kit-ink-muted">From your voice note, 0:48</p>
             <div className="mt-4 h-2 w-[86%] rounded-full bg-kit-skeleton" />
             <div className="mt-2 h-2 w-[64%] rounded-full bg-kit-skeleton" />

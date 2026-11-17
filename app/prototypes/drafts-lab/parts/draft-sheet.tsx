@@ -15,7 +15,6 @@ import {
   Count,
   Highlight,
   HoldButton,
-  LiveDot,
   MarginNote,
   Mono,
   Segmented,
@@ -23,6 +22,7 @@ import {
   Textarea,
   TextLink,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-mark"
 import { QuincyAsks } from "@/components/quincy"
 import { paragraphsOf, readBeats, type Paragraph } from "@/lib/draft-beats"
@@ -483,7 +483,12 @@ export function Status({
   if (sending) {
     return (
       <p className="text-kit-dense">
-        <LiveDot pulse>{line.text}</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            {line.text}
+          </span>
+        </span>
       </p>
     )
   }

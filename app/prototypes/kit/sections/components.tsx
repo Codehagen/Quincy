@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   Highlight,
-  LiveDot,
   MarginNote,
   Mono,
   Rule,
@@ -14,6 +13,7 @@ import {
   Text,
   Window,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { WhyThisHour } from "../demos"
 import { Code, Demo, P, Pair, type Section } from "../doc"
@@ -229,7 +229,7 @@ export const components: Section[] = [
   },
   {
     id: "pieces",
-    title: "Rule, Avatar, LiveDot, Code",
+    title: "Rule, Avatar, working, Code",
     group: "Components",
     doc: "spacing.md",
     body: (
@@ -237,11 +237,12 @@ export const components: Section[] = [
         <P>
           The small parts. <Code>Rule</Code> is a hairline across the object,
           edge to edge. <Code>Avatar</Code> is initials in a neutral disc, never
-          a photo. <Code>LiveDot</Code> is the only green in the kit: a dot
-          beside its label, pulsing only while something is happening now.{" "}
+          a photo. Working is the friend in its working state beside the words
+          (<Code>listening</Code>, <Code>reading</Code>, <Code>writing</Code>); a
+          standing state is said in words alone.{" "}
           <Code>Code</Code> is this: a code name in prose, never product text.
         </P>
-        <Demo caption="Rule between content and actions. Avatar beside the name it stands for. LiveDot with a pulse while recording, still for a standing state.">
+        <Demo caption="Rule between content and actions. Avatar beside the name it stands for. The friend listening while recording; a standing state in words.">
           <Card>
             <div className="flex items-center gap-2.5">
               <Avatar initials="MH" />
@@ -255,10 +256,15 @@ export const components: Section[] = [
             <Rule />
             <div className="flex flex-col gap-1.5">
               <Text as="div">
-                <LiveDot pulse>Recording</LiveDot>
+                <span className="inline-flex items-center gap-2">
+                  <Friend size={20} state="listening" className="shrink-0" />
+                  <span className="min-w-0">
+                    Recording
+                  </span>
+                </span>
               </Text>
               <Text as="div" tone="muted">
-                <LiveDot>Rhythm on</LiveDot>
+                Rhythm on
               </Text>
             </div>
           </Card>
@@ -275,11 +281,16 @@ export const components: Section[] = [
             ),
           }}
           correct={{
-            caption: "A dot; the words carry the meaning.",
+            caption: "The friend at work; the words carry the meaning.",
             children: (
               <Card>
                 <Text as="div">
-                  <LiveDot pulse>Recording</LiveDot>
+                  <span className="inline-flex items-center gap-2">
+                    <Friend size={20} state="listening" className="shrink-0" />
+                    <span className="min-w-0">
+                      Recording
+                    </span>
+                  </span>
                 </Text>
               </Card>
             ),

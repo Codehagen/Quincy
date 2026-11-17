@@ -6,7 +6,7 @@ import {
   type Rhythm,
 } from "@/lib/rhythms"
 import { RUNS_ELSEWHERE } from "@/lib/rhythm-handlers"
-import { Card, LiveDot, Mono, Stage, Text, TextLink } from "@/components/kit"
+import { Card, Mono, Stage, Text, TextLink } from "@/components/kit"
 import { RhythmSwitch } from "./rhythm-switch"
 
 /**
@@ -36,7 +36,7 @@ import { RhythmSwitch } from "./rhythm-switch"
  * at speed down one edge where a grid makes the eye zigzag. Each row answers
  * what it is called (a link to its page), what it does for you, and when it
  * runs; how it works in detail lives on /rhythm/[id]. A running rhythm says
- * so with a LiveDot beside its time, the one thing in the kit painted live.
+ * so in words (its switch, and its time in ink), never with a green dot.
  */
 export function RhythmGrid({
   lastRun,
@@ -126,9 +126,9 @@ function RhythmRow({
    *
    * An event rhythm is deliberately not live. It runs — that is why it is on
    * this page — but whether its source is connected right now is a question
-   * this row cannot ask without a query per row, and a live dot next to
+   * this row cannot ask without a query per row, and an ink time next to
    * Shipped Work for somebody who never connected GitHub is the one lie the
-   * dot must not tell.
+   * row must not tell.
    */
   const live = locked || (runnable && (card?.enabled ?? false))
 
@@ -164,13 +164,10 @@ function RhythmRow({
         </Text>
         <Text as="div" variant="small" tone="muted">
           <span className="flex flex-wrap items-center gap-x-kit-related gap-y-kit-tight">
-            {live ? (
-              <LiveDot>
-                <Mono tone="ink">{when}</Mono>
-              </LiveDot>
-            ) : (
-              <Mono>{when}</Mono>
-            )}
+            {/* On is said by the switch beside it and "off" by the footer;
+                the time is ink while it runs. No dot: green is not a status
+                colour (docs/design/states.md, "Working"). */}
+            {live ? <Mono tone="ink">{when}</Mono> : <Mono>{when}</Mono>}
             {/* A failed last run is said in ink, not red: nothing was
                 destroyed (docs/design/states.md). */}
             <span className={card?.failed ? "text-kit-ink" : undefined}>

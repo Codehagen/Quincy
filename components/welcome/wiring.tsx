@@ -680,8 +680,8 @@ function CorpusRead({
         {/* This is the one wait in first run long enough to need motion: a
             paid read over a hundred posts and a model call, tens of seconds on
             a screen where nothing else moves. A still line through that reads
-            as a hung page. The pulsing LiveDot is the kit's word for "this is
-            still running" (docs/design/states.md). */}
+            as a hung page. The friend reading beside the words is the
+            product's word for "this is still running" (docs/design/states.md). */}
         <Working>Reading your timeline. This takes about a minute.</Working>
       </div>
     )

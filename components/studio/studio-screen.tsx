@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react"
 import { useRouter } from "next/navigation"
 import { DefaultChatTransport, type ChatTransport } from "ai"
 
-import { Composer, LiveDot, MessageList, MessageListItem, Text, type ComposerSubmit } from "@/components/kit"
+import { Composer, MessageList, MessageListItem, Text, type ComposerSubmit } from "@/components/kit"
 import type { MascotState } from "@/components/mascot"
 import {
   ChatDraftProvider,
@@ -333,7 +333,7 @@ const Transcript = React.memo(function Transcript({
           <QuincyReply streaming>
             <QuincyByline mood="reading" />
             <Text as="div" role="status">
-              <LiveDot pulse>Thinking</LiveDot>
+              Thinking
             </Text>
           </QuincyReply>
         </MessageListItem>

@@ -128,7 +128,7 @@ tall, Tags 6px apart.
 `look` `chip` (default, the above) | `text`: muted 12px meta text with no
 ring, for a fact in a named column (DataList's Shape) or a dense row's meta
 line. A ring on twenty rows is twenty objects louder than the titles. Not
-pressable, not a filter (Segmented), not a status (LiveDot, Checklist), and
+pressable, not a filter (Segmented), not a status (StatusPill, Checklist), and
 never more than three on one item. A sentence about the item ("writes 2
 posts, for LinkedIn") is `Text variant="small" tone="muted"`, not a Tag.
 

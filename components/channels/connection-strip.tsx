@@ -34,8 +34,8 @@ import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-ma
  * HoldButton, not a dialog (AGENTS.md, "Destructive actions").
  *
  * **On the kit since 2026-11-16** (plans/029). It sits in the Card of the
- * page's first Stage. Nothing is a LiveDot: a connection is permission, not
- * a running ritual. "Needs reconnecting" is the one line in ink rather than
+ * page's first Stage. Nothing is a green dot: a connection is permission, not
+ * a running ritual, and connected is said in words. "Needs reconnecting" is the one line in ink rather than
  * grey, and not red: the kit's danger colour labels destructive actions only
  * (docs/design/states.md). The provider's photo is gone: the kit draws no
  * faces (Avatar), and a signed LinkedIn picture URL expires anyway, so the

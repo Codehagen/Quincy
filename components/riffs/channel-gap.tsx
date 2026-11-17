@@ -4,7 +4,8 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { askForChannelAngle } from "@/app/(app)/ideas/actions"
-import { Button, LiveDot, Text } from "@/components/kit"
+import { Button, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { PlatformMark } from "@/components/channels/platform-mark"
 
 /**
@@ -105,7 +106,12 @@ function Gap({
   // change, and "Make one for LinkedIn" read out after each result is noise.
   const said = working ? (
     <Text variant="small" tone="muted" as="div">
-      <LiveDot pulse>Looking for something for {channel.label} in this…</LiveDot>
+      <span className="inline-flex items-center gap-2">
+        <Friend size={20} state="reading" className="shrink-0" />
+        <span className="min-w-0">
+          Looking for something for {channel.label} in this…
+        </span>
+      </span>
     </Text>
   ) : outcome.kind === "empty" ? (
     <Text variant="small" tone="muted">

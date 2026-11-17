@@ -227,13 +227,3 @@ export const BUTTON_VARIANT = {
   ghost:
     "text-kit-ink-muted hover:not-data-disabled:bg-kit-row-hover hover:not-data-disabled:text-kit-ink data-popup-open:bg-kit-row-hover data-popup-open:text-kit-ink data-disabled:opacity-50",
 } as const
-
-/**
- * A selected row in a dense list (DataList): the selected grey, plus a 3px
- * ink bar at the row's start, 8px in from its top and foot. The grey alone
- * is 1.12:1 in light; the bar reads from across the table in both modes.
- * Not a lifted row: a shadow says "raised object", and a row is not one.
- * The element needs `relative`.
- */
-export const SELECTION_BAR =
-  "data-[selected]:before:absolute data-[selected]:before:inset-y-2 data-[selected]:before:start-0.5 data-[selected]:before:w-kit-selection-bar data-[selected]:before:rounded-full data-[selected]:before:bg-kit-ink"

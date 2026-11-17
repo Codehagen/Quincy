@@ -9,7 +9,6 @@ import {
   Field,
   FileChip,
   HoldButton,
-  LiveDot,
   Mono,
   Tab,
   TabList,
@@ -18,6 +17,7 @@ import {
   Text,
   Textarea,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 /** MAX_AUDIO_SECONDS in lib/voice-note.ts. */
 export const MAX_SECONDS = 10 * 60
@@ -54,7 +54,7 @@ export type RecorderProps = {
 }
 
 /**
- * Capture. Built on the page from Button, LiveDot and Mono, as states.md says
+ * Capture. Built on the page from Button, Friend and Mono, as states.md says
  * a recorder is ("not a kit component yet"). The microphone is stubbed: the
  * clock runs, no audio is captured.
  */
@@ -95,7 +95,12 @@ function Live({ phase, elapsed, isAction, onToggle, toggleRef }: RecorderProps) 
       {recording ? (
         <span className="flex items-center gap-kit-related">
           <Text as="span" role="status">
-            <LiveDot pulse>Recording</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="listening" className="shrink-0" />
+              <span className="min-w-0">
+                Recording
+              </span>
+            </span>
           </Text>
           {/* Outside the status region, so the clock is not read out every second. */}
           <Mono tone="ink">

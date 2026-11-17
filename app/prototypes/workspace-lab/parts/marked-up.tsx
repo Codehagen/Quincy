@@ -3,7 +3,8 @@
 import * as React from "react"
 
 import type { Angle, Riff } from "@/lib/riffs"
-import { Highlight, LiveDot, TextLink } from "@/components/kit"
+import { Highlight, TextLink } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { FOCUS_RING, HIT_44 } from "@/components/kit/control-styles"
 import { ideasFrom } from "@/components/quincy"
 
@@ -145,7 +146,12 @@ export function MarkedUp({
           <p className="max-w-[62ch] leading-6 text-pretty text-kit-ink">{prose}</p>
           {riff.state === "working" ? (
             <p role="status" className="text-kit-ink-muted">
-              <LiveDot pulse>Reading it. Marks usually land within a minute.</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="reading" className="shrink-0" />
+                <span className="min-w-0">
+                  Reading it. Marks usually land within a minute.
+                </span>
+              </span>
             </p>
           ) : riff.state === "failed" ? (
             <p role="status" className="text-kit-ink-muted">

@@ -22,11 +22,11 @@ import {
   Field,
   HoldButton,
   Input,
-  LiveDot,
   Text,
   TextButton,
   TextLink,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { QuincyAsks } from "@/components/quincy"
 import {
   SourcePanelRule,
@@ -349,7 +349,7 @@ export function GithubSourceRow({
               working (states.md). */}
           {said ? (
             <Text as="div" role="status" variant="small" tone="muted">
-              {awaiting ? <LiveDot pulse>{said}</LiveDot> : said}
+              {awaiting ? <span className="inline-flex items-center gap-2"><Friend size={20} state="reading" className="shrink-0" /><span className="min-w-0">{said}</span></span> : said}
             </Text>
           ) : null}
 

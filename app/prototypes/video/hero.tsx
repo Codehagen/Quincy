@@ -13,7 +13,8 @@
  * arrived yet keeps its room, so nothing below it moves.
  */
 
-import { LiveDot, Mono } from "@/components/kit"
+import { Mono } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { Stage, Window } from "@/components/showcase"
 import { Perched } from "@/components/showcase/demos/perched"
 import { useArrival } from "@/components/showcase/demos/use-arrival"
@@ -37,7 +38,12 @@ function Status({ done }: { done: boolean }) {
   return (
     <span className="inline-grid">
       <span className={`col-start-1 row-start-1 ${done ? "invisible" : ""}`}>
-        <LiveDot pulse>Cutting</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            Cutting
+          </span>
+        </span>
       </span>
       <span className={`col-start-1 row-start-1 ${done ? "" : "invisible"}`}>
         <Mono>done</Mono>

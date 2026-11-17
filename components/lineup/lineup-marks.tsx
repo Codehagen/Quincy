@@ -15,7 +15,7 @@ import type { Item } from "./lineup-model"
  *
  * **No green, no blink** on this page (the owner, 2026-11-16: "fjern den
  * grønne blinken"). Sending is a still glyph and its word, like Sent and
- * Didn’t go; "now" is ink. LiveDot stays as it is everywhere else.
+ * Didn’t go; "now" is ink. Elsewhere, working is the friend (states.md).
  */
 
 export function ChannelGlyph({ channel, label }: { channel: string; label: string }) {

@@ -1,4 +1,5 @@
-import { Card, FileChip, Highlight, LiveDot, MarginNote, Mono, Text } from "@/components/kit"
+import { Card, FileChip, Highlight, MarginNote, Mono, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { Perched } from "@/components/showcase/demos/perched"
 
 import { Crop, Sheet } from "@/components/showcase/demos/crop"
@@ -42,7 +43,12 @@ export function IngestPicture() {
                         <span>{row.label}</span>
                       </span>
                     ) : (
-                      <LiveDot pulse>{row.label}</LiveDot>
+                      <span className="inline-flex items-center gap-2">
+                        <Friend size={20} state="listening" className="shrink-0" />
+                        <span className="min-w-0">
+                          {row.label}
+                        </span>
+                      </span>
                     )}
                     {row.meta ? <Mono>{row.meta}</Mono> : null}
                   </div>

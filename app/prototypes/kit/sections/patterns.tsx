@@ -142,8 +142,8 @@ export const patterns: Section[] = [
     body: (
       <>
         <P>
-          While Quincy works, the object says so in words beside a pulsing{" "}
-          <Code>LiveDot</Code>, where the result will land. When it cannot do
+          While Quincy works, the object says so in words beside the friend in
+          its working state, where the result will land. When it cannot do
           something, it says why in an ink sentence and offers the way out.
           Neither is red: red is for destroying things.
         </P>

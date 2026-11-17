@@ -65,12 +65,13 @@ heading is the break.
 One row look, after the landing's idea rows: 44px minimum, 16px side
 inset, quiet grey hover, and picked or current in the selected grey with
 ink, never blue. Rows sit in a `List`. Hover is always a lighter step than
-selected, in both themes (colour.md, "Rows"). DataList's rows add a 3px
-ink bar and a 560 title to the grey (workspace.md); a ListRow in a short
-list does without them.
+selected, in both themes (colour.md, "Rows"). A selected row is the grey
+plus its title at 560 in ink, the rest muted, and never a side stripe
+(colour.md, "Rows"); DataList sets its title at 560 only on the open row
+(workspace.md).
 
 - **ListRow** — a button that opens the thing it names (a riff, a person).
-  `children` (title), `description`, `leading` (an `Avatar`, a `LiveDot`),
+  `children` (title), `description`, `leading` (an `Avatar`, the friend while it works),
   `meta` (usually `Mono`), `selected` (the row whose detail is showing;
   `"visual"` draws the grey without `aria-current`, for a trigger whose
   state is said elsewhere, such as the shell's account row),

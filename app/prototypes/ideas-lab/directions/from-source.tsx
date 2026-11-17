@@ -8,7 +8,6 @@ import {
   ButtonLink,
   Card,
   KitPage,
-  LiveDot,
   Rule,
   Stage,
   Text,
@@ -16,6 +15,7 @@ import {
   UndoBar,
   Well,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { ProvenanceMark, dismissedSentence, ideasFrom, pickAngle } from "@/components/quincy"
 
 import { WRITES } from "../fixtures"
@@ -129,7 +129,12 @@ function SourceCard({
 
         {riff.state === "working" ? (
           <Text as="div" role="status">
-            <LiveDot pulse>Reading it. Ideas usually land within a minute.</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="reading" className="shrink-0" />
+              <span className="min-w-0">
+                Reading it. Ideas usually land within a minute.
+              </span>
+            </span>
           </Text>
         ) : riff.state === "failed" ? (
           <Text role="status">

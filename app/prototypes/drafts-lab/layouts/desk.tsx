@@ -3,7 +3,8 @@
 import * as React from "react"
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons"
 
-import { Button, EmptyRegion, LiveDot, PanelBody, Tag, WorkspacePage } from "@/components/kit"
+import { Button, EmptyRegion, PanelBody, Tag, WorkspacePage } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { FOCUS_RING } from "@/components/kit/control-styles"
 
 import { FromGlyph, NextCell, fromName } from "../parts/cells"
@@ -71,7 +72,12 @@ function DeskSurface({ store, opts }: { store: DraftsStore; opts: LabOptions }) 
               <div className="dl-desk mx-auto flex w-full max-w-[46rem] flex-col gap-kit-group px-kit-group pt-8 pb-12" data-type={opts.deskType}>
                 {store.phase === "loading" ? (
                   <p role="status" className="text-kit-dense text-kit-ink-muted">
-                    <LiveDot pulse>Getting your drafts.</LiveDot>
+                    <span className="inline-flex items-center gap-2">
+                      <Friend size={20} state="reading" className="shrink-0" />
+                      <span className="min-w-0">
+                        Getting your drafts.
+                      </span>
+                    </span>
                   </p>
                 ) : !open ? null : (
                   <>

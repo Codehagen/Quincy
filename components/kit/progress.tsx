@@ -22,7 +22,7 @@ export type ProgressProps = {
  * reading sources, importing posts. The label above in ink, the count at its
  * end in Mono, a 6px bar under them: the track grey, the fill ink. Under a
  * second, or with nothing to count, it is not a Progress: a pending Button
- * label or a LiveDot says it.
+ * label or the working line (the friend and words) says it.
  *
  * The fill eases to each new value (320ms); reduced motion jumps. With no
  * value the bar holds a short ink segment that slides, and under reduced

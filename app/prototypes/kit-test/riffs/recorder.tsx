@@ -3,7 +3,8 @@
 import * as React from "react"
 import { Mic01Icon, StopIcon } from "@hugeicons/core-free-icons"
 
-import { Button, Card, LiveDot, Mono, Stage, Text } from "@/components/kit"
+import { Button, Card, Mono, Stage, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 /** A take shorter than this is a mis-tap, not a thought. */
 const MIN_SECONDS = 2
@@ -93,7 +94,12 @@ export function Recorder({
           </Button>
           {recording ? (
             <>
-              <LiveDot pulse>Recording</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="listening" className="shrink-0" />
+                <span className="min-w-0">
+                  Recording
+                </span>
+              </span>
               <Mono tone="ink">{clock(seconds)}</Mono>
             </>
           ) : null}

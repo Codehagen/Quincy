@@ -9,12 +9,12 @@ import {
   List,
   ListHeading,
   ListRow,
-  LiveDot,
   Stage,
   STAGE_STACK,
   UndoBar,
   useRevealOnNarrow,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { RiffCard, dismissedSentence, pickAngle, riffTitle } from "@/components/quincy"
 
 import { GAPS, WRITES } from "../fixtures"
@@ -134,7 +134,7 @@ export function Beside({ q, frame, c }: { q: Queue; frame: FrameId; c: Controls 
                           key={r.id}
                           selected={r.id === open?.id}
                           titleLines={c.titleLines === "2" ? 2 : 1}
-                          leading={r.state === "working" ? <LiveDot pulse /> : undefined}
+                          leading={r.state === "working" ? <Friend size={20} state="reading" className="shrink-0" /> : undefined}
                           description={rowDescription(r)}
                           onClick={() => q.setOpen("beside", r.id)}
                         >

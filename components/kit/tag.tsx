@@ -7,7 +7,7 @@ import * as React from "react"
  * small text at 460, 8px radius (`rounded-kit-control-inner`), 24px tall.
  *
  * Not pressable, not a filter (that is Segmented), not a status: running is
- * LiveDot, done is Checklist. Muted on the object is 5.28:1, on the well 4.71:1.
+ * the friend's working state, done is Checklist. Muted on the object is 5.28:1, on the well 4.71:1.
  */
 export type TagLook = "chip" | "text"
 

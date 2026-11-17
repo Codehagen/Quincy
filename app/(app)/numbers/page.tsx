@@ -38,7 +38,8 @@ async function Numbers() {
 
 export default function NumbersPage() {
   // Suspense twice over: the read, and `useQueryStates` (the period and the
-  // Table live in the URL). The fallback is the LiveDot line, never bars.
+  // Table live in the URL). The fallback is the working line (the friend
+  // reading, and words), never bars.
   return (
     <Suspense fallback={<NumbersReading />}>
       <Numbers />

@@ -6,7 +6,6 @@ import {
   Card,
   EmptyState,
   KitPage,
-  LiveDot,
   MarginNote,
   Muted,
   Rule,
@@ -125,15 +124,11 @@ export function NumbersScreen({ numbers }: { numbers: NumbersView }) {
       <Stage lead={`The last ${live.days} days.`} rest="Read fresh every morning, beside the median, never instead of it.">
         <Card width="with-margin">
           <div className="flex flex-col gap-kit-related">
-            {/* The dot only agrees with the word; the word carries it. */}
+            {/* The word carries it: green is not a status colour. */}
             {live.empty ? (
               <Text weight="strong">Frozen at import</Text>
             ) : (
-              <LiveDot>
-                <Text as="span" weight="strong">
-                  Live
-                </Text>
-              </LiveDot>
+              <Text weight="strong">Live</Text>
             )}
 
             {live.empty ? (

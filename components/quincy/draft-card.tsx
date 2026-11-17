@@ -12,7 +12,6 @@ import {
   Card,
   Count,
   HoldButton,
-  LiveDot,
   MarginNote,
   Mono,
   Rule,
@@ -20,6 +19,7 @@ import {
   Textarea,
   TextLink,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { useControllable } from "@/components/kit/use-controllable"
 import { paragraphsOf, readBeats, type Paragraph } from "@/lib/draft-beats"
 import type { Version } from "@/lib/drafts"
@@ -481,11 +481,17 @@ function Status({
   reopening: boolean
   onReopen?: () => void
 }) {
-  // Sending: the one state that is running right now, said with a live dot.
+  // Sending: the one state that is running right now, said with the friend
+  // in its working state beside the words.
   if (sending) {
     return (
       <Text as="div" role="status">
-        <LiveDot pulse>{line.text}</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            {line.text}
+          </span>
+        </span>
       </Text>
     )
   }

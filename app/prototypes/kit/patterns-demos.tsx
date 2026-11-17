@@ -12,7 +12,6 @@ import {
   HoldButton,
   List,
   ListRow,
-  LiveDot,
   MarginNote,
   Mono,
   Muted,
@@ -26,6 +25,7 @@ import {
   Well,
   useRevealOnNarrow,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 /*
  * Client demos for the patterns section (docs/design/actions.md, removing.md, states.md,
@@ -213,7 +213,12 @@ export function WhichActionWins() {
           </Button>
           {recording ? (
             <Text as="span" role="status">
-              <LiveDot pulse>Recording</LiveDot>
+              <span className="inline-flex items-center gap-2">
+                <Friend size={20} state="listening" className="shrink-0" />
+                <span className="min-w-0">
+                  Recording
+                </span>
+              </span>
             </Text>
           ) : (
             <Text variant="small" tone="muted">
@@ -353,7 +358,12 @@ export function Working() {
   return (
     <Card>
       <Text as="div" role="status">
-        <LiveDot pulse>Reading it. Angles usually land within a minute.</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            Reading it. Angles usually land within a minute.
+          </span>
+        </span>
       </Text>
     </Card>
   )

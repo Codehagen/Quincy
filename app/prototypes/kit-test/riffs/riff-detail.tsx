@@ -13,7 +13,6 @@ import {
   Card,
   Highlight,
   IconButton,
-  LiveDot,
   MarginNote,
   Menu,
   MenuItem,
@@ -24,6 +23,7 @@ import {
   Rule,
   Text,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { draftAngle } from "./actions"
 import { DESTINATIONS, WRITES, type Angle, type AngleStatus, type Riff } from "./data"
@@ -91,7 +91,12 @@ export function RiffDetail({
 
         {riff.state === "working" ? (
           <div className="mt-4" role="status">
-            <LiveDot pulse>Reading it. Angles usually land within a minute.</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="reading" className="shrink-0" />
+              <span className="min-w-0">
+                Reading it. Angles usually land within a minute.
+              </span>
+            </span>
           </div>
         ) : riff.state === "failed" ? (
           <div className="mt-4" role="status">

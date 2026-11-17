@@ -6,7 +6,6 @@ import {
   ButtonLink,
   EmptyRegion,
   EmptyState,
-  LiveDot,
   Segmented,
   Skeleton,
   type SkeletonWidth,
@@ -95,7 +94,12 @@ export function StateLine({ phase, minWeeks, notes }: { phase: Phase; minWeeks: 
   if (phase === "loading") {
     return (
       <div role="status" className="text-kit-dense text-kit-ink">
-        <LiveDot pulse>Reading your numbers. This usually takes a few seconds.</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state="reading" className="shrink-0" />
+          <span className="min-w-0">
+            Reading your numbers. This usually takes a few seconds.
+          </span>
+        </span>
       </div>
     )
   }

@@ -2,7 +2,8 @@
 
 import * as React from "react"
 
-import { Card, LiveDot, Mono, Text } from "@/components/kit"
+import { Card, Mono, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import type { ApprovalPreview } from "@/lib/draft-writes"
 import {
   isDraftArtifactOutput,
@@ -23,7 +24,7 @@ import { DRAFT_ROOM, DraftCard, DraftCardActions, DraftCardBody, DraftCardHeader
  * DraftCard /drafts shows, bound to the row the tool wrote.
  *
  * - **Writing**: from the first token of the tool's input the card is there,
- *   with a pulsing LiveDot ("Writing the LinkedIn version"), and the words
+ *   with the friend writing ("Writing the LinkedIn version"), and the words
  *   arrive in it as the tool streams preliminary outputs. Thinking above it
  *   folds as it lands (lib/studio-turn.ts).
  * - **Held**: the card with Approve · Edit, and the slot Approve would take.
@@ -121,7 +122,8 @@ export function ChatDraft({ part }: ChatDraftProps) {
 }
 
 /**
- * The card while the words arrive: the header, the words so far, a LiveDot.
+ * The card while the words arrive: the header, the words so far, the friend
+ * writing.
  * In the settled card's room (DRAFT_ROOM), so it is already the width the
  * DraftCard will be: the lines do not move when it lands and the beats
  * appear beside them.
@@ -146,7 +148,12 @@ function WritingCard({ label, body, caret = true }: { label: string | null; body
             </Text>
           ) : null}
           <Text as="div" role="status" tone="muted">
-            <LiveDot pulse>{label ? `Writing the ${label} version.` : "Writing it. A draft usually lands within a minute."}</LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="writing" className="shrink-0" />
+              <span className="min-w-0">
+                {label ? `Writing the ${label} version.` : "Writing it. A draft usually lands within a minute."}
+              </span>
+            </span>
           </Text>
         </div>
       </Card>

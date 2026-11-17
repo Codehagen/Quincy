@@ -4,7 +4,8 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { askForAngle } from "@/app/(app)/ideas/actions"
-import { Button, Disclosure, Field, Input, LiveDot, Text } from "@/components/kit"
+import { Button, Disclosure, Field, Input, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 type Outcome =
   | { kind: "idle" }
@@ -120,7 +121,12 @@ export function Steer({
           <div role="status" aria-live="polite" className="min-w-0 flex-1">
             {working ? (
               <Text variant="small" tone="muted" as="div">
-                <LiveDot pulse>Looking for that in this one…</LiveDot>
+                <span className="inline-flex items-center gap-2">
+                  <Friend size={20} state="reading" className="shrink-0" />
+                  <span className="min-w-0">
+                    Looking for that in this one…
+                  </span>
+                </span>
               </Text>
             ) : outcome.kind === "empty" ? (
               /* The honest no: nothing broke. It clears on the next keystroke,

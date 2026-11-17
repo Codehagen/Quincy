@@ -53,11 +53,12 @@ What is moving?
   on anything you add. Use `useReducedMotion()` only for motion driven from JS,
   or for logic that waits on a transition reduced motion removes.
 - **No loops, no autoplay demos.** The discarded pieces 06, 09 and 10 waited
-  for a loop before anything happened. The one exception is
-  `<LiveDot pulse>`: a ring leaves the dot every 1.8s while something is
-  actively happening (recording, publishing), because "running" is a state
-  that lasts. A standing state ("Rhythm on") is a still dot. Under reduced
-  motion the ring is gone and the dot stays.
+  for a loop before anything happened. The exception is the friend in a
+  state that lasts (`listening`, `reading`, `writing` beside the working
+  line; mascot.md, states.md › Working), because "running" is a state that
+  lasts, and Progress with no value yet. There is no pulsing dot: ESLint
+  `quincy-design/no-live-pulse`. A standing state ("Rhythm on") is said in
+  words. Under reduced motion the friend holds a pose.
 - **A number that changes counts.** `Count` runs 320ms from the old value to
   the new one, so a change the person caused reads as caused.
 - **In view, once.** `useInView` fires at 40% visible, once by default. 35%

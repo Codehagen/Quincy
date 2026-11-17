@@ -18,7 +18,6 @@ import {
   EmptyState,
   List,
   ListRow,
-  LiveDot,
   Stage,
   Text,
   Tree,
@@ -481,7 +480,12 @@ function renderEditor({
     return (
       <Card>
         <Text as="div" role="status">
-          <LiveDot pulse>Reading the brain.</LiveDot>
+          <span className="inline-flex items-center gap-2">
+            <Friend size={20} state="reading" className="shrink-0" />
+            <span className="min-w-0">
+              Reading the brain.
+            </span>
+          </span>
         </Text>
       </Card>
     )

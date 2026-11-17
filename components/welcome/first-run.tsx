@@ -273,7 +273,7 @@ export function FirstRun({
                       spend — the one that called a model was the material ask,
                       and it moved to the wiring, where it says so itself. */}
                   <MessageListItem id={`writing-${next?.id}`}>
-                    <Working>Writing that down</Working>
+                    <Working state="listening">Writing that down</Working>
                   </MessageListItem>
                 </>
               ) : null}

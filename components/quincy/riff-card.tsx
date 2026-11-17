@@ -10,7 +10,6 @@ import {
   ButtonLink,
   Card,
   Highlight,
-  LiveDot,
   MarginNote,
   Muted,
   Rule,
@@ -23,6 +22,7 @@ import {
   Text,
   Well,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { ProvenanceMark } from "./provenance-mark"
 
@@ -306,11 +306,14 @@ export function RiffCard({
 
         {riff.state === "working" ? (
           <Text as="div" role="status">
-            <LiveDot pulse>
-              {riff.stuck
-                ? "Still reading it. This one is taking longer than usual."
-                : "Reading it. Ideas usually land within a minute."}
-            </LiveDot>
+            <span className="inline-flex items-center gap-2">
+              <Friend size={20} state="reading" className="shrink-0" />
+              <span className="min-w-0">
+                {riff.stuck
+                  ? "Still reading it. This one is taking longer than usual."
+                  : "Reading it. Ideas usually land within a minute."}
+              </span>
+            </span>
           </Text>
         ) : riff.state === "failed" ? (
           <div role="status" className="flex flex-col gap-kit-related">

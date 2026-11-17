@@ -6,12 +6,12 @@ import {
   Card,
   Highlight,
   Lead,
-  LiveDot,
   Mono,
   Muted,
   SkeletonLines,
   Text,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { ApproveSwap, TheDraft } from "../demos"
 import { Code, Demo, P, Pair, type Section } from "../doc"
@@ -61,13 +61,16 @@ export const foundations: Section[] = [
           as on the landing. If a colour is not doing one of those jobs, it is
           decoration, and the kit has none.
         </P>
-        <Demo caption="Every job on one object: LiveDot (the only green), Highlight, the ink action, a danger label. Every text pair is at least 4.5:1.">
+        <Demo caption="Every job on one object: the friend at work, Highlight, the ink action, a danger label. Every text pair is at least 4.5:1.">
           <Card>
             <div className="flex flex-col gap-3">
               <Text as="div" variant="small">
-                <LiveDot pulse>
-                  Recording <Mono>0:42</Mono>
-                </LiveDot>
+                <span className="inline-flex items-center gap-2">
+                  <Friend size={20} state="listening" className="shrink-0" />
+                  <span className="min-w-0">
+                    Recording <Mono>0:42</Mono>
+                  </span>
+                </span>
               </Text>
               <Text>
                 <Highlight>Three people wrote back.</Highlight>{" "}

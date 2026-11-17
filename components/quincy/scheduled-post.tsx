@@ -3,7 +3,6 @@
 import * as React from "react"
 
 import {
-  LiveDot,
   Menu,
   MenuItem,
   MenuPanel,
@@ -14,6 +13,7 @@ import {
   TextLink,
   type MenuPanelProps,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { goingOutLine, goingOutOfEntry } from "@/lib/going-out"
 import type { Day, Entry, Slot } from "@/lib/lineup"
 
@@ -164,7 +164,12 @@ function EntryState({ entry }: { entry: Entry }) {
     case "sending":
       return (
         <Text as="span" variant="small" role="status">
-          <LiveDot pulse>Sending</LiveDot>
+          <span className="inline-flex items-center gap-2">
+            <Friend size={20} state="reading" className="shrink-0" />
+            <span className="min-w-0">
+              Sending
+            </span>
+          </span>
         </Text>
       )
     case "published":

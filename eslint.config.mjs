@@ -7,7 +7,7 @@ import { builtinRules } from "eslint/use-at-your-own-risk";
 // The design rules a selector can see (docs/design/README.md, "Checks").
 // Oxlint has no `no-restricted-syntax`, so they run here. Each is ESLint's
 // own `no-restricted-syntax` under its own name: one rule can hold only one
-// options list per file, and these three cover different files, so a single
+// options list per file, and these cover different files, so a single
 // `no-restricted-syntax` would let the last matching block drop the others.
 const restrictedSyntax = builtinRules.get("no-restricted-syntax");
 const quincyDesign = {
@@ -15,6 +15,8 @@ const quincyDesign = {
     "no-riff-copy": restrictedSyntax,
     "no-kit-primitive": restrictedSyntax,
     "no-kit-action": restrictedSyntax,
+    "no-live-pulse": restrictedSyntax,
+    "no-side-stripe": restrictedSyntax,
   },
 };
 
@@ -122,6 +124,43 @@ const eslintConfig = defineConfig([
         ...inStrings(
           "/(?<!data-)\\bkit-action\\b/",
           "--kit-action is the old blue, for the showcase pictures only. The action is ink: Button variant=\"action\" (docs/design/colour.md)",
+        ),
+      ],
+    },
+  },
+  {
+    // G: work in progress is the friend's working state plus words, never a
+    // pulsing green dot (docs/design/states.md, "Working").
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["app/prototypes/**", "components/showcase/**", ...TESTS],
+    rules: {
+      "quincy-design/no-live-pulse": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='LiveDot'] > JSXAttribute[name.name='pulse']",
+          message:
+            "No pulsing live dot. Use the friend in its working state beside the words: <Friend size={20} state=\"reading\" /> (docs/design/states.md, \"Working\")",
+        },
+      ],
+    },
+  },
+  {
+    // H: nothing selected wears a side stripe. A row is the selected grey
+    // and its title at 560; an object is the grey and a 1px ink ring all
+    // round (docs/design/colour.md, "Rows").
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["app/prototypes/**", "components/showcase/**", ...TESTS],
+    rules: {
+      "quincy-design/no-side-stripe": [
+        "error",
+        {
+          selector: "Identifier[name='SELECTION_BAR']",
+          message:
+            "No side stripe on a selected thing: a row is bg-kit-selected plus its title at 560 in ink, an object adds a 1px ink ring all round (docs/design/colour.md, \"Rows\")",
+        },
+        ...inStrings(
+          "/SELECTION_BAR|kit-selection-bar/",
+          "No side stripe on a selected thing: a row is bg-kit-selected plus its title at 560 in ink, an object adds a 1px ink ring all round (docs/design/colour.md, \"Rows\")",
         ),
       ],
     },

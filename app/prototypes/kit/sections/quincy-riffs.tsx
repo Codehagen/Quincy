@@ -43,7 +43,7 @@ export const quincyRiffs: Section[] = [
         >
           <RiffCardDemo />
         </Demo>
-        <Demo caption="Working is a LiveDot and words; failed says why in ink, with Try again. No skeleton, no red.">
+        <Demo caption="Working is the friend and words; failed says why in ink, with Try again. No skeleton, no red.">
           <RiffStatesDemo />
         </Demo>
         <Demo caption="The row title: the first idea's hook; while reading, the first sentence with the filler stripped; with no words yet, the source.">

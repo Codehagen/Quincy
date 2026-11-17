@@ -29,8 +29,8 @@ import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-ma
  * "Needs reconnecting" is the one state that interrupts, so it is the one
  * line in ink rather than grey. Not red: the kit's danger colour labels
  * destructive actions only (docs/design/states.md), and reconnecting destroys
- * nothing. Nothing here is a LiveDot either: a connection is permission, not
- * a running ritual.
+ * nothing. Nothing here is a green dot either: a connection is permission,
+ * not a running ritual, and connected is said in words.
  *
  * **A platform that cannot be connected has no control.** The old page drew
  * a disabled Connect on each; the kit does not ship a control that means

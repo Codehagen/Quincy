@@ -67,8 +67,8 @@ read-only snapshot (chat history) is the root, Header and Body, no Actions.
 States, from `GoingOut`: `writing` (Approve · Edit · Discard) · editing (Save ·
 Cancel, length counting against the channel ceiling) · `scheduled` ("Goes out
 Thu 07:45." · Undo) · `no-slot` / `slots-full` / `slot-came-later` (muted
-reason · Undo) · `approved` (chat, placement unknown) · `sending` (pulsing
-LiveDot, no button) · `published` ("Posted 09:12." · View the post) ·
+reason · Undo) · `approved` (chat, placement unknown) · `sending` (the friend
+reading beside the words, no button) · `published` ("Posted 09:12." · View the post) ·
 `failed` (the platform's words in ink · Reopen).
 
 ```tsx

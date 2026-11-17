@@ -2,7 +2,8 @@
 
 import * as React from "react"
 
-import { LiveDot, Text } from "@/components/kit"
+import { Text } from "@/components/kit"
+import { Friend, type MascotState } from "@/components/mascot"
 import { QuincyReply, YourTurn } from "@/components/quincy"
 
 /**
@@ -68,14 +69,25 @@ export function UserTurn({
 }
 
 /**
- * Quincy working: a pulsing LiveDot and the words for what it is doing
- * (docs/design/states.md). Three dots would be the reflex; this says what.
+ * Quincy working: the friend in its working state and the words for what it
+ * is doing (docs/design/states.md, "Working"). Three dots would be the
+ * reflex; this says what. `listening` while it takes something in,
+ * `reading` while it reads.
  */
-export function Working({ children }: { children: string }) {
+export function Working({
+  children,
+  state = "reading",
+}: {
+  children: string
+  state?: Extract<MascotState, "listening" | "reading" | "writing">
+}) {
   return (
     <div className={ARRIVES}>
       <Text as="div" role="status" tone="muted">
-        <LiveDot pulse>{children}</LiveDot>
+        <span className="inline-flex items-center gap-2">
+          <Friend size={20} state={state} className="shrink-0" />
+          <span className="min-w-0">{children}</span>
+        </span>
       </Text>
     </div>
   )

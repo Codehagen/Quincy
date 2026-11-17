@@ -5,7 +5,8 @@ import { ArrowDataTransferHorizontalIcon } from "@hugeicons/core-free-icons"
 
 import { measurePost } from "@/lib/post-length"
 import type { VoicePreview as Preview } from "@/lib/voice-preview"
-import { Button, LiveDot, Text, Well } from "@/components/kit"
+import { Button, Text, Well } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 import { SourceMark } from "@/components/sources/source-mark"
 import { showTheDifference } from "@/app/(app)/brain/actions"
 
@@ -35,7 +36,8 @@ export function VoicePreview() {
    * way would read as a glitch rather than as work. Past 400ms the wait is
    * long enough that an empty page reads as nothing happening, so Quincy
    * says what it is doing, in the place the posts will land
-   * (docs/design/states.md: a LiveDot line, never skeleton bars).
+   * (docs/design/states.md: the friend writing beside words, never skeleton
+   * bars).
    */
   React.useEffect(() => {
     if (!pending) return
@@ -109,7 +111,12 @@ export function VoicePreview() {
 
       {pending && slow ? (
         <Text as="div" role="status">
-          <LiveDot pulse>Writing it twice, with your voice and without.</LiveDot>
+          <span className="inline-flex items-center gap-2">
+            <Friend size={20} state="writing" className="shrink-0" />
+            <span className="min-w-0">
+              Writing it twice, with your voice and without.
+            </span>
+          </span>
         </Text>
       ) : null}
 

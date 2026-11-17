@@ -54,7 +54,7 @@ export function Channels({ row }: { row: Row }) {
 /**
  * What happens next, in two words. Waiting has no pill (StatusPill: the
  * default renders nothing); the rest reuse the four marks the kit has:
- * the live dot for sending, the clock for a time, the tick for decided, the
+ * the friend reading for sending, the clock for a time, the tick for decided, the
  * alert for what did not go.
  */
 export function NextCell({ row }: { row: Row }) {

@@ -26,7 +26,6 @@ import {
   Card,
   EmptyState,
   KitPage,
-  LiveDot,
   Mono,
   Rule,
   Stage,
@@ -169,12 +168,9 @@ export default async function RhythmDetailPage({
                 /sources. */}
             <div className="flex items-center gap-kit-related">
               <div className="min-w-0 flex-1">
+                {/* The word carries it: green is not a status colour. */}
                 {live ? (
-                  <LiveDot>
-                    <Text as="span" weight="strong">
-                      {locked ? "Always on" : "On"}
-                    </Text>
-                  </LiveDot>
+                  <Text weight="strong">{locked ? "Always on" : "On"}</Text>
                 ) : (
                   <Text weight="strong">
                     {eventControl ? "Runs when its source sends something" : "Off"}

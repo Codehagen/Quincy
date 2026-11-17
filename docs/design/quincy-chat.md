@@ -28,7 +28,7 @@ What is this piece of Quincy's turn?
  ├── Words Quincy wrote                → ReplyText
  ├── The person's own words, quoted    → ReplyQuote (one per object highlighted)
  ├── Something to press                → ReplyActions
- ├── Working (reasoning, a tool)       → LiveDot pulse + words, role="status"
+ ├── Working (reasoning, a tool)       → words, role="status" (the byline's friend works)
  └── It failed                         → ReplyFailed
 ```
 

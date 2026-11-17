@@ -8,13 +8,13 @@ import {
   Card,
   Count,
   KitPage,
-  LiveDot,
   ListRow,
   Mono,
   Lead,
   NavRow,
   Stage,
 } from "@/components/kit"
+import { Friend } from "@/components/mascot"
 
 import { BASELINE, CANNED_TRANSCRIPT, cannedAngles, type Angle, type Riff } from "./data"
 import { MAX_SECONDS, Recorder, type RecorderPhase, type Take } from "./recorder"
@@ -382,7 +382,7 @@ export function RiffsScreen({ initialRiffs }: { initialRiffs: Riff[] }) {
                     selected={riff.id === selectedId}
                     titleLines={2}
                     description={rowDescription(riff)}
-                    leading={riff.state === "working" ? <LiveDot pulse /> : undefined}
+                    leading={riff.state === "working" ? <Friend size={20} state="reading" className="shrink-0" /> : undefined}
                     meta={<Mono>{riff.capturedAt}</Mono>}
                     onClick={() => pick(riff.id)}
                   >

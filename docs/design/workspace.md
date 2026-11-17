@@ -206,7 +206,7 @@ nothing moves. Nothing in a FootBar wraps; the last hints clip.
 `status` `reading` | `drafted` | `later` | `failed`, `children` (the word,
 when the default does not fit), `hideWord` (word to assistive tech only).
 A mark and a word in muted meta text, no fill, no ring. `reading` is the
-pulsing LiveDot, the only live thing on a row; `failed` is the alert glyph
+friend in its `reading` state at 16px, the only live thing on a row; `failed` is the alert glyph
 in muted ink, not red (nothing was destroyed). Waiting is the default and
 has no pill: render nothing.
 
@@ -246,7 +246,7 @@ workspace and 2-up below it.
 - No `transition-all`: each component names its properties. Presses scale
   to `--kit-press-scale`, except a DataList row (a full-width row that
   shrinks reads as the list moving). Every transition has
-  `motion-reduce:transition-none`; the LiveDot drops its ring; skeletons do
+  `motion-reduce:transition-none`; the friend holds a pose; skeletons do
   not move.
 
 ## Never
