@@ -1,0 +1,39 @@
+/* ══ Ideas: the fold, in CSS (components/riffs/ideas-workspace.tsx) ═══════
+   `shouldFold` as container queries on the workspace, so the server's HTML
+   paints the right side at once (useWorkspaceFold reads the probe back).
+   The table needs 1053px, and folds again from 1177 to 1184: there the
+   list crosses the width that adds the Source column, which leaves the
+   title under 320 until the pane stops growing. ideas-fold.test.ts holds
+   these numbers to `shouldFold`. */
+
+.ideas-folded {
+  display: contents;
+}
+.ideas-unfolded {
+  display: none;
+}
+.ideas-fold-probe {
+  display: block;
+}
+
+@container kit-workspace (width >= 1053px) {
+  .ideas-folded,
+  .ideas-fold-probe {
+    display: none;
+  }
+  .ideas-unfolded {
+    display: contents;
+  }
+}
+
+@container kit-workspace (1177px <= width < 1185px) {
+  .ideas-folded {
+    display: contents;
+  }
+  .ideas-fold-probe {
+    display: block;
+  }
+  .ideas-unfolded {
+    display: none;
+  }
+}

@@ -115,6 +115,3 @@ export const DRAFT_COLUMNS: readonly DataListColumn<Row>[] = [
   { id: "marks", header: "", width: "4rem", cell: (r) => <CompactCell row={r} /> },
   { id: "age", header: "Age", width: "3.25rem", align: "end", cell: (r) => <DataListMono>{r.draft.from.at}</DataListMono> },
 ]
-
-/** The fixed tracks of a row, for the fold rule: marks 64, age 52, two 12px gaps, the 8 + 12 on each side. */
-export const ROW_FIXED_PX = 64 + 52 + 2 * 12 + 40

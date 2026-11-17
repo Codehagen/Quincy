@@ -4,6 +4,7 @@ import { channelGaps, CHANNEL_LABELS, getIdeasPace, getRiffs } from "@/lib/riffs
 import { listConnections } from "@/lib/channels"
 import { writesPerShape } from "@/lib/drafting"
 import { getSession } from "@/lib/session"
+import { IdeasLoading } from "@/components/riffs/ideas-loading"
 import { IdeasWorkspace } from "@/components/riffs/ideas-workspace"
 import { constructMetadata } from "@/lib/metadata"
 
@@ -31,7 +32,23 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function IdeasPage() {
+/**
+ * The reads sit under the page's own Suspense, as on /drafts: on a client
+ * navigation the layout's boundary is above what re-renders, so reads
+ * awaited here, outside a boundary, held the navigation until they landed.
+ * The same boundary covers `useQueryState`, which reads which idea is open
+ * (`?idea=`). The fallback is the workspace's frame (IdeasLoading): the
+ * title, the heads and DataList's static loading rows at their final size.
+ */
+export default function IdeasPage() {
+  return (
+    <Suspense fallback={<IdeasLoading />}>
+      <Ideas />
+    </Suspense>
+  )
+}
+
+async function Ideas() {
   // The layout is the gate (app/(app)/layout.tsx): it redirects to /login
   // and keeps the query (?idea=…); a redirect here dropped it.
   const session = await getSession()
@@ -64,10 +81,5 @@ export default async function IdeasPage() {
   /** Per riff, the channels none of its ideas reach. Resolved here, once. */
   const gaps = Object.fromEntries(riffs.map((r) => [r.id, channelGaps(r, connected)]))
 
-  // Suspense because `useQueryState` reads which idea is open (`?idea=`).
-  return (
-    <Suspense>
-      <IdeasWorkspace riffs={riffs} gaps={gaps} writes={writes} pace={pace} />
-    </Suspense>
-  )
+  return <IdeasWorkspace riffs={riffs} gaps={gaps} writes={writes} pace={pace} />
 }

@@ -26,15 +26,17 @@ import {
   revealDataListRow,
   useAnnounce,
   useLetterKeys,
+  useWorkspaceFold,
   type KeyBarItem,
 } from "@/components/kit"
 import { FOCUS_RING } from "@/components/kit/control-styles"
 import { Friend } from "@/components/mascot"
 import type { Draft } from "@/lib/drafts"
 
-import { Channels, DRAFT_COLUMNS, FromGlyph, NextCell, ROW_FIXED_PX } from "./draft-cells"
+import { Channels, DRAFT_COLUMNS, FromGlyph, NextCell } from "./draft-cells"
 import { BUCKET_LABEL, filtersOn, fromName, optionsFor, type Bucket, type Row } from "./draft-rows"
-import { MARK_COLUMN_PX, OpenDraft, type FeedAccounts } from "./open-draft"
+import { FOLD_PROBE, FOLDED, PANE_PX, UNFOLDED } from "./drafts-fold"
+import { OpenDraft, type FeedAccounts } from "./open-draft"
 import { useDrafts, type DraftsStore, type Notice } from "./use-drafts"
 
 /**
@@ -57,40 +59,7 @@ export type DraftsWorkspaceProps = {
   accounts: FeedAccounts
 }
 
-/** X's 598 column, the mark column, its 10 gap, and the pane's 20 + 20. */
-const PANE_PX = 598 + MARK_COLUMN_PX + 10 + 40
-
-/** Under this the page is a phone or a split tablet: one column. */
-const FOLD_MIN_WIDTH = 900
-/** The narrowest title column the table may leave before it folds. */
-const TITLE_MIN = 200
-
-/**
- * Fold when the workspace is under 900, or when the feed pane would leave
- * the title column under 200: a workspace under ~1180px, so 1280 with the
- * sidebar folds and 1440 stays a table. Measured on the page's own width,
- * never the viewport's.
- */
-export function shouldFold(width: number) {
-  if (width < FOLD_MIN_WIDTH) return true
-  return width - PANE_PX - 1 - ROW_FIXED_PX < TITLE_MIN
-}
-
-function useFold(ref: React.RefObject<HTMLDivElement | null>) {
-  const [fold, setFold] = React.useState<boolean | null>(null)
-  React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const measure = () => setFold(shouldFold(el.clientWidth))
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [ref])
-  return fold
-}
-
-const KEYS: readonly KeyBarItem[] = [
+export const KEYS: readonly KeyBarItem[] = [
   { keys: ["j", "k"], label: "Move" },
   { keys: ["A"], label: "Approve" },
   { keys: ["E"], label: "Edit" },
@@ -99,20 +68,20 @@ const KEYS: readonly KeyBarItem[] = [
 ]
 
 export function DraftsWorkspace(props: DraftsWorkspaceProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const fold = useFold(ref)
+  // CSS picks the side (FOLDED / UNFOLDED); script reads which, after mount.
+  const [probe, fold] = useWorkspaceFold()
   return (
-    <WorkspacePage ref={ref}>
-      {/* Hidden only until the first measure (before paint), so a narrow
-          screen never flashes the table before it folds. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
-        <DraftsSurface {...props} fold={fold === true} />
+    <WorkspacePage>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <span ref={probe} aria-hidden className={FOLD_PROBE} />
+        <DraftsSurface {...props} fold={fold} />
       </div>
     </WorkspacePage>
   )
 }
 
-function DraftsSurface({ drafts, accounts, fold }: DraftsWorkspaceProps & { fold: boolean }) {
+/** `fold` is null until mounted: both sides render, each in its slot, and CSS shows one. */
+function DraftsSurface({ drafts, accounts, fold }: DraftsWorkspaceProps & { fold: boolean | null }) {
   const store = useDrafts(drafts)
   const searchRef = React.useRef<HTMLInputElement>(null)
   useDraftKeys(store, searchRef)
@@ -126,8 +95,9 @@ function DraftsSurface({ drafts, accounts, fold }: DraftsWorkspaceProps & { fold
         <NothingYet />
       ) : (
         <>
-          <DraftsFilters store={store} status={!fold} />
-          {fold ? <LineupDrafts store={store} sheet={sheet} /> : <TableDrafts store={store} sheet={sheet} />}
+          <DraftsFilters store={store} status={fold} />
+          <div className={FOLDED}>{fold !== false ? <LineupDrafts store={store} sheet={sheet} /> : null}</div>
+          <div className={UNFOLDED}>{fold !== true ? <TableDrafts store={store} sheet={sheet} /> : null}</div>
         </>
       )}
       {/* No keys to show over nothing; a note after a discard still needs its foot. */}
@@ -260,8 +230,8 @@ function DraftsFilters({
   status,
 }: {
   store: DraftsStore
-  /** Off under the fold, where Lineup's groups already are the status. */
-  status: boolean
+  /** The fold (null until mounted): Status is off under it, where Lineup's groups already are the status. */
+  status: boolean | null
 }) {
   const f = store.filters
   const count = `${store.shown.length} of ${store.rows.length}`
@@ -285,13 +255,15 @@ function DraftsFilters({
   return (
     <Toolbar label="Filters" size="filter">
       <ToolbarGroup>
-        {status ? (
-          <FilterMenu
-            label="Status"
-            value={f.status}
-            options={optionsFor(store.rows, f, "status")}
-            onValueChange={(v) => store.setFilter("status", v)}
-          />
+        {status !== true ? (
+          <span className={UNFOLDED}>
+            <FilterMenu
+              label="Status"
+              value={f.status}
+              options={optionsFor(store.rows, f, "status")}
+              onValueChange={(v) => store.setFilter("status", v)}
+            />
+          </span>
         ) : null}
         <FilterMenu label="From" value={f.from} options={optionsFor(store.rows, f, "from")} onValueChange={(v) => store.setFilter("from", v)} />
         <FilterMenu

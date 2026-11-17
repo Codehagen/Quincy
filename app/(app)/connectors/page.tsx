@@ -5,6 +5,7 @@ import { filterFromParam } from "@/lib/connectors"
 import { loadConnectors } from "@/lib/connectors-load"
 import { constructMetadata } from "@/lib/metadata"
 import { getSession } from "@/lib/session"
+import { ConnectorsLoading } from "@/components/connectors/connectors-loading"
 import { ConnectorsWorkspace } from "@/components/connectors/connectors-workspace"
 
 /**
@@ -31,9 +32,14 @@ type Props = {
   searchParams: Promise<{ open?: string; show?: string; github?: string }>
 }
 
+/**
+ * The fallback is the workspace's frame (ConnectorsLoading): the title, the
+ * heads and DataList's static loading rows at their final size, so a client
+ * navigation opens the page at once and nothing moves when the reads land.
+ */
 export default function ConnectorsPage({ searchParams }: Props) {
   return (
-    <Suspense>
+    <Suspense fallback={<ConnectorsLoading />}>
       <Connectors searchParams={searchParams} />
     </Suspense>
   )

@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { useReducedMotion } from "@/components/kit/use-reduced-motion"
 
+import { useOnScreen } from "./use-on-screen"
+
 import type { MascotState } from "./engine"
 import {
   NIB_STROKE,
@@ -123,6 +125,8 @@ export function SmoothFriend({
   const shown = React.useRef<SmoothPose>(mountPose)
   const from = React.useRef<SmoothPose | null>(null)
   const speedRef = React.useRef(speed)
+  const svgRef = React.useRef<SVGSVGElement | null>(null)
+  const onScreen = useOnScreen(svgRef)
 
   React.useEffect(() => {
     speedRef.current = speed
@@ -136,9 +140,9 @@ export function SmoothFriend({
     first.current = false
   }, [state])
 
-  // The clock.
+  // The clock: only while the friend is on screen (useOnScreen).
   React.useEffect(() => {
-    if (frozen || paused || reduced) return
+    if (frozen || paused || reduced || !onScreen) return
     let raf = 0
     let prev: number | null = null
     const tick = (now: number) => {
@@ -156,7 +160,7 @@ export function SmoothFriend({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [state, frozen, paused, reduced])
+  }, [state, frozen, paused, reduced, onScreen])
 
   // Reduced motion: the held pose. A one-shot cuts to its `then` once.
   React.useEffect(() => {
@@ -184,6 +188,7 @@ export function SmoothFriend({
       {...a11y}
       ref={(el) => {
         parts.current.svg = el
+        svgRef.current = el
       }}
       data-slot="smooth-friend"
       data-state={shownState}

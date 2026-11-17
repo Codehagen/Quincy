@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
 import { getSession } from "@/lib/session"
@@ -29,7 +30,22 @@ export const metadata = constructMetadata({
  * so the day is a ListHeading over its rows rather than a date repeated at
  * the end of every one.
  */
-export default async function ConversationsPage() {
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation the layout's boundary is above what re-renders, so the
+ * old page held until every read landed. The fallback is the page's frame,
+ * its title (states.md, "Working"), so the page opens at once and the title
+ * never moves when the rest arrives.
+ */
+export default function ConversationsPage() {
+  return (
+    <Suspense fallback={<KitPage title="Conversations">{null}</KitPage>}>
+      <Conversations />
+    </Suspense>
+  )
+}
+
+async function Conversations() {
   const session = await getSession()
 
   if (!session) {

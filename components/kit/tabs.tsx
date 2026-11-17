@@ -88,7 +88,7 @@ export function TabList({ children, size = "md", ...props }: TabListProps) {
       {...props}
       data-slot="kit-tab-list"
       data-size={size}
-      className={`${SEGMENT_TRACK} ${size === "xs" ? `${DENSE_HEIGHT.xs} group/kit-tab-list text-kit-dense` : SEGMENT_HEIGHT[size]} inline-flex`}
+      className={`${SEGMENT_TRACK} group/kit-tab-list ${size === "xs" ? `${DENSE_HEIGHT.xs} text-kit-dense` : SEGMENT_HEIGHT[size]} inline-flex`}
     >
       <TabsPrimitive.Indicator
         className={`${SEGMENT_THUMB} top-1 bottom-1 left-(--active-tab-left) w-(--active-tab-width)`}
@@ -111,12 +111,20 @@ export type TabProps = Omit<Unstyled<TabsPrimitive.Tab.Props>, "value" | "childr
   count?: number
 }
 
+/**
+ * Until the page runs, the measured indicator is `hidden` (it has nothing to
+ * measure yet), so the server's HTML painted the active label in
+ * --kit-primary-on on no fill. The active tab carries the ink itself while
+ * the indicator is hidden; the indicator then lands on the same box.
+ */
+const ACTIVE_BEFORE_MEASURE = "group-has-[>[role=presentation][hidden]]/kit-tab-list:data-active:bg-kit-primary"
+
 export function Tab({ children, count, ...props }: TabProps) {
   return (
     <TabsPrimitive.Tab
       {...props}
       data-slot="kit-tab"
-      className={`${SEGMENT_ITEM} gap-1.5 group-data-[size=xs]/kit-tab-list:px-2.5 data-active:text-kit-primary-on data-active:hover:text-kit-primary-on`}
+      className={`${SEGMENT_ITEM} gap-1.5 group-data-[size=xs]/kit-tab-list:px-2.5 data-active:text-kit-primary-on data-active:hover:text-kit-primary-on ${ACTIVE_BEFORE_MEASURE}`}
     >
       {children}
       {count != null ? (

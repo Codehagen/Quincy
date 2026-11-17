@@ -34,6 +34,7 @@ import {
   revealDataListRow,
   useAnnounce,
   useLetterKeys,
+  useWorkspaceFold,
   type DataListGroup,
 } from "@/components/kit"
 import { Friend } from "@/components/mascot"
@@ -42,13 +43,15 @@ import { writesSentence } from "@/components/quincy"
 
 import { AdaptBox } from "./adapt-box"
 import { ChannelGaps } from "./channel-gap"
-import { IDEA_COLUMNS, IdeaChannels, IdeaShape, DATA_WIDE_PX, ROW_FIXED_PX, SOURCE_COLUMN_PX } from "./idea-cells"
+import { DETAIL_WIDTH } from "./ideas-fold"
+import { IDEA_COLUMNS, IdeaChannels, IdeaShape } from "./idea-cells"
 import { ageOf, dayOf, filtersOn, optionsFor, sourceName, type IdeaRow, type StatusFilter } from "./idea-rows"
 import { MarginIdea, MarkedUp, MarkedUpColumns, MarkedUpMargin, MarkedUpProse, MarkedUpTitle } from "./marked-up"
 import { RecordBox } from "./record-box"
 import { RiffsRefresh } from "./riffs-refresh"
 import { Steer } from "./steer"
 import { asideSentence, useIdeas, type DraftRefusal, type IdeasState } from "./use-ideas"
+import "./ideas.css"
 
 /**
  * /ideas, a workspace (docs/design/workspace.md; decisions.md, "Ideas is a
@@ -74,45 +77,7 @@ export type IdeasWorkspaceProps = {
   pace: IdeasPace
 }
 
-/** The fixed pane: a share of the workspace between a floor and a ceiling (workspace-lab DECISION.md). */
-const DETAIL_MIN = 440
-const DETAIL_MAX = 560
-const DETAIL_SHARE = 0.36
-const DETAIL_WIDTH = `clamp(${DETAIL_MIN}px, ${DETAIL_SHARE * 100}cqi, ${DETAIL_MAX}px)`
-
-/** Under this the page is a phone or a split tablet: one column. */
-const FOLD_MIN_WIDTH = 900
-/** The narrowest title column the table may leave before it folds. */
-const TITLE_MIN = 320
-
-/**
- * Fold when the workspace is under 900, or when the detail pane would leave
- * the title column under 320 (at the defaults: a workspace under ~1053px).
- * Measured on the page's own width, never the viewport's.
- */
-export function shouldFold(width: number) {
-  if (width < FOLD_MIN_WIDTH) return true
-  const detail = Math.min(DETAIL_MAX, Math.max(DETAIL_MIN, width * DETAIL_SHARE))
-  const list = width - detail - 1
-  const title = list - ROW_FIXED_PX - (list >= DATA_WIDE_PX ? SOURCE_COLUMN_PX : 0)
-  return title < TITLE_MIN
-}
-
-function useFold(ref: React.RefObject<HTMLDivElement | null>) {
-  const [fold, setFold] = React.useState<boolean | null>(null)
-  React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const measure = () => setFold(shouldFold(el.clientWidth))
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [ref])
-  return fold
-}
-
-const KEYS = [
+export const KEYS = [
   { keys: ["j", "k"], label: "Move" },
   { keys: ["D"], label: "Draft" },
   { keys: ["N"], label: "Not this one" },
@@ -121,20 +86,20 @@ const KEYS = [
 ] as const
 
 export function IdeasWorkspace(props: IdeasWorkspaceProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const fold = useFold(ref)
+  // CSS picks the side (ideas.css); script reads which, after mount.
+  const [probe, fold] = useWorkspaceFold()
   return (
-    <WorkspacePage ref={ref}>
-      {/* Hidden only until the first measure (before paint), so a narrow
-          screen never flashes the table before it folds. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
-        <IdeasSurface {...props} fold={fold === true} />
+    <WorkspacePage>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <span ref={probe} aria-hidden className="ideas-fold-probe" />
+        <IdeasSurface {...props} fold={fold} />
       </div>
     </WorkspacePage>
   )
 }
 
-function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps & { fold: boolean }) {
+/** `fold` is null until mounted: both sides render, each in its slot, and CSS shows one. */
+function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps & { fold: boolean | null }) {
   const ideas = useIdeas(riffs)
   const searchRef = React.useRef<HTMLInputElement>(null)
   const [steering, setSteering] = React.useState(false)
@@ -254,9 +219,10 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
         <>
           <IdeasFilters
             ideas={ideas}
-            view={fold ? null : <ViewSwitch value={view} onValueChange={setView} />}
+            view={fold === true ? null : <ViewSwitch value={view} onValueChange={setView} />}
           />
-          {fold ? (
+          <div className="ideas-folded">
+          {fold !== false ? (
             <InlineIdeas
               ideas={ideas}
               detail={(row) => (
@@ -272,7 +238,10 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
                 </div>
               )}
             />
-          ) : (
+          ) : null}
+          </div>
+          <div className="ideas-unfolded">
+          {fold !== true ? (
             <WorkspacePanes>
               <Panel label="Ideas">
                 <PanelBody>
@@ -315,7 +284,8 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
                 </PanelBody>
               </Panel>
             </WorkspacePanes>
-          )}
+          ) : null}
+          </div>
         </>
       )}
 
@@ -402,10 +372,11 @@ function IdeasFilters({ ideas, view }: { ideas: IdeasState; view: React.ReactNod
       <ToolbarGroup end>
         <span className="font-kit-mono text-kit-mono-sm whitespace-nowrap text-kit-ink-muted tabular-nums">{count}</span>
         {view ? (
-          <>
+          // Off under the fold, where the one column has no view to switch.
+          <span className="ideas-unfolded">
             <ToolbarDivider />
             {view}
-          </>
+          </span>
         ) : null}
       </ToolbarGroup>
     </Toolbar>

@@ -41,7 +41,44 @@ component: the two pieces are the whole pattern.
   finishes, the line is replaced by the result (Arrive), not by "Done".
 - A button that started the work shows its own `pendingLabel` (buttons.md);
   the working line is for work that outlives the press.
-- A route-level `<Suspense>` fallback is `null` or this line. Never bars.
+- A route-level `<Suspense>` fallback holds the page's frame (below).
+
+### A page while its reads land
+
+**A page's `<Suspense>` fallback is the page's own frame at its final size:
+the title, and on a workspace the toolbars, the column heads over
+`DataList status="loading"` (eight static rows on the real grid) and the
+open item's pane. Where the page has no list, the title alone, or this
+working line when the wait is Quincy reading (Numbers). Never `null`, never
+a Skeleton for prose, never a shimmer.**
+
+Why: on a client navigation the layout's boundary is already shown, so the
+page's own boundary is what the person sees first. With `null` the main
+area went blank and the whole page popped in; with no boundary at all the
+old page held until every read was back. The frame opens at once and the
+data lands in place, so nothing moves. DataList's loading rows are the
+kit's one loading shape, static, and on the same grid as the rows that
+replace them.
+<!-- 2026-11-17: the owner asked for skeletons, done as best practice, across every page -->
+
+```tsx
+// Correct — a workspace: its frame, extracted next to it (components/drafts/drafts-loading.tsx)
+<Suspense fallback={<DraftsLoading />}><Drafts /></Suspense>
+
+// Correct — a KitPage with no list: the title (and a summary that does not depend on the data)
+<Suspense fallback={<KitPage title="Credits" summary={SUMMARY}>{null}</KitPage>}><Credits /></Suspense>
+
+// Incorrect — the main area blank until the data is back, then the page pops in
+<Suspense><Drafts /></Suspense>
+```
+
+- The frame is the page's, not a copy of it: build it from the
+  workspace's fold classes, columns and keys, so the two cannot drift
+  apart. The fold is CSS (workspace.md), so the frame needs no script.
+- A frame says nothing it cannot know: no counts, no dates, no summary
+  that depends on the data. Lineup's day heads are blank for that reason.
+- A page whose title is its data (a channel, a rhythm) keeps no fallback
+  of its own until the title can be read from the route.
 
 ## Empty
 

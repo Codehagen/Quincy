@@ -40,6 +40,7 @@ import {
   focusRestoredDataList,
   revealDataListRow,
   useLetterKeys,
+  useWorkspaceFold,
   type DataListColumn,
 } from "@/components/kit"
 import { useControllable } from "@/components/kit/use-controllable"
@@ -61,8 +62,14 @@ import { Climb, MultipleBar } from "./charts"
 
 type Row = { post: Post; multiple: number | null }
 
-/** Below this width of workspace the pane folds and a row opens in place. */
-const FOLD = 900
+/**
+ * Below 900px of workspace the pane folds and a row opens in place. The fold
+ * is CSS (useWorkspaceFold), so a link straight to Table paints the right
+ * side at once. Literal, so Tailwind sees the classes.
+ */
+const FOLDED = "contents @[900px]/kit-workspace:hidden"
+const UNFOLDED = "hidden @[900px]/kit-workspace:contents"
+const FOLD_PROBE = "block @[900px]/kit-workspace:hidden"
 const PANE = "clamp(400px, 40cqi, 560px)"
 
 const SHOW_LABEL: Record<Show, string> = {
@@ -98,24 +105,10 @@ export type NumbersTableProps = {
 export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, onValueChange, onPeriodChange, onBack }: NumbersTableProps) {
   const [table, setState] = useControllable(value, defaultValue, onValueChange)
   const setTable = (next: Partial<TableState>) => setState({ ...table, ...next })
-  const [fold, setFold] = React.useState<boolean | null>(null)
+  // CSS picks the side; script reads which, after mount (null until then: both render, CSS shows one).
+  const [probe, fold] = useWorkspaceFold()
   const [detail, setDetail] = React.useState(table.post !== null)
   const { against, order, show } = table
-
-  // Measured on Table's own root, which spans the workspace. The workspace's
-  // ref is not attached yet when this runs on a first load (a parent's ref
-  // lands after its children's layout effects), so a link straight to Table
-  // stayed hidden.
-  const rootRef = React.useRef<HTMLDivElement>(null)
-  React.useLayoutEffect(() => {
-    const el = rootRef.current
-    if (!el) return
-    const measure = () => setFold(el.clientWidth < FOLD)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const all: Row[] = read.scored
   const people = data.people
@@ -276,7 +269,8 @@ export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, 
   const shows = (people === null ? (["all", "replies"] as const) : (["all", "replies", "returning"] as const)) satisfies readonly Show[]
 
   return (
-    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <span ref={probe} aria-hidden className={FOLD_PROBE} />
       <Toolbar label="Filters" size="filter">
         <ToolbarGroup>
           <FilterMenu
@@ -322,7 +316,8 @@ export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, 
           </span>
         </ToolbarGroup>
       </Toolbar>
-      {fold ? (
+      <div className={FOLDED}>
+      {fold !== false ? (
         detail && openRow ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="px-kit-group pt-kit-related">
@@ -347,7 +342,10 @@ export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, 
             {list}
           </div>
         )
-      ) : (
+      ) : null}
+      </div>
+      <div className={UNFOLDED}>
+      {fold !== true ? (
         <WorkspacePanes>
           <Panel label="Posts">
             <PanelBody>{list}</PanelBody>
@@ -371,7 +369,8 @@ export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, 
             </PanelBody>
           </Panel>
         </WorkspacePanes>
-      )}
+      ) : null}
+      </div>
       <KeyBar
         keys={[
           { keys: ["j", "k"], label: "Move" },

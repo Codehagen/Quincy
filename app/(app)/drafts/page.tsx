@@ -4,6 +4,7 @@ import { listConnections } from "@/lib/channels"
 import { getDrafts } from "@/lib/drafts"
 import { feedAccounts } from "@/lib/feed-accounts"
 import { getSession } from "@/lib/session"
+import { DraftsLoading } from "@/components/drafts/drafts-loading"
 import { DraftsWorkspace } from "@/components/drafts/drafts-workspace"
 import { constructMetadata } from "@/lib/metadata"
 
@@ -47,10 +48,14 @@ export const metadata = constructMetadata({
  * what re-renders, so the uncached reads would block the navigation (Next's
  * instant-navigation check flags exactly that). The same boundary covers
  * `useQueryState`, which reads which piece is open (`?piece=`).
+ *
+ * The fallback is the workspace's frame (DraftsLoading): the title, the
+ * heads and DataList's static loading rows at their final size, so the page
+ * opens at once and nothing moves when the drafts land (states.md).
  */
 export default function DraftsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<DraftsLoading />}>
       <Drafts />
     </Suspense>
   )

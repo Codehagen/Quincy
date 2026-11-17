@@ -50,7 +50,7 @@ const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 type Proposal = { dayId: string; minute: number }
 
-export function LineupCalendar({ store, accounts, mode, pane, notes }: { store: LineupStore; accounts: FeedAccounts; mode: "week" | "day"; pane: number; notes: { on: boolean; set: (on: boolean) => void } }) {
+export function LineupCalendar({ store, accounts, mode, notes }: { store: LineupStore; accounts: FeedAccounts; mode: "week" | "day"; notes: { on: boolean; set: (on: boolean) => void } }) {
   const announce = useAnnounce()
   const { clock, days } = store
   const thisWeek = store.week.week === store.week.thisWeek
@@ -159,7 +159,8 @@ export function LineupCalendar({ store, accounts, mode, pane, notes }: { store: 
             </PanelBody>
           </WeekCalendar>
         </Panel>
-        <Panel label="Open post" width={`${pane}px`} edge="start">
+        {/* 320, or 380 from 1200px of workspace: lineup.css sets the variable. */}
+        <Panel label="Open post" width="var(--lineup-pane)" edge="start">
           <PanelBody label="The open post" scrollKey={open?.key ?? (proposal ? `${proposal.dayId}${proposal.minute}` : null)}>
             {proposal ? (
               <ProposalPane proposal={proposal} store={store} onDone={() => setProposal(null)} />

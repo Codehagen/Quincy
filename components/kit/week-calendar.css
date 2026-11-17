@@ -167,7 +167,6 @@
   pointer-events: auto;
   cursor: pointer;
   user-select: none;
-  will-change: translate;
   transition:
     translate 380ms var(--wc-spring),
     scale 150ms ease-out,
@@ -178,6 +177,13 @@
 .wc-block[data-movable] {
   cursor: grab;
   touch-action: none;
+}
+/* A layer of its own only while it moves (a drag, a key hold): a hint on
+   every block would hold a layer per block for the whole page's life. */
+.wc-block[data-dragging],
+.wc-block[data-held],
+.wc-block[data-lifted] {
+  will-change: translate;
 }
 /* Under the pointer: it glides between the snaps, so it follows without a
    jump and without lag. */

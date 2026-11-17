@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
 import { getSession } from "@/lib/session"
@@ -54,7 +55,24 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function RhythmPage() {
+const SUMMARY = `${LIVE_RHYTHMS.length} things I do on my own, and when.`
+
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation the layout's boundary is above what re-renders, so the
+ * old page held until every read landed. The fallback is the page's frame,
+ * its title (states.md, "Working"), so the page opens at once and the title
+ * never moves when the rest arrives.
+ */
+export default function RhythmPage() {
+  return (
+    <Suspense fallback={<KitPage title="Rhythm" summary={SUMMARY}>{null}</KitPage>}>
+      <Rhythm />
+    </Suspense>
+  )
+}
+
+async function Rhythm() {
   const session = await getSession()
   if (!session) {
     redirect("/login?next=/rhythm")
@@ -102,7 +120,7 @@ export default async function RhythmPage() {
       title="Rhythm"
       // Counted, not written. The page is short and a reader is owed the
       // reason: this is everything, not the first screen of something.
-      summary={`${LIVE_RHYTHMS.length} things I do on my own, and when.`}
+      summary={SUMMARY}
     >
       <RhythmGrid lastRun={lastRun} cards={cards} />
 

@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 
@@ -36,7 +37,22 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function BrainPage() {
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation the layout's boundary is above what re-renders, so the
+ * old page held until every read landed. The fallback is the page's frame,
+ * its title (states.md, "Working"), so the page opens at once and the title
+ * never moves when the rest arrives.
+ */
+export default function BrainPage() {
+  return (
+    <Suspense fallback={<KitPage title="Brain">{null}</KitPage>}>
+      <Brain />
+    </Suspense>
+  )
+}
+
+async function Brain() {
   const session = await getSession()
   if (!session) {
     redirect("/login?next=/brain")

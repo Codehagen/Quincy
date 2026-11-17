@@ -896,8 +896,11 @@ function TrayItem({ value, onPlace, className, onClick, onPointerDown, children,
           },
           onMove: ({ x, y }) => {
             preview?.move(x, y)
-            last = at(x, y)
-            setDropAt(last)
+            // The preview follows every move; the calendar re-renders only
+            // when the snapped place under it changes, not once a pointer event.
+            const next = at(x, y)
+            if (next?.day !== last?.day || next?.minute !== last?.minute) setDropAt(next)
+            last = next
           },
           onEnd: (_e, canceled) => {
             preview?.remove()

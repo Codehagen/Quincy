@@ -10,6 +10,7 @@ import { DraftFeed, type FeedAccount, type FeedField } from "./draft-feed"
 import { DraftVerbs, Notices, STRANDED, type DraftAction } from "./draft-verbs"
 import type { Row } from "./draft-rows"
 import type { DraftsStore } from "./use-drafts"
+import { MARK_COLUMN_PX } from "./drafts-fold"
 
 /**
  * The open draft (decided on /prototypes/drafts-lab, round 2, "C · Feed"):
@@ -22,8 +23,6 @@ import type { DraftsStore } from "./use-drafts"
 /** The width each platform's column is drawn at, before the room narrows it. */
 const OBJECT_WIDTH: Record<string, string> = { x: "598px", linkedin: "555px" }
 
-/** The margin column beside the feed (narrower than the kit's 170, so the pane is 798). */
-export const MARK_COLUMN_PX = 150
 
 /** Who each channel's post is from, and who it is from where no channel is connected. */
 export type FeedAccounts = { byChannel: Record<string, FeedAccount>; fallback: FeedAccount }

@@ -46,8 +46,10 @@ Does the summary change with what the person does on the page (a live Count)?
  ├── No  → KitPage in page.tsx (a server component); the screen is its child
  └── Yes → the client screen renders KitPage itself, so the summary and the
            Stages read one state. page.tsx renders the screen.
-Either way: KitPage is never under a <Suspense> that waits on data. The title
-renders before the data, so the page never opens blank.
+Either way: the title renders before the data, so the page never opens
+blank. KitPage stands outside the <Suspense> that waits on data, or that
+Suspense's fallback is the same KitPage with the title (states.md, "A page
+while its reads land").
 ```
 
 Do not split the state to keep KitPage on the server (a provider around
@@ -73,8 +75,9 @@ renders KitPage at once, and `use()`s the promise in a child inside its own
 **A page that reads `searchParams`** (Next 16, `cacheComponents` is on):
 KitPage and the title stay outside the read, and the promise goes
 to a child inside `<Suspense>`. Awaiting it at the top of `page.tsx` is a
-build error. The fallback is `null` or a LiveDot line (states.md), never a
-Skeleton.
+build error. KitPage is already on screen, so the fallback is `null`, the
+working line, or DataList's loading rows for a list (states.md), never a
+Skeleton for prose.
 
 ```tsx
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
@@ -244,8 +247,9 @@ the title, not the gutter, not the top and bottom air, not the gaps.
   its controls past the Show control (`--kit-shell-inset`).
 - **The fold is the page's.** Under ~900px of workspace (or where the
   detail pane would leave the title column under 320) the page renders one
-  column whose rows open in place, from the same store. Measured on the
-  frame (`ref`), never the viewport.
+  column whose rows open in place, from the same store. CSS draws the
+  fold, from the frame's own width, never the viewport (workspace.md,
+  "The fold is CSS").
 
 ```tsx
 // Correct — the frame, then its rows: toolbars, panes, foot

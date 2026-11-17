@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { useReducedMotion } from "@/components/kit/use-reduced-motion"
 
+import { useOnScreen } from "./use-on-screen"
+
 import {
   type Cursor,
   type MascotState,
@@ -77,6 +79,8 @@ export function PixelFriend({
   const [handedOver, setHandedOver] = React.useState<MascotState | null>(null)
   const elapsed = React.useRef(0)
   const speedRef = React.useRef(speed)
+  const svgRef = React.useRef<SVGSVGElement>(null)
+  const onScreen = useOnScreen(svgRef)
 
   // A new state starts from its own beginning (state derived during render,
   // so the first frame of the new state paints with the change).
@@ -94,9 +98,9 @@ export function PixelFriend({
     elapsed.current = 0
   }, [state])
 
-  // The clock.
+  // The clock: only while the friend is on screen (useOnScreen).
   React.useEffect(() => {
-    if (frozen || paused || reduced) return
+    if (frozen || paused || reduced || !onScreen) return
     let raf = 0
     let prev: number | null = null
     const tick = (now: number) => {
@@ -109,7 +113,7 @@ export function PixelFriend({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [state, frozen, paused, reduced])
+  }, [state, frozen, paused, reduced, onScreen])
 
   // Reduced motion: the first frame, held. A one-shot cuts to its `then`
   // once, when it would have ended.
@@ -143,6 +147,7 @@ export function PixelFriend({
   return (
     <svg
       {...a11y}
+      ref={svgRef}
       data-slot="pixel-friend"
       data-state={shown.state}
       data-frame={shown.index}

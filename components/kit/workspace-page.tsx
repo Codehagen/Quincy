@@ -37,7 +37,7 @@ import { Announcer } from "./announcer"
  */
 export type WorkspacePageProps = {
   children: React.ReactNode
-  /** The element to measure (a fold decision); the frame's root. */
+  /** The frame's root. A fold is CSS (useWorkspaceFold), never a measure of this. */
   ref?: React.Ref<HTMLDivElement>
 }
 

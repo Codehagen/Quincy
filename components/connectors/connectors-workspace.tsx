@@ -32,8 +32,10 @@ import {
   focusRestoredDataList,
   revealDataListRow,
   useLetterKeys,
+  useWorkspaceFold,
   type DataListColumn,
   type DataListGroup,
+  type KeyBarItem,
 } from "@/components/kit"
 import { ICON_DENSE_CHEVRON } from "@/components/kit/control-styles"
 import { FILTERS, isConnected, type Connector as ConnectorData, type ConnectorFilter } from "@/lib/connectors"
@@ -65,33 +67,27 @@ export type ConnectorsWorkspaceProps = OpenConnectorState & {
   defaultFilter?: ConnectorFilter
 }
 
-/** Under this the workspace is a phone or a split tablet: the cards. */
-const FOLD = 900
-
-function useFold(ref: React.RefObject<HTMLDivElement | null>) {
-  const [fold, setFold] = React.useState<boolean | null>(null)
-  React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const measure = () => setFold(el.clientWidth < FOLD)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [ref])
-  return fold
-}
+/**
+ * Under 900px of workspace it is a phone or a split tablet: the cards. The
+ * fold is CSS (useWorkspaceFold), so the server's HTML paints the right side
+ * at once. Literal, so Tailwind sees the classes.
+ */
+export const FOLD_AT = 900
+export const FOLDED = "contents @[900px]/kit-workspace:hidden"
+export const UNFOLDED = "hidden @[900px]/kit-workspace:contents"
+export const FOLD_PROBE = "block @[900px]/kit-workspace:hidden"
 
 export function ConnectorsWorkspace({ connectors, defaultFilter, ...open }: ConnectorsWorkspaceProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const fold = useFold(ref)
+  // CSS picks the side; script reads which, after mount. Until then both
+  // render, each in its slot, and CSS shows one.
+  const [probe, fold] = useWorkspaceFold()
   const store = useConnectors(connectors, { ...open, defaultFilter })
   return (
-    <WorkspacePage ref={ref}>
-      {/* Hidden only until the first measure (before paint), so a narrow
-          screen never flashes the table before it folds. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
-        {fold ? <ConnectorsGrid store={store} /> : <ConnectorsTable store={store} />}
+    <WorkspacePage>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <span ref={probe} aria-hidden className={FOLD_PROBE} />
+        <div className={FOLDED}>{fold !== false ? <ConnectorsGrid store={store} /> : null}</div>
+        <div className={UNFOLDED}>{fold !== true ? <ConnectorsTable store={store} /> : null}</div>
       </div>
     </WorkspacePage>
   )
@@ -99,7 +95,7 @@ export function ConnectorsWorkspace({ connectors, defaultFilter, ...open }: Conn
 
 /* ── The table ────────────────────────────────────────────────────── */
 
-const COLUMNS: DataListColumn<ConnectorData>[] = [
+export const COLUMNS: DataListColumn<ConnectorData>[] = [
   {
     id: "mark",
     header: "",
@@ -250,15 +246,15 @@ function ConnectorsTable({ store }: { store: ConnectorsStore }) {
           </Panel>
         </WorkspacePanes>
       </FilterPanels>
-      <KeyBar
-        keys={[
-          { keys: ["j", "k"], label: "Move" },
-          { keys: ["/"], label: "Search" },
-        ]}
-      />
+      <KeyBar keys={KEYS} />
     </FilterTabs>
   )
 }
+
+export const KEYS: readonly KeyBarItem[] = [
+  { keys: ["j", "k"], label: "Move" },
+  { keys: ["/"], label: "Search" },
+]
 
 /* ── The fold ─────────────────────────────────────────────────────── */
 

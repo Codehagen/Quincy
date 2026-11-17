@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm"
 
@@ -34,7 +35,24 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function SettingsPage() {
+const SUMMARY = "What Quincy knows about the account, and how to correct it."
+
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation the layout's boundary is above what re-renders, so the
+ * old page held until every read landed. The fallback is the page's frame,
+ * its title (states.md, "Working"), so the page opens at once and the title
+ * never moves when the rest arrives.
+ */
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<KitPage title="Settings" summary={SUMMARY}>{null}</KitPage>}>
+      <Settings />
+    </Suspense>
+  )
+}
+
+async function Settings() {
   const session = await getSession()
 
   // The layout has already redirected anyone without a session. This is the
@@ -269,7 +287,7 @@ export default async function SettingsPage() {
   return (
     <KitPage
       title="Settings"
-      summary="What Quincy knows about the account, and how to correct it."
+      summary={SUMMARY}
     >
       <SettingsBriefing
         name={account.name?.trim() || account.email}

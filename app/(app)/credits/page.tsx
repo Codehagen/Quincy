@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
 import { getSession } from "@/lib/session"
@@ -32,7 +33,24 @@ export const metadata = constructMetadata({
  * tabular mono so the columns line up, and an EmptyState with the friend when
  * nothing has been spent this month.
  */
-export default async function CreditsPage() {
+const SUMMARY = "What Quincy spent, and what it went on."
+
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation the layout's boundary is above what re-renders, so the
+ * old page held until every read landed. The fallback is the page's frame,
+ * its title (states.md, "Working"), so the page opens at once and the title
+ * never moves when the rest arrives.
+ */
+export default function CreditsPage() {
+  return (
+    <Suspense fallback={<KitPage title="Credits" summary={SUMMARY}>{null}</KitPage>}>
+      <Credits />
+    </Suspense>
+  )
+}
+
+async function Credits() {
   const session = await getSession()
 
   // The layout already gates on a session; this is the narrowing, not the
@@ -64,7 +82,7 @@ export default async function CreditsPage() {
   ]
 
   return (
-    <KitPage title="Credits" summary="What Quincy spent, and what it went on.">
+    <KitPage title="Credits" summary={SUMMARY}>
       {summary.turns === 0 ? (
         <Stage aria-label="Credits">
           <EmptyState

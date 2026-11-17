@@ -106,13 +106,3 @@ export const IDEA_COLUMNS: readonly DataListColumn<IdeaRow>[] = [
     cell: (r) => <DataListMono>{ageOf(r.riff)}</DataListMono>,
   },
 ]
-
-/**
- * What a row spends outside the title column, in px, from the columns above:
- * 8+8 inset, 12+12 padding, the 16 glyph, Shape 88, For 52, Age 48, and four
- * 12px gaps. From a 46rem list the Source column (120 + a gap) joins. The
- * fold reads these (ideas-workspace.tsx, `shouldFold`).
- */
-export const ROW_FIXED_PX = 16 + 24 + 16 + 88 + 52 + 48 + 4 * 12
-export const SOURCE_COLUMN_PX = 120 + 12
-export const DATA_WIDE_PX = 736

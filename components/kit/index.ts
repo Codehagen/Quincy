@@ -43,6 +43,7 @@ export { UndoBar, type UndoBarProps } from "./undo-bar"
 export { Arrive, type ArriveProps } from "./arrive"
 export { useInView } from "./use-in-view"
 export { useRevealOnNarrow } from "./use-reveal-on-narrow"
+export { useWorkspaceFold } from "./use-workspace-fold"
 export { useReducedMotion } from "./use-reduced-motion"
 export { useModKey } from "./use-mod-key"
 

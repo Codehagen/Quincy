@@ -5,6 +5,7 @@ import { feedAccounts } from "@/lib/feed-accounts"
 import { getLineupWeek } from "@/lib/lineup"
 import { getSession } from "@/lib/session"
 import { dayKeyIn, hhmmIn, resolveTimeZone } from "@/lib/timezone"
+import { LineupLoading } from "@/components/lineup/lineup-loading"
 import { LineupWorkspace } from "@/components/lineup/lineup-workspace"
 import { constructMetadata } from "@/lib/metadata"
 
@@ -36,11 +37,12 @@ export const metadata = constructMetadata({
 /**
  * The reads sit under the page's own Suspense, as on /drafts: on a client
  * navigation the layout's boundary is above what re-renders, so the uncached
- * reads would block it.
+ * reads would block it. The fallback is the workspace's frame (LineupLoading):
+ * the title, and the calendar's hours and columns at their final size.
  */
 export default function LineupPage({ searchParams }: { searchParams: Promise<{ week?: string | string[] }> }) {
   return (
-    <Suspense>
+    <Suspense fallback={<LineupLoading />}>
       <Lineup searchParams={searchParams} />
     </Suspense>
   )

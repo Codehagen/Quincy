@@ -186,8 +186,45 @@ The fixed pane's width is a share of the **workspace**, in `cqi` on a
 container around the panes, never `vw`: the sidebar is not the page's.
 Under the fold (a workspace under ~900px, or where the title column would
 drop under 320px) the page folds to one column whose rows open in place
-(components/riffs/ideas-workspace.tsx, `shouldFold`). Fold on the page's own
+(components/riffs/ideas-fold.ts, `shouldFold`). Fold on the page's own
 width, never the viewport.
+
+### The fold is CSS
+
+**Each side of the fold sits in a slot whose container query on
+`kit-workspace` shows or hides it. Script never decides the layout: it
+reads which side CSS is showing (`useWorkspaceFold`, from an empty probe
+CSS shows only under the fold) and uses that for behaviour (keys, where a
+row opens). Until mount both sides render, each in its slot; after, only
+the one showing.**
+
+Why: a fold measured in script cannot be drawn until the script runs, so
+the server's HTML was hidden until hydration and the page painted late on
+every full load. In CSS the first paint is already the right side, and
+since script reads CSS rather than measuring on its own, the two cannot
+disagree, so nothing swaps at hydration.
+
+```tsx
+// Correct — CSS picks; script reads (components/drafts/drafts-fold.ts)
+const [probe, fold] = useWorkspaceFold()
+<span ref={probe} aria-hidden className="block @[1179px]/kit-workspace:hidden" />
+<div className="contents @[1179px]/kit-workspace:hidden">{fold !== false ? <OneColumn /> : null}</div>
+<div className="hidden @[1179px]/kit-workspace:contents">{fold !== true ? <TableAndPane /> : null}</div>
+
+// Incorrect — the page hidden until script has measured it
+<div style={fold === null ? { visibility: "hidden" } : undefined}>{fold ? <OneColumn /> : <TableAndPane />}</div>
+```
+
+- The switch point is a literal in the class or the CSS file, so Tailwind
+  sees it. The rule it stands for (`shouldFold`, `modeFor`) lives in its
+  own module free of the kit, and a test holds the two together.
+- A fold that is not one width is still CSS: Ideas folds again from 1177
+  to 1184 (ideas.css), Lineup has three layouts and a touch rule
+  (lineup.css). A pane width that steps is a CSS variable set by the same
+  queries (`--lineup-pane`).
+- A loading frame (states.md) uses the same slots, so it needs no script.
+- What CSS cannot set is a scroll position. Lineup's calendar opens on
+  07:00 once script runs; until then a full load shows midnight.
 
 ## KeyBar and FootBar
 

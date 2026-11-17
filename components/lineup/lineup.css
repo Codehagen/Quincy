@@ -346,3 +346,67 @@
     scale: 1;
   }
 }
+
+/* ── The layout, in CSS ──
+   `modeFor` (lineup-layout.ts) as container queries on the workspace,
+   so the server's HTML paints the right layout at once: the Feed under
+   860px and on any touch screen, one day from 860, the week from 1020, and
+   the pane 380 from 1200 (320 under it). Script reads the probes back
+   (useWorkspaceFold) for the keys; it never measures a width of its own.
+   lineup-fold.test.ts holds these numbers to `modeFor`. */
+.lineup-surface {
+  --lineup-pane: 320px;
+}
+.lineup-feed-only {
+  display: contents;
+}
+.lineup-feed-probe {
+  display: block;
+}
+.lineup-cal-only,
+.lineup-day-only,
+.lineup-week-only,
+.lineup-week-probe {
+  display: none;
+}
+@container kit-workspace (width >= 860px) {
+  .lineup-feed-only,
+  .lineup-feed-probe {
+    display: none;
+  }
+  .lineup-cal-only,
+  .lineup-day-only {
+    display: contents;
+  }
+}
+@container kit-workspace (width >= 1020px) {
+  .lineup-day-only {
+    display: none;
+  }
+  .lineup-week-only {
+    display: contents;
+  }
+  .lineup-week-probe {
+    display: block;
+  }
+}
+@container kit-workspace (width >= 1200px) {
+  .lineup-surface {
+    --lineup-pane: 380px;
+  }
+}
+/* A finger needs 44px; a quarter hour on the calendar is 14. Last, so it wins. */
+@media (pointer: coarse) {
+  .lineup-feed-only {
+    display: contents;
+  }
+  .lineup-feed-probe {
+    display: block;
+  }
+  .lineup-cal-only,
+  .lineup-day-only,
+  .lineup-week-only,
+  .lineup-week-probe {
+    display: none;
+  }
+}
