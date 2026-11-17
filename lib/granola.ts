@@ -192,7 +192,11 @@ export async function fetchGranolaNote(
       if (res.status === 403) break
       if (!res.ok) return fail(res.status)
       const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
-      if (Array.isArray(body?.transcript)) items.push(...body.transcript)
+      // A page that will not decode is a retry, never the end of the transcript:
+      // returning what came before would store a truncated call, and the dedup
+      // key would stop the redelivery that could have read the rest.
+      if (!body || !Array.isArray(body.transcript)) return fail(502)
+      items.push(...body.transcript)
       cursor = typeof body?.cursor === "string" ? body.cursor : null
       if (!body?.hasMore || !cursor) break
     }

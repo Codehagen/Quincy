@@ -386,28 +386,46 @@ export async function connectKeySource(
         )
 
   if (!created.ok) {
-    if (!existing) await disconnectSource(userId, source)
+    await dropIfUnfinished(userId, source, existing !== null)
     revalidatePath("/connectors")
     return { ok: false, message: created.message }
   }
 
+  // A throw here (the key cannot be encrypted, the database is unreachable)
+  // is handled like a refusal: the action still holds the key and the id, so
+  // the webhook it just made can come down rather than be orphaned.
   const stored = await storeProviderWebhook(userId, source, {
     apiKey: key,
     signingSecret: created.secret,
     meta: created.meta,
+  }).catch((cause): { ok: false; message: string } => {
+    console.error(`[${source}] could not store the webhook:`, cause)
+    return { ok: false, message: `Connecting ${name} failed on our side. Try again.` }
   })
 
   if (!stored.ok) {
     // The vendor now holds a webhook Quincy cannot verify. Take it back down.
     if (source === "fathom") await deleteFathomWebhook(key, created.id)
     else await deleteGranolaWebhook(key, created.id)
-    if (!existing) await disconnectSource(userId, source)
+    await dropIfUnfinished(userId, source, existing !== null)
   } else if (removeOld) {
     await removeOld()
   }
 
   revalidatePath("/connectors")
   return stored
+}
+
+/**
+ * Remove the row a failed first connect created, but only if it is still
+ * unfinished. Re-read rather than trusted from the start of the action: two
+ * tabs connecting at once share one row (`connectSource`), and the one that
+ * fails last must not delete what the other one finished.
+ */
+async function dropIfUnfinished(userId: string, source: KeySource, hadRow: boolean): Promise<void> {
+  if (hadRow) return
+  const now = await getSourceConnection(userId, source)
+  if (now && !now.verified) await disconnectSource(userId, source)
 }
 
 /**

@@ -130,6 +130,20 @@ describe("fetchGranolaNote", () => {
     expect(calls).toHaveLength(4)
   })
 
+  it("retries rather than store a transcript cut short by a page that will not decode", async () => {
+    const fetcher = (async (url: string) => {
+      if (url.includes("include=transcript")) return new Response("", { status: 413 })
+      if (url.includes("/transcript?") && !url.includes("cursor=")) {
+        return Response.json({ transcript: [{ text: "one" }], hasMore: true, cursor: "c2" })
+      }
+      if (url.includes("cursor=c2")) return new Response("{ cut off", { status: 200 })
+      return Response.json(note({ transcript: null }))
+    }) as unknown as typeof fetch
+
+    const result = await fetchGranolaNote("grn_key", "not_1d3tmYTlCICgjy", fetcher)
+    expect(!result.ok && result.failure.kind).toBe("retry")
+  })
+
   it("says refused, gone and retry apart", async () => {
     const answer = (status: number) => (async () => new Response("", { status })) as unknown as typeof fetch
     const kind = async (status: number) => {
