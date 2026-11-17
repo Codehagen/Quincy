@@ -16,6 +16,8 @@ export type LabOptions = {
   header: "ink" | "quiet"
   /** Show a small "proposed" next to every control with nothing behind it yet. */
   proposed: "show" | "hide"
+  /** Lab only: the server action or route behind each verb, in mono under the verbs. */
+  wiring: "on" | "off"
 }
 
 export const DEFAULT_OPTIONS: LabOptions = {
@@ -27,4 +29,5 @@ export const DEFAULT_OPTIONS: LabOptions = {
   mark: "words",
   header: "ink",
   proposed: "show",
+  wiring: "off",
 }

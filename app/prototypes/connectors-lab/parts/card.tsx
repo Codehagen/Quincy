@@ -166,7 +166,7 @@ function Foot({
 }) {
   const show = opts.proposed === "show"
   const st = c.status
-  const muted = "min-w-0 truncate text-kit-small text-kit-ink-muted"
+  const muted = "min-w-0 truncate text-kit-small text-kit-ink-muted tabular-nums"
 
   if (st.s === "failed" || st.s === "reauth" || st.s === "setup") {
     return (
@@ -212,7 +212,7 @@ function Foot({
   if (st.s === "soon") {
     return (
       <>
-        <span className={muted}>{c.setup}</span>
+        <span className={muted}>{c.short ?? c.setup}</span>
         <span className="flex shrink-0 items-center gap-kit-controls">
           <Proposed show={show} why="no request path exists" />
           <FootLink onClick={() => onOpen(c.id)} describedBy={nameId(c, "card")}>
@@ -226,7 +226,7 @@ function Foot({
   // available, needs, builtin
   return (
     <>
-      <span className={muted}>{c.setup}</span>
+      <span className={muted}>{c.short ?? c.setup}</span>
       {c.guide ? (
         <span className="flex shrink-0 items-center gap-kit-controls">
           {!c.guide.real ? <Proposed show={show} why={c.guide.ref} /> : null}

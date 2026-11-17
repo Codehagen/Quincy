@@ -20,12 +20,13 @@ import {
   ToolbarTitle,
   WorkspacePage,
   WorkspacePanes,
+  focusRestoredDataList,
   revealDataListRow,
   useLetterKeys,
   type DataListColumn,
   type DataListGroup,
 } from "@/components/kit"
-import { ICON_DENSE } from "@/components/kit/control-styles"
+import { ICON_DENSE, ICON_DENSE_CHEVRON } from "@/components/kit/control-styles"
 import { hasPlatformMark, PlatformMark } from "@/components/channels/platform-mark"
 
 import { isConnected, needsYou, type Connector } from "../data"
@@ -110,7 +111,7 @@ function lastFact(c: Connector): string {
   if (st.s === "connected" || st.s === "paused") return st.last
   if (st.s === "waiting") return `Connected ${st.since}`
   if (st.s === "failed" || st.s === "reauth" || st.s === "setup") return primaryFix(c)
-  return c.setup ?? ""
+  return c.short ?? c.setup ?? ""
 }
 
 function primaryFix(c: Connector) {
@@ -138,7 +139,7 @@ function columns(opts: LabOptions): DataListColumn<Connector>[] {
       wide: true,
       cell: (c) => (
         <DataListMeta>
-          <span className="block truncate">{lastFact(c)}</span>
+          <span className="block truncate tabular-nums">{lastFact(c)}</span>
         </DataListMeta>
       ),
     },
@@ -189,7 +190,7 @@ function TableSurface({ store, opts }: { store: ConnectorsStore; opts: LabOption
       name: g.name(items.length),
       label: (
         <span className={`inline-flex items-center gap-1.5 ${you ? "text-kit-ink" : "text-kit-ink-muted"}`}>
-          {you ? <HugeiconsIcon icon={Alert02Icon} {...ICON_DENSE} aria-hidden /> : null}
+          {you ? <HugeiconsIcon icon={Alert02Icon} {...ICON_DENSE_CHEVRON} aria-hidden className="shrink-0" /> : null}
           <span className="font-kit-strong">{g.label}</span>
           <span className="tabular-nums">{items.length}</span>
         </span>
@@ -257,7 +258,7 @@ function TableSurface({ store, opts }: { store: ConnectorsStore; opts: LabOption
                   columns={cols}
                   status={store.phase === "loading" ? "loading" : "ready"}
                   loadingLabel="Reading your connections"
-                  empty={<Empty store={store} />}
+                  empty={<Empty store={store} onRestore={focusRestoredDataList} />}
                 />
               </PanelBody>
             </Panel>

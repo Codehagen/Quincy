@@ -204,6 +204,44 @@ would only repeat the search field and `/`.
   collapse to one white ring (the kit's elevation tokens); the selected row
   is the dark well; the Well is darker than the pane (a recess), as in light.
 
+### Polish, settled (a polish pass, 2026-11-17)
+
+Already the kit's, checked and left alone: antialiased Inter on the root;
+the kit's `::selection`; rows' hover, pressed and selected grey with the 3px
+ink bar and the ink focus ring at offset 0; rows 44 tall on a coarse pointer;
+the tabs' focus ring and 44px hit area (`SEGMENT_ITEM`); a row moved into
+view by j/k parks clear of the 32px head band (`scroll-mt-kit-head-clear`);
+the pane goes back to its top when the open row changes (`scrollKey`);
+HoldButton and Button reserve their widest label, so "Disconnecting…",
+"Disconnected" and "Connecting…" never move what sits beside them; every
+transition names its property and has a reduced-motion path.
+
+Changed in the lab:
+
+- **Nothing truncates in a one-line place.** Each connector has a `short`
+  line for the table's Latest and the card's foot ("One click · 60 days",
+  "Two steps", "One link", "Comes with X"). The full sentence ("Two steps ·
+  a URL out, a secret back") moved into the pane as "What it takes: …",
+  where it wraps.
+- **Tabular numbers** on the tab counts, the group counts, the tally, the
+  metric ("27 · usual 22") and every time in Latest and in a card's foot.
+  A connect or disconnect changes a count by one digit of the same width,
+  so the strip holds still; reserving two digits was tried and read as a
+  stray gap after "Connected", so 9 → 10 (rare) lets the thumb retarget.
+- **Group head**: the Needs you alert drawn at 14 beside 12px text (16 sat
+  heavy against the cap height).
+- **Filtered empty**: centred with the friend under the column heads, which
+  stay. "Clear the search" brings the rows back and puts focus on the open
+  row (`focusRestoredDataList`), since the button goes with the empty state.
+- **Wiring off by default.** The mono list of server actions behind each
+  verb is lab-only and hides behind a new "Show wiring" control, off; the
+  pane reads as the product would. "Proposed" tags stay on their own control.
+
+Left for the kit, on purpose: the open row's title goes from 460 to 560
+(workspace.md). It is one truncated line in the `1fr` column, so only the
+text's own width changes and no neighbour moves; the weight is the cue
+DataList chose over a second colour.
+
 ## What the pick asks of the kit
 
 | Need | Where it is now | Proposed |

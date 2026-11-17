@@ -69,8 +69,10 @@ export type Connector = {
   metric?: Metric
   /** What it hands over, as chips, on a card that is not connected. */
   tags?: string[]
-  /** The footer of a card not connected yet: what connecting costs. */
+  /** What connecting takes, in full: the open pane says it. */
   setup?: string
+  /** The same in two or three words, for one-line places (the table's Latest, a card's foot), so it never truncates. */
+  short?: string
   /** The footer link of a card not connected yet. */
   guide?: { label: string; real: boolean; ref: string }
   /** The switch on a connected card, where one maps to something. */
@@ -106,7 +108,7 @@ function base(): Connector[] {
       gives: "Each pull request as it merges. I read the description you wrote, never the diff, and keep the merges that carry an idea.",
       status: { s: "available" },
       tags: ["Pull requests", "Descriptions"],
-      setup: "One link · posts nothing",
+      setup: "One link · posts nothing", short: "One link",
       guide: { label: "How it works", real: false, ref: "proposed: no guide page; plans/021 is the source" },
       reading: { label: "Reading", on: true, real: false, ref: "proposed: lib pauseSource exists, no server action calls it" },
       actions: [
@@ -126,7 +128,7 @@ function base(): Connector[] {
       gives: "Each call as it ends. I read your half of the transcript, keep the passage worth posting, and store nothing anyone else said.",
       status: { s: "available" },
       tags: ["Your half", "Transcripts"],
-      setup: "Two steps · a URL out, a secret back",
+      setup: "Two steps · a URL out, a secret back", short: "Two steps",
       guide: { label: "How it works", real: false, ref: "proposed: the steps live in the row's panel today" },
       reading: { label: "Reading", on: true, real: false, ref: "proposed: lib pauseSource exists, no server action calls it" },
       actions: [
@@ -144,7 +146,7 @@ function base(): Connector[] {
       gives: "Your own posts, read back so I learn how you write. Up to 100 a read.",
       status: { s: "needs", on: "x", onName: "X" },
       tags: ["Your posts", "Voice rules"],
-      setup: "Comes with X · one read at a time",
+      setup: "Comes with X · one read at a time", short: "Comes with X",
       actions: [
         { id: "import", label: "Import again", real: true, ref: "importFromX (10 min cooldown, 100 posts)" },
         { id: "brain", label: "See what I learned", real: true, ref: "/brain" },
@@ -159,7 +161,7 @@ function base(): Connector[] {
       gives: "Posts you saved on X. I pick the few you have something of your own to say about. Their numbers and stories stay theirs.",
       status: { s: "needs", on: "x", onName: "X" },
       tags: ["Bookmarks", "Daily"],
-      setup: "Comes with X · read once a day",
+      setup: "Comes with X · read once a day", short: "Comes with X",
       reading: { label: "Read them daily", on: true, real: true, ref: "enableRhythm / disableRhythm('bookmarks-to-posts')" },
       actions: [
         { id: "run", label: "Read them now", real: true, ref: "runRhythmNow (MANUAL_RUN_COOLDOWN_MS, 200 posts read)" },
@@ -175,7 +177,7 @@ function base(): Connector[] {
       gives: "Say it out loud on Ideas. I transcribe it and bring you the angles in it.",
       status: { s: "builtin" },
       tags: ["Transcripts"],
-      setup: "Nothing to connect",
+      setup: "Nothing to connect", short: "Nothing to connect",
       guide: { label: "Record one", real: true, ref: "/ideas" },
       actions: [{ id: "record", label: "Record on Ideas", real: true, ref: "/ideas (POST /api/voice-notes)" }],
     },
@@ -188,7 +190,7 @@ function base(): Connector[] {
       gives: "I publish what you approve, and read back the posts I published to tell you how they did.",
       status: { s: "available" },
       tags: ["Posts", "Threads"],
-      setup: "One click · nothing goes out unapproved",
+      setup: "One click · nothing goes out unapproved", short: "One click",
       guide: { label: "What it grants", real: true, ref: "ConnectionStrip GRANTS" },
       actions: [{ id: "connect", label: "Connect X", real: true, ref: "/api/connect/x" }, ...channelActions("x", "X")],
     },
@@ -201,7 +203,7 @@ function base(): Connector[] {
       gives: "I publish what you approve. I can't read your feed, your posts or how they did.",
       status: { s: "available" },
       tags: ["Posts"],
-      setup: "One click · renews every 60 days",
+      setup: "One click · renews every 60 days", short: "One click · 60 days",
       guide: { label: "What it grants", real: true, ref: "ConnectionStrip GRANTS" },
       actions: [{ id: "connect", label: "Connect LinkedIn", real: true, ref: "/api/connect/linkedin" }, ...channelActions("linkedin", "LinkedIn")],
     },
@@ -236,7 +238,7 @@ function soon(id: string, glyph: string, name: string, kind: Kind, gives: string
       gives,
       status: { s: "soon" },
       tags,
-      setup: "Not wired up yet",
+      setup: "Not wired up yet", short: "Not wired up yet",
       actions: [ASK],
     },
   ]

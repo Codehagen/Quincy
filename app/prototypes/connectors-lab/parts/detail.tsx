@@ -74,6 +74,12 @@ export function ConnectorDetail({
 
       <Text tone="muted">{c.gives}</Text>
 
+      {c.setup && !connected && c.status.s !== "builtin" ? (
+        <Text variant="small" tone="muted">
+          What it takes: {c.setup}.
+        </Text>
+      ) : null}
+
       {c.metric && reads ? (
         <Well>
           <MetricRow m={c.metric} />
@@ -109,7 +115,7 @@ export function ConnectorDetail({
               </span>
             ))}
           </div>
-          {show ? (
+          {opts.wiring === "on" ? (
             <ul className="flex flex-col gap-0.5 font-kit-mono text-kit-mono-sm text-kit-ink-muted">
               {more.map((a) => (
                 <li key={a.id} className="truncate">

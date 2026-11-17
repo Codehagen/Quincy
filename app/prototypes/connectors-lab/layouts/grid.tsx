@@ -35,7 +35,13 @@ import { Proposed } from "../parts/marks"
  * Keys: Tab walks name → controls → next card; ← → move along the tabs; /
  * goes to the search. Esc closes the sheet.
  */
-export function GridLayout({ store, opts }: { store: ConnectorsStore; opts: LabOptions }) {
+export function GridLayout({
+  store,
+  opts,
+}: {
+  store: ConnectorsStore
+  opts: LabOptions
+}) {
   const [sheetId, setSheetId] = React.useState<string | null>(null)
   const searchRef = React.useRef<HTMLInputElement>(null)
   useLetterKeys({ "/": () => searchRef.current?.focus() })
@@ -75,13 +81,20 @@ export function GridLayout({ store, opts }: { store: ConnectorsStore; opts: LabO
           </div>
 
           <FilterPanels store={store}>
-            <div data-frame={opts.frame} className={`cl-panel ${opts.frame === "panel" ? "@[36rem]/cl:rounded-kit-object @[36rem]/cl:bg-kit-object @[36rem]/cl:shadow-kit-object" : ""}`}>
+            <div
+              data-frame={opts.frame}
+              className={`cl-panel ${opts.frame === "panel" ? "@[36rem]/cl:rounded-kit-object @[36rem]/cl:bg-kit-object @[36rem]/cl:shadow-kit-object" : ""}`}
+            >
               {store.phase === "loading" ? (
                 <>
                   <Text as="div" role="status" tone="muted" variant="small">
                     <LiveDot pulse>Reading your connections.</LiveDot>
                   </Text>
-                  <div className="cl-grid mt-kit-related" data-cols={opts.cols} data-density={opts.density}>
+                  <div
+                    className="cl-grid mt-kit-related"
+                    data-cols={opts.cols}
+                    data-density={opts.density}
+                  >
                     {Array.from({ length: opts.cols * 2 }, (_, i) => (
                       <CardSkeleton key={i} opts={opts} />
                     ))}
@@ -92,9 +105,20 @@ export function GridLayout({ store, opts }: { store: ConnectorsStore; opts: LabO
                   <Empty store={store} />
                 </EmptyRegion>
               ) : (
-                <div className="cl-grid" data-cols={opts.cols} data-density={opts.density}>
+                <div
+                  className="cl-grid"
+                  data-cols={opts.cols}
+                  data-density={opts.density}
+                >
                   {store.shown.map((c) => (
-                    <ConnectorCard key={c.id} c={c} store={store} opts={opts} isAction={owner === c.id} onOpen={setSheetId} />
+                    <ConnectorCard
+                      key={c.id}
+                      c={c}
+                      store={store}
+                      opts={opts}
+                      isAction={owner === c.id}
+                      onOpen={setSheetId}
+                    />
                   ))}
                 </div>
               )}
@@ -103,12 +127,24 @@ export function GridLayout({ store, opts }: { store: ConnectorsStore; opts: LabO
         </FilterTabs>
       </div>
 
-      <Sheet open={open !== null} onOpenChange={(o) => {
-        if (!o) setSheetId(null)
-      }}>
+      <Sheet
+        open={open !== null}
+        onOpenChange={(o) => {
+          if (!o) setSheetId(null)
+        }}
+      >
         {open ? (
-          <SheetPanel title={open.name} description={`${open.kind === "source" ? "Source" : "Channel"} · ${open.line}`}>
-            <ConnectorDetail c={open} store={store} opts={opts} isAction={owner === open.id} showHead={false} />
+          <SheetPanel
+            title={open.name}
+            description={`${open.kind === "source" ? "Source" : "Channel"} · ${open.line}`}
+          >
+            <ConnectorDetail
+              c={open}
+              store={store}
+              opts={opts}
+              isAction={owner === open.id}
+              showHead={false}
+            />
           </SheetPanel>
         ) : null}
       </Sheet>
@@ -116,17 +152,32 @@ export function GridLayout({ store, opts }: { store: ConnectorsStore; opts: LabO
   )
 }
 
-export function HeaderActions({ opts, isAction, size }: { opts: LabOptions; isAction: boolean; size?: "sm" }) {
+export function HeaderActions({
+  opts,
+  isAction,
+  size,
+}: {
+  opts: LabOptions
+  isAction: boolean
+  size?: "sm"
+}) {
   return (
     <>
       <ButtonLink href="/rhythm" icon={WorkflowSquare01Icon} size={size}>
         What reads them
       </ButtonLink>
       <span className="flex items-center gap-kit-controls">
-        <Button variant={isAction ? "action" : "quiet"} icon={isAction ? undefined : PlusSignIcon} size={size}>
+        <Button
+          variant={isAction ? "action" : "quiet"}
+          icon={isAction ? undefined : PlusSignIcon}
+          size={size}
+        >
           Ask for one
         </Button>
-        <Proposed show={opts.proposed === "show"} why="no request path exists; could open Studio with the ask" />
+        <Proposed
+          show={opts.proposed === "show"}
+          why="no request path exists; could open Studio with the ask"
+        />
       </span>
     </>
   )
@@ -138,17 +189,34 @@ export function Tally({ store }: { store: ConnectorsStore }) {
   const connected = store.all.filter(isConnected).length
   return (
     <p className="text-kit-small whitespace-nowrap text-kit-ink-muted tabular-nums">
-      {connected} connected · {store.counts.ready} ready · {store.counts.later} later
+      {connected} connected · {store.counts.ready} ready · {store.counts.later}{" "}
+      later
     </p>
   )
 }
 
 /** Centred, with the friend (states.md): filtered empty, or nothing connected yet. */
-export function Empty({ store }: { store: ConnectorsStore }) {
+export function Empty({
+  store,
+  onRestore,
+}: {
+  store: ConnectorsStore
+  onRestore?: () => void
+}) {
   if (store.q.trim()) {
     return (
-      <EmptyState frame="none" bold="Nothing matches that." rest="Try another word, or clear the search.">
-        <Button size="sm" onClick={() => store.setQ("")}>
+      <EmptyState
+        frame="none"
+        bold="Nothing matches that."
+        rest="Try another word, or clear the search."
+      >
+        <Button
+          size="sm"
+          onClick={() => {
+            store.setQ("")
+            onRestore?.()
+          }}
+        >
           Clear the search
         </Button>
       </EmptyState>
@@ -156,12 +224,28 @@ export function Empty({ store }: { store: ConnectorsStore }) {
   }
   if (store.filter === "connected") {
     return (
-      <EmptyState frame="none" bold="Nothing connected yet." rest="Connect X and I'll learn how you write from what you already posted.">
-        <Button size="sm" onClick={() => store.setFilter("all")}>
+      <EmptyState
+        frame="none"
+        bold="Nothing connected yet."
+        rest="Connect X and I'll learn how you write from what you already posted."
+      >
+        <Button
+          size="sm"
+          onClick={() => {
+            store.setFilter("all")
+            onRestore?.()
+          }}
+        >
           See them all
         </Button>
       </EmptyState>
     )
   }
-  return <EmptyState frame="none" bold="Nothing here yet." rest="Every connector is under All." />
+  return (
+    <EmptyState
+      frame="none"
+      bold="Nothing here yet."
+      rest="Every connector is under All."
+    />
+  )
 }

@@ -106,6 +106,8 @@ export function ControlPanel({
       <SegRow label="Header pill" value={opts.header} options={["ink", "quiet"] as const} set={(v) => set("header", v)} why="ink: the reference's 'Request integration'. A broken connector takes the ink either way (actions.md)" />
       <SegRow label="Mark proposed" value={opts.proposed} options={["show", "hide"] as const} set={(v) => set("proposed", v)} why="A small 'proposed' beside every control with nothing behind it yet; hover for why" />
 
+      <SegRow label="Show wiring" value={opts.wiring} options={["off", "on"] as const} set={(v) => set("wiring", v)} why="The server action or route behind each verb, in mono in the pane. Off: the pane as the product would show it" />
+
       <div className="row">
         <div className="seg" style={{ background: "transparent", gap: 6 }}>
           <button
