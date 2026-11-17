@@ -86,7 +86,7 @@ ReconnectChannel.PreviewProps = {
   name: "Christer",
   channel: "LinkedIn",
   expiresOn: "12 October",
-  url: "https://hirequincy.com/channels",
+  url: "https://hirequincy.com/connectors?show=channels",
 } satisfies ReconnectChannelProps
 
 export { ReconnectChannel }

@@ -174,7 +174,7 @@ async function main() {
     .filter((p) => p.length > 0)
 
   const routes = new Set([
-    "/sources",
+    "/connectors",
     "/brain",
     "/rhythm",
     "/ideas",

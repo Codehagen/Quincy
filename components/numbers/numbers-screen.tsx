@@ -70,7 +70,7 @@ export function NumbersScreen({ numbers }: { numbers: NumbersView }) {
 
         <Text tone="muted">
           Reading a channel back is one press on{" "}
-          <TextLink href="/sources">Sources</TextLink>.
+          <TextLink href="/connectors">Connectors</TextLink>.
         </Text>
       </KitPage>
     )
@@ -147,7 +147,7 @@ export function NumbersScreen({ numbers }: { numbers: NumbersView }) {
                 ) : (
                   <>
                     No reading yet. Numbers refresh every morning once X is{" "}
-                    <TextLink href="/channels">connected</TextLink>. Until then
+                    <TextLink href="/connectors?open=x">connected</TextLink>. Until then
                     every figure here is the one X reported when the post was
                     imported.
                   </>

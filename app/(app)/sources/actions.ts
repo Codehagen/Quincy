@@ -125,7 +125,7 @@ export async function importFromX(): Promise<ImportFromXReceipt> {
           : imported.reason === "rate-limited"
             ? "X is rate-limiting reads right now. Try again in a few minutes."
             : imported.reason === "rejected"
-              ? "X refused the read. Try again, and if it keeps failing check /channels."
+              ? "X refused the read. Try again, and if it keeps failing reconnect X on Connectors."
               : imported.message,
     }
   }
@@ -145,7 +145,7 @@ export async function importFromX(): Promise<ImportFromXReceipt> {
         : await compileIfCorpusExists(session.user.id)
   } catch (cause) {
     console.error("[sources] voice compile failed:", cause)
-    revalidatePath("/sources")
+    revalidatePath("/connectors")
     return {
       ok: false,
       message:
@@ -155,7 +155,7 @@ export async function importFromX(): Promise<ImportFromXReceipt> {
     }
   }
 
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
 
   return {
     ok: true,
@@ -237,7 +237,7 @@ export async function startCirclebackSetup(): Promise<
   // already pasted the first one.
   const connection = await connectSource(session.user.id, "circleback")
 
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
 
   return {
     ok: true,
@@ -256,7 +256,7 @@ export async function saveCirclebackSecret(
 
   const result = await setSigningSecret(session.user.id, "circleback", secret)
 
-  if (result.ok) revalidatePath("/sources")
+  if (result.ok) revalidatePath("/connectors")
 
   return result
 }
@@ -286,7 +286,7 @@ export async function disconnectCircleback(): Promise<
   if (!session) return { ok: false, message: "Not signed in." }
 
   await disconnectSource(session.user.id, "circleback")
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
 
   return { ok: true }
 }
@@ -383,7 +383,7 @@ export async function saveGithubLogin(
 
   const result = await setGithubLogin(session.user.id, login)
 
-  if (result.ok) revalidatePath("/sources")
+  if (result.ok) revalidatePath("/connectors")
 
   return result
 }
@@ -404,7 +404,7 @@ export async function disconnectGithub(): Promise<
   if (!session) return { ok: false, message: "Not signed in." }
 
   await disconnectSource(session.user.id, "github")
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
 
   return { ok: true }
 }
@@ -650,7 +650,7 @@ export async function readLastMergedPull(): Promise<BackfillResult> {
   }
 
   revalidatePath("/ideas")
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
   return { ok: true, started: true, sourceItemId: stored.sourceItemId }
 }
 
@@ -786,7 +786,7 @@ export async function answerMergeQuestion(
     // Somebody — another tab, a second tap — got there first, or the id is not
     // theirs. Both are "there is nothing to answer", and neither is an error
     // worth a red line on the row.
-    revalidatePath("/sources")
+    revalidatePath("/connectors")
     return { ok: true }
   }
 
@@ -853,7 +853,7 @@ export async function answerMergeQuestion(
   }
 
   revalidatePath("/ideas")
-  revalidatePath("/sources")
+  revalidatePath("/connectors")
 
   return { ok: true }
 }

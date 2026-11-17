@@ -170,7 +170,7 @@ export async function proposeStrategyAction(
   if (!result.ok) return { ok: false, error: result.message }
 
   revalidatePath("/brain")
-  revalidatePath(`/channels/${channel}`)
+  revalidatePath(`/connectors/${channel}`)
 
   return {
     ok: true,
@@ -195,7 +195,7 @@ export async function saveStrategyPage(
     const userId = await requireUser()
     await saveStrategy(userId, channel, strategy)
     revalidatePath("/brain")
-    revalidatePath(`/channels/${channel}`)
+    revalidatePath(`/connectors/${channel}`)
     return { ok: true }
   } catch (cause) {
     if (cause instanceof BrainInvariantError) {

@@ -21,7 +21,7 @@ import { getSession } from "@/lib/session"
  */
 export async function GET(request: Request) {
   if (!isGithubAppConfigured()) {
-    redirect("/sources?github=unconfigured")
+    redirect("/connectors?open=github&github=unconfigured")
   }
 
   const session = await getSession()
@@ -46,11 +46,11 @@ export async function GET(request: Request) {
    * not exist yet — and GitHub will send them here again if it is granted.
    */
   if (params.get("setup_action") === "request") {
-    redirect("/sources?github=requested")
+    redirect("/connectors?open=github&github=requested")
   }
 
   if (!Number.isInteger(installationId) || installationId <= 0) {
-    redirect("/sources?github=failed")
+    redirect("/connectors?open=github&github=failed")
   }
 
   const installation = await fetchInstallation(installationId)
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     // Either the id was invented, or the app's key cannot read it. Both are
     // "we will not write a row for this", and neither is worth distinguishing
     // to the person looking at the page.
-    redirect("/sources?github=failed")
+    redirect("/connectors?open=github&github=failed")
   }
 
   /**
@@ -85,8 +85,8 @@ export async function GET(request: Request) {
   })
 
   if (!connected.ok) {
-    redirect("/sources?github=taken")
+    redirect("/connectors?open=github&github=taken")
   }
 
-  redirect(login ? "/sources?github=connected" : "/sources?github=needs-login")
+  redirect(login ? "/connectors?open=github&github=connected" : "/connectors?open=github&github=needs-login")
 }

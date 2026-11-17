@@ -28,8 +28,8 @@ export async function POST(
   // for anyone who asks.
   await disconnect(session.user.id, channel)
 
-  revalidatePath("/channels")
-  revalidatePath(`/channels/${channel}`)
+  revalidatePath("/connectors")
+  revalidatePath(`/connectors/${channel}`)
 
   return new Response(null, { status: 204 })
 }

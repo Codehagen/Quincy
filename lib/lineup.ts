@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt } from "drizzle-orm"
+import { and, asc, eq, gte, isNull, lt } from "drizzle-orm"
 
 import { db } from "./db"
 import {
@@ -16,8 +16,10 @@ import {
   hhmmIn,
   isoWeekdayOf,
   resolveTimeZone,
+  parseDayKey,
   startOfDayIn,
 } from "./timezone"
+import { filledOccurrences, mondayOf, occurrenceKey } from "./lineup-week"
 
 /**
  * When approved writing goes out.
@@ -237,8 +239,14 @@ export async function getLineup(
     })
   }
 
-  const filled = new Map(
-    rows.filter((r) => r.post.slotId).map((r) => [r.post.slotId!, r.post.id])
+  // Filled at the slot's own instant, as `nextFreeSlot` asks it (see
+  // lib/lineup-week.ts). Not "any post pointing at the slot": a post sent
+  // early still points at it and fills nothing.
+  const filled = filledOccurrences(
+    rows.map((r) => ({ id: r.post.id, slotId: r.post.slotId, scheduledFor: r.post.scheduledFor })),
+    standing,
+    Array.from({ length: 7 }, (_, i) => addCalendarDays(today, i)),
+    zone
   )
 
   const slots: Slot[] = standing.flatMap((s) => {
@@ -256,12 +264,172 @@ export async function getLineup(
         label: `${WEEKDAY[s.weekday - 1]} ${s.timeOfDay}`,
         channel: s.channel,
         channelLabel: CHANNEL_LABELS[s.channel] ?? s.channel,
-        filledBy: filled.get(s.id) ?? null,
+        filledBy: filled.get(occurrenceKey(s.id, day.id)) ?? null,
       },
     ]
   })
 
   return { days, slots }
+}
+
+/* ── The calendar's week ─────────────────────────────────────────────────── */
+
+/** One post in the calendar's week: an `Entry`, with what the calendar and its feed pane need beside it. */
+export type WeekPost = Entry & {
+  /** The day it goes out on, `YYYY-MM-DD`, in the account's zone. */
+  dayId: string
+  /** The whole post. The pane draws it as the feed will (read-only). */
+  body: string
+  /** The standing slot it points at, or null for a one-off. */
+  slotId: string | null
+}
+
+/** A standing slot, as the calendar draws its occurrences. */
+export type WeekSlot = {
+  id: string
+  channel: string
+  channelLabel: string
+  /** ISO weekday, 1–7. */
+  weekday: number
+  /** Zero-padded 24-hour. */
+  time: string
+}
+
+/**
+ * Approved writing with no `scheduled_post` row: "waiting on Drafts for a
+ * time" (lib/schema-app.ts). `no-slot` when the channel has no slot at all;
+ * `slot-came-later` when it has one now, so placement never ran for it (the
+ * same reading lib/going-out.ts makes on Drafts). Whether every slot is full
+ * is only known by asking `placeApprovedVersion`.
+ */
+export type Unplaced = {
+  versionId: string
+  channel: string
+  channelLabel: string
+  body: string
+  opening: string
+  reason: "no-slot" | "slot-came-later"
+}
+
+export type LineupWeek = {
+  /** The Monday of the week shown, `YYYY-MM-DD`. */
+  week: string
+  /** The Monday of the week today falls in. */
+  thisWeek: string
+  posts: WeekPost[]
+  slots: WeekSlot[]
+  /** `slotId@dayId` → the post that fills that occurrence (lib/lineup-week.ts). */
+  filled: Record<string, string>
+  unplaced: Unplaced[]
+}
+
+/**
+ * A Monday-to-Sunday week, for the calendar on /lineup.
+ *
+ * `getLineup` reads a rolling seven days from today, which is the right
+ * question for a list ("what is going out") and the wrong one for a calendar
+ * of the week: Monday's 08:00 that went out this morning belongs on the
+ * grid. So this reads the week `week` names (any Monday; a day that is not a
+ * Monday is taken as its week), or this week. A read only, of the same rows
+ * `getLineup` reads, plus the approved versions that have no time, which
+ * Drafts reads too.
+ */
+export async function getLineupWeek(
+  user: { id: string; timezone?: string | null },
+  { week, now = new Date() }: { week?: string | null; now?: Date } = {}
+): Promise<LineupWeek> {
+  const zone = resolveTimeZone(user.timezone)
+  const thisWeek = mondayOf(dayKeyIn(now, zone))!
+  const asked = week ? mondayOf(week) : null
+  const monday = parseDayKey(asked ?? thisWeek)!
+  const days = Array.from({ length: 7 }, (_, i) => addCalendarDays(monday, i))
+  const from = startOfDayIn(monday, zone)
+  const to = startOfDayIn(addCalendarDays(monday, 7), zone)
+
+  const [rows, standing, waiting] = await Promise.all([
+    db
+      .select({ post: scheduledPost, version: draftVersion, piece: draft })
+      .from(scheduledPost)
+      .innerJoin(draftVersion, eq(scheduledPost.draftVersionId, draftVersion.id))
+      .innerJoin(draft, eq(draftVersion.draftId, draft.id))
+      .where(
+        and(
+          eq(scheduledPost.userId, user.id),
+          gte(scheduledPost.scheduledFor, from),
+          lt(scheduledPost.scheduledFor, to)
+        )
+      )
+      .orderBy(asc(scheduledPost.scheduledFor)),
+    db
+      .select()
+      .from(slot)
+      .where(eq(slot.userId, user.id))
+      .orderBy(asc(slot.weekday), asc(slot.timeOfDay)),
+    // Owned through `draft.user_id`: `draft_version` has no owner of its own.
+    db
+      .select({ version: draftVersion })
+      .from(draftVersion)
+      .innerJoin(draft, eq(draftVersion.draftId, draft.id))
+      .leftJoin(scheduledPost, eq(scheduledPost.draftVersionId, draftVersion.id))
+      .where(
+        and(
+          eq(draft.userId, user.id),
+          eq(draftVersion.state, "approved"),
+          isNull(scheduledPost.id)
+        )
+      )
+      .orderBy(asc(draftVersion.approvedAt)),
+  ])
+
+  const posts: WeekPost[] = rows.map((row) => ({
+    id: row.post.id,
+    versionId: row.version.id,
+    draftId: row.piece.id,
+    idea: row.piece.idea,
+    channel: row.version.channel,
+    channelLabel: row.version.label,
+    sourceId: row.piece.sourceId,
+    sourceLabel: row.piece.sourceLabel,
+    opening: row.version.body.split("\n")[0],
+    time: hhmmIn(row.post.scheduledFor, zone),
+    state: row.post.state,
+    url: row.post.postUrl,
+    error: row.post.lastError,
+    dayId: dayKeyIn(row.post.scheduledFor, zone),
+    body: row.version.body,
+    slotId: row.post.slotId,
+  }))
+
+  const filled = filledOccurrences(
+    rows.map((r) => ({ id: r.post.id, slotId: r.post.slotId, scheduledFor: r.post.scheduledFor })),
+    standing,
+    days,
+    zone
+  )
+
+  const withSlots = new Set(standing.map((s) => s.channel))
+
+  return {
+    week: dayKeyOf(monday),
+    thisWeek,
+    posts,
+    slots: standing.map((s) => ({
+      id: s.id,
+      channel: s.channel,
+      channelLabel: CHANNEL_LABELS[s.channel] ?? s.channel,
+      weekday: s.weekday,
+      time: s.timeOfDay,
+    })),
+    filled: Object.fromEntries(filled),
+    unplaced: waiting.map(({ version: v }) => ({
+      versionId: v.id,
+      channel: v.channel,
+      channelLabel: v.label,
+      body: v.body,
+      opening: v.body.split("\n")[0],
+      reason: withSlots.has(v.channel) ? "slot-came-later" : "no-slot",
+    })),
+  }
 }
 
 /**

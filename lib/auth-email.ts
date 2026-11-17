@@ -90,7 +90,7 @@ export async function sendWelcomeEmail({
       "",
       "Getting started — five things worth doing first:",
       "",
-      `1. Point it at your material: ${APP_URL}/sources`,
+      `1. Point it at your material: ${APP_URL}/connectors`,
       "   Repos, essays, calendars, threads. This is what it draws from.",
       "",
       `2. Tell it what you know: ${APP_URL}/brain`,

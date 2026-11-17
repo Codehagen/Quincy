@@ -59,7 +59,7 @@ async function refusalsAsResults(run: () => Promise<void>): Promise<MoveResult> 
   }
 }
 
-/** Where a move can land. Mirrors `MoveTarget` in components/lineup/lineup-parts.tsx. */
+/** Where a move can land. Mirrors `MoveTarget` in lib/lineup-week.ts. */
 type MoveTarget =
   | { kind: "slot"; slotId: string }
   | { kind: "day"; dayId: string; time: string }

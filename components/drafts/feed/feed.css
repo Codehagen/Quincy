@@ -401,3 +401,47 @@
   border-radius: 9999px;
   object-fit: cover;
 }
+
+/* ── Narrow columns: the feed fits the column it is given ──
+   X's column is 598 when there is room, and a LinkedIn card is as wide as
+   its feed; in a narrower pane (Lineup's is 380, or 320 under a 1200px
+   workspace) both take the pane's width and the action rows tighten the
+   way the platforms' own phone apps do, rather than run past the edge.
+   Each column measures itself (an inline-size container), so the pane's
+   width decides, not the viewport's. */
+.xf,
+.lf {
+  container-type: inline-size;
+  max-width: 100%;
+  min-width: 0;
+}
+.lf-card {
+  max-width: 100%;
+  min-width: 0;
+}
+.lf-action {
+  min-width: 0;
+}
+/* LinkedIn's phone layout: the label under its icon, in 12px. Four actions
+   are then ~60px each, so a 256px row (a 320 pane less the card's margins)
+   holds them with room to spare. Side by side they need ~335px plus the
+   row's 24px of margin, so the switch is at 400. */
+@container (max-width: 400px) {
+  .lf-action {
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 4px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+}
+/* X under 340: the icon cells narrow from 34 to 28 and the end pair closes
+   up, so the row needs ~172px where a 280px column leaves its text ~194. */
+@container (max-width: 340px) {
+  .xf-actions > span {
+    min-width: 28px;
+  }
+  .xf-actions-end {
+    gap: 6px;
+  }
+}

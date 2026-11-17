@@ -1,0 +1,337 @@
+/* ══ WeekCalendar (components/kit/week-calendar.tsx) ═══════════════════
+   Decided on /prototypes/lineup-lab, "2 · Calendar" (2026-11-16). Kit
+   tokens only. The blocks sit in one layer over the day tracks, a size
+   container, so a block's place is a `translate` in container units: every
+   move (a drag between snaps, a key, a drop, a neighbour making room, a
+   week change) animates transform and opacity only, and a CSS transition
+   retargets mid-move instead of restarting.
+
+   Surfaces:
+   - A line that separates is a border at the density-aware hairline
+     (--border-hairline: 1px, 0.5px from 2x). Day columns and hours take
+     --kit-hairline; half hours the quieter --kit-grid-line; quarters none
+     (the snap is felt, not drawn).
+   - What is raised is a shadow, never a border: a movable block is the
+     object (--shadow-kit-object); lifted, --shadow-kit-lifted and a small
+     scale, so the lift reads in dark through the scale and the ring.
+   - A slot is a commitment with nothing in it: a 1px dashed ink-muted
+     outline (a meaningful graphic, over 3:1 in both themes). Passed is the
+     same dash at 45%, decorative: its words carry it.
+   - Radii: a block and a chip are --radius-kit-control-inner (8). They sit
+     on a grid, not inside a rounded parent, so nothing nests.
+   - Today is the one tinted column, the stage grey at half strength (a
+     recess in both themes). No `dark:` anywhere: the tokens flip. */
+
+.wc-grid {
+  --wc-gutter: 56px;
+  /* The drop: a short spring with a little overshoot (ui-sdk's solver is
+     internal, so the curve is written out). */
+  --wc-spring: linear(0, 0.06 2.6%, 0.24 5.6%, 0.5 9.6%, 0.75 14.4%, 0.9 19.4%, 0.98 24.8%, 1.02 30.6%, 1.03 37%, 1.02 45%, 1.005 56%, 1 70%, 1);
+  /* Moves on screen: accelerate, then brake. */
+  --wc-move: cubic-bezier(0.32, 0.72, 0, 1);
+  isolation: isolate;
+}
+
+/* ── The day heads ── */
+.wc-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 56px repeat(var(--wc-days, 7), minmax(0, 1fr));
+  padding-inline: var(--spacing-kit-group);
+  background: var(--kit-ground);
+}
+.wc-dayhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--spacing-kit-head);
+  padding: 0 8px;
+  border-bottom: var(--border-hairline) solid var(--kit-hairline);
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  color: var(--kit-ink-muted);
+  white-space: nowrap;
+}
+/* Today: said by weight and ink, and by the column's recess. No pill. */
+.wc-dayhead[data-today] {
+  color: var(--kit-ink);
+  font-weight: 560;
+}
+.wc-date {
+  font-family: var(--font-kit-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The body: the hours, the day tracks, the layer over them ── */
+.wc-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--wc-gutter) minmax(0, 1fr);
+  margin: 0 var(--spacing-kit-group) var(--spacing-kit-group);
+}
+.wc-body[data-dir],
+.wc-head[data-dir] {
+  animation: wc-week-in 240ms var(--wc-move, cubic-bezier(0.32, 0.72, 0, 1));
+}
+.wc-body[data-dir="-1"],
+.wc-head[data-dir="-1"] {
+  --wc-from: -16px;
+}
+@keyframes wc-week-in {
+  from {
+    opacity: 0;
+    translate: var(--wc-from, 16px) 0;
+  }
+}
+.wc-gutter {
+  position: relative;
+  grid-row: 1;
+}
+.wc-hour,
+.wc-now-time {
+  position: absolute;
+  right: 8px;
+  translate: 0 -50%;
+  font-family: var(--font-kit-mono);
+  font-size: var(--text-kit-mono-sm, 11px);
+  font-variant-numeric: tabular-nums;
+  color: var(--kit-ink-muted);
+}
+.wc-hour[data-hidden] {
+  visibility: hidden;
+}
+/* Now, in the gutter: the time in ink, where the hour label would be. */
+.wc-now-time {
+  font-weight: 560;
+  color: var(--kit-ink);
+}
+.wc-tracks {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--wc-days, 7), minmax(0, 1fr));
+  border-bottom: var(--border-hairline) solid var(--kit-hairline);
+}
+.wc-track {
+  position: relative;
+  border-left: var(--border-hairline) solid var(--kit-hairline);
+}
+.wc-track:last-child {
+  border-right: var(--border-hairline) solid var(--kit-hairline);
+}
+.wc-track[data-today] {
+  background: color-mix(in oklch, var(--kit-stage) 50%, transparent);
+}
+.wc-cell {
+  display: block;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.wc-cell[data-hour] {
+  border-top: var(--border-hairline) solid var(--kit-hairline);
+}
+.wc-cell[data-half] {
+  border-top: var(--border-hairline) solid var(--kit-grid-line);
+}
+.wc-cell:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: -2px;
+}
+.wc-layer {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  height: 100%;
+  container-type: size;
+  pointer-events: none;
+}
+
+/* ── A block ──
+   Raised while it can still move, flat once it is only a commitment. It
+   never enters from nothing: it is on the page from the first frame and
+   only ever moves. */
+.wc-block {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: var(--radius-kit-control-inner);
+  background: var(--kit-object);
+  box-shadow: var(--shadow-kit-object);
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  will-change: translate;
+  transition:
+    translate 380ms var(--wc-spring),
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out,
+    background-color 150ms ease-out;
+}
+/* Only a movable block is grabbed, and only it claims the pointer from a pan. */
+.wc-block[data-movable] {
+  cursor: grab;
+  touch-action: none;
+}
+/* Under the pointer: it glides between the snaps, so it follows without a
+   jump and without lag. */
+.wc-block[data-dragging] {
+  cursor: grabbing;
+  transition:
+    translate 60ms linear,
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+/* Held by the keyboard: each arrow is a short move that retargets. */
+.wc-block[data-held] {
+  transition:
+    translate 160ms var(--wc-move),
+    scale 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+.wc-block[data-lifted] {
+  z-index: 3;
+  scale: 1.03;
+  box-shadow: var(--shadow-kit-lifted);
+}
+.wc-block[data-variant="slot"],
+.wc-block[data-variant="passed"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--kit-ink-muted);
+  outline-offset: -1px;
+}
+.wc-block[data-variant="passed"] {
+  outline-color: color-mix(in oklch, var(--kit-ink-muted) 45%, transparent);
+  color: var(--kit-ink-muted);
+}
+/* Picked: the well grey and a 1px ink ring all round. No side bar (the
+   owner, 2026-11-17: "på calender kan du også fjerne det helt til
+   venstre?"): on a 100px block the 3px stripe read as a coloured edge,
+   not a pick. The ring holds in both themes; ink flips with the mode. */
+.wc-block[data-picked] {
+  background: var(--kit-selected);
+  box-shadow: 0 0 0 1px var(--kit-ink);
+}
+.wc-block[data-picked][data-lifted] {
+  box-shadow:
+    0 0 0 1px var(--kit-ink),
+    var(--shadow-kit-lifted);
+}
+.wc-grid:focus-within .wc-block[data-focused] {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+
+/* Where a drop or a proposal lands: a dashed ink outline, on the grid. */
+.wc-proposal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-kit-control-inner);
+  outline: 1.5px dashed var(--kit-ink);
+  outline-offset: -1px;
+  transition: translate 120ms var(--wc-move);
+}
+/* Now: one still ink line across its day, the time in ink in the gutter
+   beside it. No dot, no pulse, no green, and no tick: the gutter's time
+   already marks where the line starts (2026-11-17, a subtract-first pass). */
+/* Under the blocks (z 0, and drawn before them): a block at now covers the
+   line rather than the line striking through its words. */
+.wc-now {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  height: 0;
+  border-top: 1.5px solid var(--kit-ink);
+  transition:
+    translate 300ms var(--wc-move),
+    opacity 200ms ease-out;
+}
+/* A note written on the time: never over a block's words, never pressed. */
+.wc-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+/* ── The tray: things with no time yet, over the grid ── */
+.wc-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--spacing-kit-related) var(--spacing-kit-group);
+}
+.wc-chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 18rem;
+  padding: 6px 8px 7px;
+  border-radius: var(--radius-kit-control-inner);
+  background: var(--kit-object);
+  box-shadow: var(--shadow-kit-object);
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.wc-chip[data-draggable] {
+  cursor: grab;
+  touch-action: none;
+}
+.wc-chip:hover {
+  background: var(--kit-row-hover);
+}
+.wc-chip[data-picked] {
+  background: var(--kit-selected);
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+.wc-chip:focus-visible {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+/* The copy that follows the pointer: lifted from its resting size, never from nothing. */
+.wc-chip[data-drag-preview][data-lifted] {
+  scale: 1.03;
+  box-shadow: var(--shadow-kit-lifted);
+  animation: wc-lift 150ms ease-out;
+}
+@keyframes wc-lift {
+  from {
+    scale: 1;
+    box-shadow: var(--shadow-kit-object);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wc-block,
+  .wc-block[data-dragging],
+  .wc-block[data-held],
+  .wc-proposal,
+  .wc-now,
+  .wc-chip {
+    transition: none;
+  }
+  .wc-block[data-lifted],
+  .wc-chip[data-drag-preview][data-lifted] {
+    scale: 1;
+    animation: none;
+  }
+  .wc-body[data-dir],
+  .wc-head[data-dir] {
+    animation: none;
+  }
+}

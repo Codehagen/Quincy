@@ -247,7 +247,7 @@ function IdeasSurface({ riffs, gaps, writes, pace, fold }: IdeasWorkspaceProps &
             bold="Nothing to work on yet."
             rest="Say a half-thought, or add a source and I'll bring you the material: your merges, your meetings, the posts you save."
           >
-            <ButtonLink href="/sources">Add a source</ButtonLink>
+            <ButtonLink href="/connectors?show=sources">Add a source</ButtonLink>
           </EmptyState>
         </EmptyRegion>
       ) : (
@@ -731,7 +731,7 @@ function OpenIdea({
                 See plans
               </ButtonLink>
             ) : refusal.reason === "no-channel" ? (
-              <ButtonLink size="xs" href="/channels">
+              <ButtonLink size="xs" href="/connectors?show=channels">
                 Connect a channel
               </ButtonLink>
             ) : null}

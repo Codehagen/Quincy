@@ -179,6 +179,18 @@ const nextConfig: NextConfig = {
        */
       { source: "/riffs", destination: "/ideas", permanent: true },
       { source: "/riffs/:path*", destination: "/ideas/:path*", permanent: true },
+      /**
+       * /sources and /channels became one page, /connectors, on 2026-11-17
+       * (the connectors lab: material in and writing out are one idea, and
+       * X was connected on one page and read back on the other). Permanent,
+       * as /riffs: the old names will not be reused. Each lands on its own
+       * tab (`?show=`), and Next passes the rest of the query through, so a
+       * GitHub callback link or a mailed `/sources` still works. A channel's
+       * topics and times moved with it: /channels/x is /connectors/x.
+       */
+      { source: "/sources", destination: "/connectors?show=sources", permanent: true },
+      { source: "/channels", destination: "/connectors?show=channels", permanent: true },
+      { source: "/channels/:platform", destination: "/connectors/:platform", permanent: true },
     ]
   },
 }

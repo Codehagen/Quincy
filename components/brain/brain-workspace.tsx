@@ -332,7 +332,7 @@ function GroupOverview({
             <Text>{group.empty}</Text>
             {group.value === STRATEGY_GROUP ? (
               <div className="flex">
-                <ButtonLink href="/channels">Connect a channel</ButtonLink>
+                <ButtonLink href="/connectors?show=channels">Connect a channel</ButtonLink>
               </div>
             ) : null}
           </div>

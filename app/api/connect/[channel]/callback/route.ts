@@ -42,7 +42,7 @@ function back(
   next: string | null = null
 ): NextResponse {
   const url = new URL(
-    next ?? `/channels/${channel}`,
+    next ?? `/connectors/${channel}`,
     process.env.BETTER_AUTH_URL ?? "http://localhost:3000"
   )
 

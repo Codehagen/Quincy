@@ -554,7 +554,7 @@ function AnglePanel({
                 {refusal.reason === "entitlement" ? (
                   <ButtonLink href="/settings/billing">See plans</ButtonLink>
                 ) : refusal.reason === "no-channel" ? (
-                  <ButtonLink href="/channels">Connect a channel</ButtonLink>
+                  <ButtonLink href="/connectors?show=channels">Connect a channel</ButtonLink>
                 ) : null}
                 <Button onClick={draft}>Try again</Button>
               </div>

@@ -42,14 +42,14 @@ describe("the route model (Desk)", () => {
       "Drafts",
       "Lineup",
       "Numbers",
-      "Sources",
+      "Connectors",
       "Cuts",
     ])
     expect(NAV.find((i) => i.href === "/cuts")?.badge).toBe("Beta")
   })
 
   it("puts setup and the account in the menu, not the sidebar", () => {
-    expect(SETUP_NAV.map((i) => i.href)).toEqual(["/brain", "/channels", "/rhythm"])
+    expect(SETUP_NAV.map((i) => i.href)).toEqual(["/brain", "/rhythm"])
     expect(ACCOUNT_NAV.map((i) => i.href)).toEqual(["/credits", "/settings/billing", "/settings"])
   })
 
@@ -75,7 +75,8 @@ describe("the route model (Desk)", () => {
       "/settings",
       "/settings/billing",
       "/brain",
-      "/channels/x",
+      "/connectors",
+      "/connectors/x",
       "/rhythm/abc",
     ]
     for (const route of routes) {
@@ -90,6 +91,9 @@ describe("the route model (Desk)", () => {
   it("names the page a route belongs to", () => {
     expect(navItemFor("/c/x")?.label).toBe("Studio")
     expect(navItemFor("/settings/billing")?.label).toBe("Billing")
+    // A channel's topics and times live under Connectors (Sources and
+    // Channels became one page on 2026-11-17).
+    expect(navItemFor("/connectors/linkedin")?.label).toBe("Connectors")
     expect(navItemFor("/nowhere")).toBeUndefined()
   })
 })

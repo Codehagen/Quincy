@@ -5,7 +5,6 @@ import {
   ChartLineData01Icon,
   Coins01Icon,
   CreditCardIcon,
-  Megaphone01Icon,
   Message01Icon,
   Plug01Icon,
   QuillWrite01Icon,
@@ -44,20 +43,22 @@ export const NAV: NavItem[] = [
   { href: "/lineup", label: "Lineup", icon: Calendar03Icon },
   { href: "/numbers", label: "Numbers", icon: ChartLineData01Icon },
   // In the sidebar, not in Setup: connecting a source is a thing you come
-  // back to as the work changes, not a one-off.
-  { href: "/sources", label: "Sources", icon: Plug01Icon },
+  // back to as the work changes, not a one-off. Sources and Channels became
+  // this one page on 2026-11-17 (next.config.ts redirects both); a channel's
+  // topics and times are /connectors/[platform], so they light it too.
+  { href: "/connectors", label: "Connectors", icon: Plug01Icon },
   // The video editor. Still the largest unfinished surface (plans/031), so it
   // carries "Beta" rather than promising a finished room.
   { href: "/cuts", label: "Cuts", icon: Scissor01Icon, badge: "Beta" },
 ]
 
 /**
- * The account menu's Setup group. Read as a sentence: who you are, where it
- * goes out, how often. Brain first: it changes what every draft comes out like.
+ * The account menu's Setup group. Read as a sentence: who you are, how
+ * often. Brain first: it changes what every draft comes out like. Where it
+ * goes out is Connectors, in the sidebar.
  */
 export const SETUP_NAV: NavItem[] = [
   { href: "/brain", label: "Brain", icon: BrainIcon },
-  { href: "/channels", label: "Channels", icon: Megaphone01Icon },
   { href: "/rhythm", label: "Rhythm", icon: RepeatIcon },
 ]
 

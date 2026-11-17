@@ -244,9 +244,9 @@ export default async function RhythmDetailPage({
         <Stage>
           <EmptyState
             bold="There is no switch here."
-            rest={`It fires ${rhythm.trigger.label} and stops when you disconnect the source, so Sources is where it goes on and off.`}
+            rest={`It fires ${rhythm.trigger.label} and stops when you disconnect the source, so Connectors is where it goes on and off.`}
           >
-            <ButtonLink href={eventControl.switchedAt}>Open Sources</ButtonLink>
+            <ButtonLink href={eventControl.switchedAt}>Open Connectors</ButtonLink>
           </EmptyState>
         </Stage>
       ) : locked ? (

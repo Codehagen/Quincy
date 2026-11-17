@@ -95,7 +95,7 @@ export async function GET(request: Request) {
   <head><meta charset="utf-8"><title>The app exists. Store these.</title></head>
   <body style="font: 15px system-ui; padding: 3rem; max-width: 46rem; margin: 0 auto; line-height: 1.5">
     <h1 style="font-size: 1.3rem">The app exists. These are shown once.</h1>
-    <p>Put all four into the project's environment, redeploy, then install it from <code>/sources</code>. This page will 404 afterwards.</p>
+    <p>Put all four into the project's environment, redeploy, then install it from <code>/connectors</code>. This page will 404 afterwards.</p>
     <textarea readonly rows="10" style="width: 100%; font: 12px ui-monospace, monospace; padding: .75rem">${escapeHtml(env)}</textarea>
     <p><a href="${escapeHtml(app.html_url ?? "https://github.com/settings/apps")}">The app on GitHub</a></p>
     <p style="color:#666">The OAuth client secret is deliberately not printed. This app authenticates as itself and never as a user, so nothing needs it.</p>

@@ -1,0 +1,344 @@
+/* ══ Lineup (components/lineup) ═══════════════════════════════════════
+   Decided on /prototypes/lineup-lab (2026-11-16). The calendar's grid and
+   blocks are the kit's (components/kit/week-calendar.css); this file is
+   what Lineup puts on them and around them: a block's inside and its state
+   by post, the one-day strip, and the Feed layout (touch and phone). Inside
+   a feed column the platform's look is components/drafts/feed/feed.css,
+   read here only through its variables (--xf-*, --lf-*). Kit tokens only. */
+
+/* ── A block's state, by what a post is ──
+   Sent: it happened, so it is no longer raised; the inset ring keeps its
+   edge and it stays. Failed and sending keep the object surface: the mark
+   and the platform's words say it, never red. */
+.lineup-block[data-state="published"] {
+  background: transparent;
+  box-shadow: var(--shadow-kit-inset);
+}
+.lineup-block[data-state="published"][data-picked] {
+  background: var(--kit-selected);
+  box-shadow: 0 0 0 1px var(--kit-ink);
+}
+/* The week while the next one is read: quieter, still there. */
+.lineup-week {
+  transition: opacity 150ms ease-out;
+}
+.lineup-week[data-pending] {
+  opacity: 0.6;
+}
+
+.lineup-block-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.lineup-block-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  font-weight: var(--text-kit-meta--font-weight);
+  color: var(--kit-ink);
+  overflow-wrap: anywhere;
+}
+.lineup-block[data-variant="slot"] .lineup-block-text,
+.lineup-block[data-variant="passed"] .lineup-block-text,
+.lineup-block[data-state="published"] .lineup-block-text {
+  color: var(--kit-ink-muted);
+}
+.lineup-chip-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--text-kit-meta);
+  line-height: var(--text-kit-meta--line-height);
+  font-weight: var(--text-kit-meta--font-weight);
+  letter-spacing: var(--text-kit-meta--letter-spacing);
+  overflow-wrap: anywhere;
+}
+.lineup-loading {
+  margin: 0 var(--spacing-kit-group);
+  background: repeating-linear-gradient(to bottom, var(--kit-hairline) 0 1px, transparent 1px var(--lineup-hour, 56px));
+}
+
+/* ── One day: the week as a strip of seven over the column ── */
+.lineup-daystrip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 var(--spacing-kit-group) var(--spacing-kit-related);
+}
+.lineup-daystrip button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 10px;
+  border-radius: var(--radius-kit-control-inner);
+  font-size: var(--text-kit-meta);
+  font-weight: 560;
+  color: var(--kit-ink-muted);
+  transition:
+    background-color 150ms ease-out,
+    scale 150ms ease-out;
+}
+.lineup-daystrip button:active {
+  scale: 0.96;
+}
+.lineup-daystrip button:hover {
+  background: var(--kit-row-hover);
+}
+/* Picked by fill and ink, never by weight: a weight change reflows the label. */
+.lineup-daystrip button[aria-pressed="true"] {
+  background: var(--kit-selected);
+  color: var(--kit-ink);
+}
+.lineup-daystrip button[data-today] {
+  color: var(--kit-ink);
+}
+.lineup-daystrip button:focus-visible {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+.lineup-daystrip-dot {
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+}
+.lineup-daystrip-dot[data-on] {
+  background: var(--kit-ink-muted);
+}
+
+/* ── The Feed layout: a rail, the column, a margin ── */
+.lineup-feed {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 598px) 248px;
+  column-gap: 20px;
+  justify-content: center;
+  padding: 0 var(--spacing-kit-group) calc(var(--spacing-kit-group) + env(safe-area-inset-bottom));
+}
+.lineup-row {
+  display: contents;
+}
+.lineup-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 14px;
+  text-align: end;
+}
+.lineup-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.lineup-rail-btn {
+  /* j / k bring a post to the top, under the column's sticky tabs. */
+  scroll-margin-top: 72px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 2px 6px;
+  margin-inline-end: -6px;
+  border-radius: var(--radius-kit-chip);
+  cursor: pointer;
+}
+.lineup-rail-btn:focus-visible {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: 1px;
+}
+/* 44px of hit area on a coarse pointer, without moving anything. */
+@media (pointer: coarse) {
+  .lineup-rail-btn::after {
+    content: "";
+    position: absolute;
+    inset: -12px -4px;
+  }
+}
+.lineup-margin {
+  padding-top: 14px;
+  min-width: 0;
+}
+.lineup-slice {
+  min-width: 0;
+  position: relative;
+}
+.lineup-row[data-picked] > .lineup-slice {
+  box-shadow: inset var(--spacing-kit-selection-bar, 3px) 0 0 var(--kit-ink);
+}
+.lineup-row-top > .lineup-slice {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.lineup-tail {
+  min-height: 48px;
+}
+.lineup-mark-row > .lineup-rail {
+  padding-top: 10px;
+}
+
+/* Drawn for you only, inside the column, in the platform's secondary
+   colour (the convention of the fold line): a quiet day, the head of the
+   no-time posts. Dashed rules either side of a few words. */
+.lineup-band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--xf-dim, var(--lf-dim));
+  border-bottom: 1px solid var(--xf-line, transparent);
+}
+.lf .lineup-band {
+  color: var(--lf-dim);
+  border-bottom: 0;
+}
+.lineup-band::before,
+.lineup-band::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed currentColor;
+}
+
+/* Now: one ink line across the column, the time in the rail. */
+.lineup-now > .lineup-rail {
+  padding-top: 0;
+  justify-content: center;
+  min-height: 20px;
+}
+.lineup-now > .lineup-slice {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+}
+.lineup-now-line {
+  display: block;
+  width: 100%;
+  border-top: 1px solid var(--kit-ink);
+}
+.lineup-now > .lineup-slice.lf {
+  padding: 0;
+}
+
+/* An open slot where a post would stand: a dashed outline, the platform's
+   secondary colour, plain words. Never a fake post. */
+.lineup-gap {
+  padding: 12px 16px;
+  color: var(--xf-dim, var(--lf-dim));
+  border-bottom: 1px solid var(--xf-line, transparent);
+}
+.lf .lineup-gap {
+  padding: 0;
+  color: var(--lf-dim);
+  border-bottom: 0;
+}
+.lineup-gap-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px dashed currentColor;
+  border-radius: 12px;
+}
+.lineup-gap[data-passed] .lineup-gap-box {
+  border-color: var(--xf-line, var(--lf-line));
+}
+.lineup-gap-title {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+  color: var(--xf-text, var(--lf-text));
+}
+.lineup-gap[data-passed] .lineup-gap-title {
+  color: inherit;
+}
+.lineup-gap-sub {
+  font-size: 13px;
+  line-height: 16px;
+}
+/* A sent post recedes and stays: you can check that it happened. */
+.lineup-feed-post[data-state="published"] .feed-text {
+  color: var(--xf-dim, var(--lf-dim));
+}
+
+/* The phone fold: the rail becomes a line over each post, the margin a
+   block under it. */
+@container kit-workspace (max-width: 47.99rem) {
+  .lineup-feed {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: max(0px, env(safe-area-inset-left)) max(0px, env(safe-area-inset-right));
+  }
+  .lineup-rail {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 6px;
+    text-align: start;
+  }
+  .lineup-day {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .lineup-rail-btn {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: 0;
+    margin-inline-start: auto;
+  }
+  .lineup-margin {
+    padding: 8px 16px 12px;
+  }
+  .lineup-margin:empty {
+    display: none;
+  }
+  .lineup-now > .lineup-rail {
+    padding: 4px 16px;
+  }
+  .lineup-row-top > .lineup-rail,
+  .lineup-row-top > .lineup-margin,
+  .lineup-tail + .lineup-margin {
+    display: none;
+  }
+}
+
+/* Between the table width and the phone: the margin goes under, the rail stays. */
+@container kit-workspace (min-width: 48rem) and (max-width: 63.99rem) {
+  .lineup-feed {
+    grid-template-columns: 112px minmax(0, 598px);
+  }
+  .lineup-margin {
+    grid-column: 2;
+    padding: 8px 0 12px;
+  }
+  .lineup-margin:empty {
+    display: none;
+  }
+  .lineup-row-top > .lineup-margin,
+  .lineup-tail + .lineup-margin {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lineup-week,
+  .lineup-daystrip button {
+    transition: none;
+  }
+  .lineup-daystrip button:active {
+    scale: 1;
+  }
+}

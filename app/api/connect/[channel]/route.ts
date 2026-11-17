@@ -35,7 +35,7 @@ export async function GET(
   if (!session) {
     return Response.redirect(
       new URL(
-        `/login?next=/channels/${channel}`,
+        `/login?next=/connectors/${channel}`,
         process.env.BETTER_AUTH_URL ?? "http://localhost:3000"
       ),
       302
@@ -45,7 +45,7 @@ export async function GET(
   if (!isChannelEnabled(channel)) {
     return Response.redirect(
       new URL(
-        `/channels/${channel}?error=not_configured`,
+        `/connectors/${channel}?error=not_configured`,
         process.env.BETTER_AUTH_URL ?? "http://localhost:3000"
       ),
       302

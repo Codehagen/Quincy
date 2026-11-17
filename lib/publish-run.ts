@@ -584,6 +584,28 @@ export async function countUnresolved(): Promise<number> {
 
 /* ── Sending one post, now, because a person just pressed it ──────────────── */
 
+/**
+ * What a row that already exists becomes when a person sends it now.
+ *
+ * **It leaves its slot.** A slot is filled by a post at the slot's own
+ * instant: `nextFreeSlot` compares `scheduledFor`, so a Tuesday post sent on
+ * Monday frees Tuesday. Keeping `slot_id` made the row still point at a slot
+ * it no longer fills, and /lineup, which read "filled" off `slot_id`, drew
+ * Tuesday as taken while the next approval was placed into it: two pages
+ * disagreeing about one slot. A post sent now is a one-off, exactly as one
+ * with no row before it is (the insert above writes `slotId: null`).
+ *
+ * Exported so the shape is tested without a database (publish-run.test.ts).
+ */
+export function requeuedForNow(now: Date) {
+  return {
+    scheduledFor: now,
+    state: "queued" as const,
+    lastError: null,
+    slotId: null,
+  }
+}
+
 export type SendNowResult =
   /** It is on the internet. `url` is the receipt, exactly as `record` stored it. */
   | { ok: true; url: string }
@@ -755,7 +777,7 @@ export async function sendNow({
      */
     await db
       .update(scheduledPost)
-      .set({ scheduledFor: now, state: "queued", lastError: null })
+      .set(requeuedForNow(now))
       .where(
         and(
           eq(scheduledPost.id, postId),

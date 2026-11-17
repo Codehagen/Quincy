@@ -260,3 +260,26 @@ export { ICON_DENSE, ICON_DENSE_CHEVRON } from "./control-styles"
 // /prototypes/numbers-lab after the owner picked Dashboard with Table.
 export { StatTile, type StatTileProps, type StatTileLabelProps, type StatTileValueProps } from "./stat-tile"
 export { Sparkline, type SparklineProps } from "./sparkline"
+
+// Lineup (2026-11-17): a week of continuous time with blocks moved by pointer
+// and keyboard, promoted from /prototypes/lineup-lab ("2 · Calendar"). ui-sdk only.
+export {
+  WeekCalendar,
+  useWeekCalendar,
+  describePlace,
+  hhmm,
+  type BlockState,
+  type BlockVariant,
+  type CalendarDay,
+  type WeekCalendarProps,
+  type WeekCalendarBlockProps,
+  type WeekCalendarGridProps,
+  type WeekCalendarHeaderProps,
+  type WeekCalendarDayHeadProps,
+  type WeekCalendarTimeAxisProps,
+  type WeekCalendarNowLineProps,
+  type WeekCalendarNoteProps,
+  type WeekCalendarProposalProps,
+  type WeekCalendarTrayProps,
+  type WeekCalendarTrayItemProps,
+} from "./week-calendar"

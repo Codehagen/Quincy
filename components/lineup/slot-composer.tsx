@@ -25,6 +25,7 @@ import {
   TimeInput,
   Well,
 } from "@/components/kit"
+import { useControllable } from "@/components/kit/use-controllable"
 
 /**
  * Where a standing rhythm comes from.
@@ -92,6 +93,9 @@ export function SlotComposer({
   timezone,
   label = "Slots",
   primary = false,
+  open: openProp,
+  onOpenChange,
+  shortcut,
 }: {
   existing?: ExistingSlot[]
   /**
@@ -113,9 +117,14 @@ export function SlotComposer({
    * header the action belongs to the object it acts on (actions.md).
    */
   primary?: boolean
+  /** Open, controlled (Lineup's S key opens it), with `onOpenChange`; uncontrolled without. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** The key that opens it, shown on the trigger. */
+  shortcut?: string
 }) {
   const router = useRouter()
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useControllable(openProp, false, onOpenChange)
   const [saving, setSaving] = React.useState(false)
   const [removing, setRemoving] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -203,7 +212,7 @@ export function SlotComposer({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button icon={PlusSignIcon} variant={primary ? "action" : "quiet"}>
+          <Button icon={PlusSignIcon} variant={primary ? "action" : "quiet"} shortcut={shortcut}>
             {label}
           </Button>
         }

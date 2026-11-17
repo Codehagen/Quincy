@@ -57,7 +57,7 @@ export async function sendReconnectEmail({
   expiresAt: Date | null
 }): Promise<MailResult> {
   const expiresOn = formatExpiry(expiresAt)
-  const url = `${APP_URL}/channels`
+  const url = `${APP_URL}/connectors?show=channels`
 
   return deliver({
     to,

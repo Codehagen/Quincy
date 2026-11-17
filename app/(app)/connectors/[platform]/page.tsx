@@ -21,6 +21,10 @@ import { constructMetadata } from "@/lib/metadata"
  * One channel: whether Quincy may speak for you there, and what it should sound
  * like when it does.
  *
+ * At /connectors/[platform] since 2026-11-17, when Sources and Channels
+ * became one Connectors page; /channels/[platform] redirects here
+ * (next.config.ts), and the connect callback lands here as it always did.
+ *
  * The two halves are independent, and that independence is why this route no
  * longer requires a policy page to exist. It used to `notFound()` without one,
  * on the reasoning that a policy page is created by the agent and landing
@@ -85,7 +89,7 @@ export default async function ChannelPage({
   const { platform } = await params
   const session = await getSession()
   if (!session) {
-    redirect(`/login?next=/channels/${platform}`)
+    redirect(`/login?next=/connectors/${platform}`)
   }
 
   const slug = `strategy/${platform}`
@@ -141,8 +145,8 @@ export default async function ChannelPage({
           : "Whether I can publish here."
       }
       actions={
-        <ButtonLink href="/channels" icon={ArrowLeft01Icon}>
-          Channels
+        <ButtonLink href={`/connectors?open=${platform}`} icon={ArrowLeft01Icon}>
+          Connectors
         </ButtonLink>
       }
     >

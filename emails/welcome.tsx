@@ -52,7 +52,7 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
 
       <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
         1. Point it at your material:{" "}
-        <Link href={`${appUrl}/sources`} className="text-ink underline">
+        <Link href={`${appUrl}/connectors`} className="text-ink underline">
           connect your sources
         </Link>{" "}
         — repos, essays, calendars, threads. This is what it draws from.

@@ -99,7 +99,7 @@ export function StateLine({ data, enoughHistory, minWeeks = MIN_WEEKS }: { data:
           X isn&apos;t connected.{" "}
           <span className="text-kit-ink-muted">These are the numbers as they stood{last ? ` on ${last}` : ""}; I&apos;ll read again once it is.</span>
         </p>
-        <TextLink href="/channels">Connect X</TextLink>
+        <TextLink href="/connectors?open=x">Connect X</TextLink>
       </div>
     )
   }
@@ -109,7 +109,7 @@ export function StateLine({ data, enoughHistory, minWeeks = MIN_WEEKS }: { data:
         <p className="text-kit-ink">
           The last reading is from {last}. <span className="text-kit-ink-muted">I read X every morning at 06:00 UTC.</span>
         </p>
-        <TextLink href="/channels">Check the connection</TextLink>
+        <TextLink href="/connectors?open=x">Check the connection</TextLink>
       </div>
     )
   }
@@ -136,7 +136,7 @@ export function EmptyNumbers({ kind }: { kind: "empty" | "disconnected" }) {
           bold="No channel connected."
           rest="Connect X and I'll read back every post each morning, and set it against your own median. Never a follower count."
         >
-          <ButtonLink href="/channels" variant="action">
+          <ButtonLink href="/connectors?open=x" variant="action">
             Connect X
           </ButtonLink>
         </EmptyState>

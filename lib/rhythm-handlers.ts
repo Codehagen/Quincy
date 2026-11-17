@@ -581,17 +581,17 @@ export const RUNS_ELSEWHERE: Record<string, ElsewhereRun> = {
   "voice-notes": {
     kind: "event",
     runs: "workflows/run-voice-riff.ts",
-    switchedAt: "/sources",
+    switchedAt: "/connectors?open=voice",
   },
   "meeting-notes": {
     kind: "event",
     runs: "app/api/webhooks/circleback/[token]/route.ts",
-    switchedAt: "/sources",
+    switchedAt: "/connectors?open=circleback",
   },
   "shipped-work": {
     kind: "event",
     runs: "app/api/webhooks/github/route.ts",
-    switchedAt: "/sources",
+    switchedAt: "/connectors?open=github",
   },
   heartbeat: { kind: "system", runs: "lib/heartbeat.ts" },
 }
