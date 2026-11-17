@@ -78,6 +78,26 @@ function hourBucket(now: Date): string {
 }
 
 /**
+ * Hard-wraps a sentence for the plain-text body at 78 columns, the line length
+ * a text-only client is assumed to show without reflowing. The consequences
+ * are single strings because the HTML template prints them as a paragraph.
+ */
+function wrap(text: string, width = 78): string {
+  const lines: string[] = []
+  let line = ""
+  for (const word of text.split(" ")) {
+    if (line && line.length + 1 + word.length > width) {
+      lines.push(line)
+      line = word
+    } else {
+      line = line ? `${line} ${word}` : word
+    }
+  }
+  if (line) lines.push(line)
+  return lines.join("\n")
+}
+
+/**
  * Report that a scheduled job could not do its work.
  *
  * Never throws and never blocks the response: a cron route's job is to run the
@@ -111,11 +131,15 @@ export async function alertCronFailure({
           ? `The ${job} cron refused to run because CRON_SECRET is not set.`
           : `The ${job} cron finished with failures.`,
         "",
-        CONSEQUENCE[job],
+        wrap(CONSEQUENCE[job]),
         "",
-        failure === "unconfigured"
-          ? "Set CRON_SECRET in the deployment's environment. Until it is set, this job does nothing every time it is called."
-          : "The run's own response carries the counts. Check the deployment logs for this job.",
+        wrap(
+          failure === "unconfigured"
+            ? "Set CRON_SECRET in the deployment’s environment. Until it is set, this job does nothing every time it is called."
+            : "The run’s own response carries the counts. Check the deployment logs for this job."
+        ),
+        "",
+        "This message is sent at most once an hour per job.",
       ].join("\n"),
       idempotencyKey: `cron-alert/${job}/${failure}/${hourBucket(now)}`,
     })

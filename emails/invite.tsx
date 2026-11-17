@@ -1,6 +1,4 @@
-import { Heading, Text } from "@react-email/components"
-
-import { Action, Rule, Shell } from "./shell"
+import { Action, Footer, Note, Num, Para, Shell, Title } from "./shell"
 
 interface InviteProps {
   /** The signup link, invite code already on it. */
@@ -11,7 +9,7 @@ interface InviteProps {
 
 /**
  * The one mail the waitlist ever sends, and it is sent by a person running
- * `scripts/invite.ts` — never by the join endpoint. See plans/023.
+ * `scripts/invite.ts`, never by the join endpoint. See plans/023.
  *
  * That is the whole reason `/api/waitlist` does not confirm by mail: a public
  * endpoint that emails whatever address is posted to it is a mail-bomb
@@ -20,7 +18,7 @@ interface InviteProps {
  * us is this, and it is expected.
  *
  * No name. The waitlist form asks for an address and nothing else, so we do not
- * have one — and "Hi there" is worse than opening with the sentence that
+ * have one, and "Hi there" is worse than opening with the sentence that
  * matters.
  *
  * No unsubscribe link, matching `welcome.tsx`: this is transactional, sent once
@@ -29,43 +27,38 @@ interface InviteProps {
  */
 export default function Invite({ url, expiresIn }: InviteProps) {
   return (
-    <Shell title="Your Quincy invite" preview="Your invite is ready">
-      <Heading
-        as="h1"
-        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
-      >
-        You are in.
-      </Heading>
+    <Shell
+      title="Your Quincy invite"
+      preview="You asked to be told when Quincy opened. It is your turn."
+    >
+      <Title>You are in.</Title>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
+      <Para>
         You asked to be told when Quincy opened. It is your turn. Quincy takes
-        your raw material — something you shipped, a half-thought, a call you
-        recorded — and drafts it in your voice. It writes, then it stops.
+        your raw material (something you shipped, a half-thought, a call you
+        recorded) and drafts it in your voice. It writes, then it stops.
         Nothing goes out in your name until you approve it.
-      </Text>
+      </Para>
 
-      <Action href={url}>
-        Create your account
-      </Action>
+      <Action href={url}>Create your account</Action>
 
-      <Text className="mt-[16px] text-[14px] leading-[1.5] text-inkMuted">
-        The link works once and runs out in {expiresIn}. It is tied to this
-        address, so create the account with the one this mail arrived at.
-      </Text>
+      <Note after="block">
+        The link works once and runs out in <Num>{expiresIn}</Num>. It is tied
+        to this address, so create the account with the one this mail arrived
+        at.
+      </Note>
 
-      <Rule />
-
-      <Text className="text-[14px] leading-[1.5] text-inkMuted">
+      <Footer>
         If you would rather not, do nothing and the invite lapses. Replies to
         this message reach a real person.
-      </Text>
+      </Footer>
     </Shell>
   )
 }
 
 /**
  * What the preview server renders. Without these the invite showed "runs out
- * in ." — an empty prop reading as a typo in the one template nobody had ever
+ * in .", an empty prop reading as a typo in the one template nobody had ever
  * looked at, because it is the only one that had never been sent.
  *
  * The code is obviously fake on purpose. A realistic-looking one invites

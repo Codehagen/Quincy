@@ -225,6 +225,6 @@ export const QUESTIONS = [
   },
   {
     q: "Can I cancel?",
-    a: "In the billing portal, in one press. The subscription runs to the end of the period you have already paid for and then stops.",
+    a: "Under Settings, Billing: hold Cancel subscription. The subscription runs to the end of the period you have already paid for and then stops.",
   },
 ] as const

@@ -24,8 +24,15 @@ export function BillingActions({
   price,
   disabled,
   disabledReason,
+  variant = "action",
 }: {
   mode: "subscribe" | "manage"
+  /**
+   * `action` (default): the page's one ink action. `quiet` where something
+   * else is the action, as on the confirmation after Checkout, where the
+   * next step is Studio and Manage billing stays reachable beside it.
+   */
+  variant?: "action" | "quiet"
   /**
    * The monthly price in dollars, from the page. Passed in rather than
    * imported: `PLAN_PRICE_USD` lives in lib/stripe.ts beside the Stripe SDK,
@@ -95,11 +102,12 @@ export function BillingActions({
 
   return (
     <div className="flex flex-col items-start gap-kit-related">
-      {/* The one action on the page (docs/design/actions.md). `pending` keeps
-          it focusable and announces the label while the browser leaves. */}
+      {/* The one action on the page unless the caller says otherwise
+          (docs/design/actions.md). `pending` keeps it focusable and announces
+          the label while the browser leaves. */}
       <Button
         type="button"
-        variant="action"
+        variant={variant}
         size="lg"
         onClick={run}
         disabled={disabled}

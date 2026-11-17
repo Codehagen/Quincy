@@ -135,6 +135,15 @@ async function main() {
       "<title> describes the email",
       html.includes(`<title>${title}</title>`)
     )
+    // The friend is an opaque PNG, so a client that inverts the page would
+    // leave a light square on a dark one. Gmail ignores this; the rest honour it.
+    check(
+      "declared light-only",
+      html.includes('name="color-scheme" content="light"') &&
+        html.includes('name="supported-color-schemes" content="light"')
+    )
+    // Visible copy carries no em dashes (see lib/metadata.ts).
+    check("no em dash in the copy", !html.includes("\u2014"))
     check(
       "layout table is presentational",
       html.includes('role="presentation"')
@@ -203,7 +212,7 @@ async function main() {
   // The welcome is signed by a person and promises a reply reaches them. That
   // promise is only true while MAIL_REPLY_TO is a mailbox someone opens, so the
   // signature and the reply-to are checked as one thing.
-  check("signed by a person", welcome.includes("— Christer"))
+  check("signed by a person", />\s*Christer\s*<\/p>/.test(welcome))
   check(
     "reply-to is a personal address, as the sign-off claims",
     (process.env.MAIL_REPLY_TO ?? "christer@hirequincy.com").startsWith(

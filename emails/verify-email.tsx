@@ -1,6 +1,4 @@
-import { Heading, Link, Text } from "@react-email/components"
-
-import { Action, Rule, Shell } from "./shell"
+import { Action, Footer, Para, PasteLink, Shell, Title } from "./shell"
 
 interface VerifyEmailProps {
   name: string
@@ -11,38 +9,23 @@ export default function VerifyEmail({ name, url }: VerifyEmailProps) {
   return (
     <Shell
       title="Confirm your email address for Quincy"
-      preview="Confirm your email and Quincy gets to work"
+      preview="One click and Quincy gets to work."
     >
-      <Heading
-        as="h1"
-        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
-      >
-        Confirm your email.
-      </Heading>
+      <Title>Confirm your email.</Title>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
-        Hi {name} — one click and Quincy can start reading your sources and
+      <Para>
+        Hi {name}. One click and Quincy can start reading your sources and
         drafting in your voice.
-      </Text>
+      </Para>
 
-      <Action href={url}>
-        Confirm email
-      </Action>
+      <Action href={url}>Confirm email</Action>
 
-      <Text className="mt-[24px] text-[14px] leading-[1.5] text-inkMuted">
-        Or paste this into your browser:
-        <br />
-        <Link href={url} className="text-ink break-all underline">
-          {url}
-        </Link>
-      </Text>
+      <PasteLink href={url} />
 
-      <Rule />
-
-      <Text className="m-0 text-[14px] leading-[1.5] text-inkMuted">
-        If you did not create a Quincy account, ignore this — nothing happens
+      <Footer>
+        If you did not create a Quincy account, ignore this. Nothing happens
         until the link is used. Replies to this message reach a real person.
-      </Text>
+      </Footer>
     </Shell>
   )
 }

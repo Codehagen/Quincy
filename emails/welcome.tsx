@@ -1,6 +1,6 @@
-import { Heading, Link, Text } from "@react-email/components"
+import { Link } from "@react-email/components"
 
-import { Action, Rule, Shell } from "./shell"
+import { Action, Note, Num, Para, Rule, Shell, Subtitle, Title } from "./shell"
 
 interface WelcomeProps {
   name: string
@@ -13,11 +13,11 @@ interface WelcomeProps {
  * password signup, immediately for Google, since Google has already proved the
  * address. See the hooks in lib/auth.ts.
  *
- * Structured the way Dub structures theirs: a plain welcome, one line on what
- * the product now does for you, five numbered steps that each link somewhere
- * real, one button. No unsubscribe link, which is where this departs from
- * Dub's — theirs carries marketing framing and needs one. This is the welcome
- * half only, and mixing the two is the hybrid the guidance warns against.
+ * The shape: a plain welcome, one line on what the product now does for you,
+ * five numbered steps that each link somewhere real, one button. No
+ * unsubscribe link: a welcome that carries marketing framing needs one, and
+ * this is the welcome half only. Mixing the two is the hybrid the guidance
+ * warns against.
  *
  * Every step names a page that exists and describes what that page actually
  * says it does. An onboarding list that oversells is worse than none: the
@@ -26,89 +26,75 @@ interface WelcomeProps {
 export default function Welcome({ name, appUrl }: WelcomeProps) {
   return (
     <Shell title="Welcome to Quincy" preview="Give it something to write about">
-      <Heading
-        as="h1"
-        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
-      >
-        Welcome to Quincy.
-      </Heading>
+      <Title>Welcome to Quincy.</Title>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
-        Hi {name} — your account is ready. Give Quincy raw material and it
+      <Para>
+        Hi {name}. Your account is ready. Give Quincy raw material and it
         drafts in your voice. Nothing goes out until you approve it, and the
         more it knows about how you write, the less you will need to rewrite.
-      </Text>
+      </Para>
 
-      <Heading
-        as="h2"
-        className="text-ink mt-[32px] mb-0 text-[18px] leading-[1.3] font-semibold"
-      >
-        Getting started
-      </Heading>
+      <Subtitle>Getting started</Subtitle>
 
-      <Text className="mt-[8px] mb-[20px] text-[14px] leading-[1.5] text-inkMuted">
-        Five things worth doing first. None takes long.
-      </Text>
+      <Note>Five things worth doing first. None takes long.</Note>
 
-      <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
-        1. Point it at your material:{" "}
+      <Para>
+        <Num>1.</Num> Point it at your material:{" "}
         <Link href={`${appUrl}/connectors`} className="text-ink underline">
           connect your sources
         </Link>{" "}
-        — repos, essays, calendars, threads. This is what it draws from.
-      </Text>
+        (repos, essays, calendars, threads). This is what it draws from.
+      </Para>
 
-      <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
-        2. Tell it what you know:{" "}
+      <Para>
+        <Num>2.</Num> Tell it what you know:{" "}
         <Link href={`${appUrl}/brain`} className="text-ink underline">
           fill in the Brain
         </Link>{" "}
         with your positions and platform strategy, so drafts argue your line
         rather than a general one.
-      </Text>
+      </Para>
 
-      <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
-        3. Set the cadence:{" "}
+      <Para>
+        <Num>3.</Num> Set the cadence:{" "}
         <Link href={`${appUrl}/rhythm`} className="text-ink underline">
           choose your Rhythm
         </Link>{" "}
         and it briefs you before the noise, recaps posts and performance after.
-      </Text>
+      </Para>
 
-      <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
-        4. Work a half-thought:{" "}
+      <Para>
+        <Num>4.</Num> Work a half-thought:{" "}
         <Link href={`${appUrl}/ideas`} className="text-ink underline">
           open Ideas
-        </Link>{" "}
-        — scraps in, several directions out, before anything reaches Drafts.
-      </Text>
+        </Link>
+        . Scraps in, several directions out, before anything reaches Drafts.
+      </Para>
 
-      <Text className="text-ink my-[12px] text-[15px] leading-[1.6]">
-        5. Or just talk to it:{" "}
+      <Para>
+        <Num>5.</Num> Or just talk to it:{" "}
         <Link href={`${appUrl}/studio`} className="text-ink underline">
           the Studio
         </Link>{" "}
         is the main way in. Every page is a window onto the same conversation.
-      </Text>
+      </Para>
 
       <Action href={`${appUrl}/studio`}>Open Studio</Action>
 
       <Rule />
 
       {/*
-       * Signed, and the claim is literal: MAIL_REPLY_TO is christer@ — a Zoho
+       * Signed, and the claim is literal: MAIL_REPLY_TO is christer@, a Zoho
        * mailbox a person opens. "Lands in my inbox" stops being true the moment
        * that variable points at a shared queue, so the two move together.
        */}
-      <Text className="text-ink m-0 text-[15px] leading-[1.6]">
+      <Para first>
         Stuck, or did it draft something that does not sound like you? Just
-        reply — this lands in my inbox, and early on that is the feedback that
+        reply. This lands in my inbox, and early on that is the feedback that
         tunes the voice.
-      </Text>
+      </Para>
 
-      <Text className="mt-[16px] mb-0 text-[15px] leading-[1.6] text-inkMuted">
-        — Christer
-      </Text>
+      <Para>Christer</Para>
     </Shell>
   )
 }

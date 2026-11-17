@@ -8,6 +8,8 @@ import { MANAGED_PAYMENTS } from "@/lib/billing-flags"
 import { isBillingConfigured, PLAN_PRICE_USD } from "@/lib/stripe"
 import { TRIAL_DAYS } from "@/lib/trial"
 import { BillingActions } from "@/components/billing/billing-actions"
+import { CheckoutConfirmed, CheckoutPending } from "@/components/billing/checkout-done"
+import { PlanCancel } from "@/components/billing/plan-cancel"
 import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { Card, KitPage, Stage, Text } from "@/components/kit"
 import { constructMetadata } from "@/lib/metadata"
@@ -26,6 +28,10 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
+type Props = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
+
 /**
  * The reads sit under the page's own Suspense, not only the layout's: on a
  * client navigation the layout's boundary is above what re-renders, so the
@@ -33,7 +39,7 @@ export const metadata = constructMetadata({
  * its title (states.md, "Working"), so the page opens at once and the title
  * never moves when the rest arrives.
  */
-export default function BillingPage() {
+export default function BillingPage({ searchParams }: Props) {
   return (
     <Suspense
       fallback={
@@ -42,12 +48,12 @@ export default function BillingPage() {
         </KitPage>
       }
     >
-      <Billing />
+      <Billing searchParams={searchParams} />
     </Suspense>
   )
 }
 
-async function Billing() {
+async function Billing({ searchParams }: Props) {
   // The snapshot, not the gate. `getEntitlement` short-circuits on the trial
   // and would have this page offering Subscribe to somebody who had already
   // subscribed — see lib/billing.ts.
@@ -93,7 +99,7 @@ async function Billing() {
         : "You are on the plan.",
       body: snapshot.cancelAtPeriodEnd
         ? "Your plan is cancelled but still running. Nothing changes until the date above, and restarting before then costs nothing."
-        : `Everything is switched on${renews ? `, and renews ${renews}` : ""}. Cancel, change your card or pull an invoice from the Stripe portal. It is the same billing account, not a copy of it.`,
+        : `Everything is switched on${renews ? `, and renews ${renews}` : ""}. Change your card or pull an invoice from the Stripe portal. It is the same billing account, not a copy of it.`,
       mode: "manage" as const,
     },
     expired: {
@@ -123,10 +129,43 @@ async function Billing() {
   // would bill once the card is fixed. Only cancelled or none subscribes.
   const mode = snapshot.recoverable ? ("manage" as const) : copy.mode
 
+  // Back from Checkout (billing-actions.tsx sets this successUrl). Read here,
+  // under the page's Suspense: under cacheComponents a read above it blocks
+  // the prerender. Confirmed when the snapshot already says active; pending
+  // when it does not yet, and pending never renders Subscribe, because a
+  // second Checkout during the lag opens a second subscription. An active plan
+  // that is already ending is not a purchase that just happened, so it gets
+  // the ordinary page. Without the query the page is exactly as before.
+  const { checkout } = await searchParams
+  const back = checkout === "done"
+  const confirmed = back && snapshot.state === "active" && !snapshot.cancelAtPeriodEnd
+  const pending = back && snapshot.state !== "active"
+
+  const summary = `${pending ? "Confirming" : copy.badge}. One plan, $${PLAN_PRICE_USD} a month${MANAGED_PAYMENTS ? " plus VAT where it applies" : ""}, cancel any time.`
+
+  if (confirmed || pending) {
+    return (
+      <KitPage title="Billing" summary={summary}>
+        <Stage>
+          {confirmed ? (
+            <CheckoutConfirmed
+              renews={renews}
+              soldThroughLink={MANAGED_PAYMENTS}
+              price={PLAN_PRICE_USD}
+              disabled={!isBillingConfigured}
+            />
+          ) : (
+            <CheckoutPending soldThroughLink={MANAGED_PAYMENTS} />
+          )}
+        </Stage>
+      </KitPage>
+    )
+  }
+
   return (
     <KitPage
       title="Billing"
-      summary={`${copy.badge}. One plan, $${PLAN_PRICE_USD} a month${MANAGED_PAYMENTS ? " plus VAT where it applies" : ""}, cancel any time.`}
+      summary={summary}
     >
       <Stage lead={copy.title}>
         <Card>
@@ -142,6 +181,12 @@ async function Billing() {
                   : "Billing is not set up here: STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are missing."
               }
             />
+            {/* Cancel, or undo a cancel, in the app: below a fold in the
+                card, away from the page's one action. Only for a plan that
+                is on, and only where Stripe can be reached. */}
+            {snapshot.state === "active" && isBillingConfigured ? (
+              <PlanCancel ending={snapshot.cancelAtPeriodEnd} endsOn={renews} />
+            ) : null}
           </div>
         </Card>
       </Stage>

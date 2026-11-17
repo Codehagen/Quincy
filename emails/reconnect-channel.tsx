@@ -1,6 +1,4 @@
-import { Heading, Link, Text } from "@react-email/components"
-
-import { Action, Rule, Shell } from "./shell"
+import { Action, Footer, Num, Para, PasteLink, Shell, Title } from "./shell"
 
 interface ReconnectChannelProps {
   name: string
@@ -40,41 +38,35 @@ export default function ReconnectChannel({
           : `${channel} access has ended. One click renews it.`
       }
     >
-      <Heading
-        as="h1"
-        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
-      >
+      <Title>
         {expiresOn
           ? `Renew ${channel} access.`
           : `${channel} needs a reconnect.`}
-      </Heading>
+      </Title>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
-        Hi {name} — {channel} grants access for 60 days at a time, then asks
-        again. {expiresOn ? `Yours ends ${expiresOn}.` : "Yours has run out."}{" "}
+      <Para>
+        Hi {name}. {channel} grants access for <Num>60</Num> days at a time,
+        then asks again.{" "}
+        {expiresOn ? (
+          <>
+            Yours ends <Num>{expiresOn}</Num>.
+          </>
+        ) : (
+          "Yours has run out."
+        )}{" "}
         Nothing is wrong and nothing was lost; your drafts, strategy and
         schedule are exactly where you left them.
-      </Text>
+      </Para>
 
-      <Action href={url}>
-        Reconnect {channel}
-      </Action>
+      <Action href={url}>Reconnect {channel}</Action>
 
-      <Text className="mt-[24px] text-[14px] leading-[1.5] text-inkMuted">
-        Or paste this into your browser:
-        <br />
-        <Link href={url} className="text-ink break-all underline">
-          {url}
-        </Link>
-      </Text>
+      <PasteLink href={url} />
 
-      <Rule />
-
-      <Text className="m-0 text-[14px] leading-[1.5] text-inkMuted">
-        Until you reconnect, Quincy keeps drafting — it just cannot post. It has
+      <Footer>
+        Until you reconnect, Quincy keeps drafting. It just cannot post. It has
         never posted anything you did not approve, and that does not change.
         Replies to this message reach a real person.
-      </Text>
+      </Footer>
     </Shell>
   )
 }

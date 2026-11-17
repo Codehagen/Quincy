@@ -1,6 +1,4 @@
-import { Heading, Text } from "@react-email/components"
-
-import { Shell } from "./shell"
+import { Footer, Note, Para, Shell, Title } from "./shell"
 
 interface CronAlertProps {
   /** The job as its route path names it: publish, rhythms, channels, heartbeat. */
@@ -33,31 +31,27 @@ export function CronAlertEmail({ job, failure, consequence }: CronAlertProps) {
       title={`The ${job} cron ${unconfigured ? "cannot run" : "is failing"}`}
       preview={consequence}
     >
-      <Heading
-        as="h1"
-        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
-      >
+      <Title>
         {unconfigured
           ? `The ${job} cron cannot run.`
           : `The ${job} cron is failing.`}
-      </Heading>
+      </Title>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
+      <Para>
         {unconfigured
-          ? `It refused to run because CRON_SECRET is not set, and it will refuse every time it is called until that changes.`
-          : `Its last run finished with failures.`}
-      </Text>
+          ? "It refused to run because CRON_SECRET is not set, and it will refuse every time it is called until that changes."
+          : "Its last run finished with failures."}
+      </Para>
 
-      <Text className="text-ink mt-[12px] text-[16px] leading-[1.55]">
-        {consequence}
-      </Text>
+      <Para>{consequence}</Para>
 
-      <Text className="mt-[12px] text-[14px] leading-[1.55] text-inkMuted">
+      <Note>
         {unconfigured
-          ? "Set CRON_SECRET in the deployment's environment."
-          : "The counts are in the run's own response and in the deployment logs for this job."}{" "}
-        This message is sent at most once an hour per job.
-      </Text>
+          ? "Set CRON_SECRET in the deployment’s environment."
+          : "The counts are in the run’s own response and in the deployment logs for this job."}
+      </Note>
+
+      <Footer>This message is sent at most once an hour per job.</Footer>
     </Shell>
   )
 }
