@@ -23,18 +23,22 @@ export default function AppError({
   }, [error])
 
   return (
-    <EmptyRegion>
-      <EmptyState
-        media={<Friend size={40} state="stuck" className="text-kit-ink" />}
-        bold="This page didn’t load."
-        rest="Nothing you saved is lost. Try again, or go back to Studio."
-      >
-        <Button onClick={() => retry()}>Try again</Button>
-        {/* A link beside the one action, not a second button. */}
-        <span className="flex items-center px-kit-tight">
-          <TextLink href="/studio">Go to Studio</TextLink>
-        </span>
-      </EmptyState>
-    </EmptyRegion>
+    // The page column every other page reads in. Without it the card ran
+    // the full width of the main area, edge to edge on a wide screen.
+    <div className="mx-auto w-full max-w-kit-page px-kit-page-gutter pt-kit-page-top">
+      <EmptyRegion>
+        <EmptyState
+          media={<Friend size={40} state="stuck" className="text-kit-ink" />}
+          bold="This page didn’t load."
+          rest="Nothing you saved is lost. Try again, or go back to Studio."
+        >
+          <Button onClick={() => retry()}>Try again</Button>
+          {/* A link beside the one action, not a second button. */}
+          <span className="flex items-center px-kit-tight">
+            <TextLink href="/studio">Go to Studio</TextLink>
+          </span>
+        </EmptyState>
+      </EmptyRegion>
+    </div>
   )
 }
