@@ -258,5 +258,5 @@ export { ICON_DENSE, ICON_DENSE_CHEVRON } from "./control-styles"
 // Numbers (2026-11-17, docs/design/workspace.md "StatTile and Sparkline"):
 // the one page with tiles (decisions.md, "Never"), promoted from
 // /prototypes/numbers-lab after the owner picked Dashboard with Table.
-export { StatTile, type StatTileProps } from "./stat-tile"
+export { StatTile, type StatTileProps, type StatTileLabelProps, type StatTileValueProps } from "./stat-tile"
 export { Sparkline, type SparklineProps } from "./sparkline"

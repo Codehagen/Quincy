@@ -42,6 +42,7 @@ import {
   useLetterKeys,
   type DataListColumn,
 } from "@/components/kit"
+import { useControllable } from "@/components/kit/use-controllable"
 
 import { Climb, MultipleBar } from "./charts"
 
@@ -76,37 +77,45 @@ function passAgainst(a: Against, r: Row) {
   return a === "above" ? r.multiple >= 1 : a === "below" ? r.multiple < 1 : r.multiple >= 3
 }
 
-export function NumbersTable({
-  data,
-  read,
-  table,
-  setTable,
-  setPeriod,
-  back,
-  foldRef,
-}: {
+/** Every post, newest first, none open: Table with nothing asked of it. */
+export const TABLE_DEFAULT: TableState = { post: null, show: "all", order: "newest", against: "any" }
+
+export type NumbersTableProps = {
   data: NumbersData
   read: Read
-  table: TableState
-  setTable: (next: Partial<TableState>) => void
-  setPeriod: (p: Period) => void
-  back: () => void
-  /** The workspace, measured for the fold. */
-  foldRef: React.RefObject<HTMLDivElement | null>
-}) {
+  /** Controlled: the filters and the open post (`post`). */
+  value?: TableState
+  /** Uncontrolled starting filters and open post. */
+  defaultValue?: TableState
+  /** The whole next state, after a filter changed or a post opened. */
+  onValueChange?: (next: TableState) => void
+  /** The empty state's "Show 90 days". */
+  onPeriodChange: (p: Period) => void
+  /** Esc with nothing open in place: back to the Dashboard. */
+  onBack: () => void
+}
+
+export function NumbersTable({ data, read, value, defaultValue = TABLE_DEFAULT, onValueChange, onPeriodChange, onBack }: NumbersTableProps) {
+  const [table, setState] = useControllable(value, defaultValue, onValueChange)
+  const setTable = (next: Partial<TableState>) => setState({ ...table, ...next })
   const [fold, setFold] = React.useState<boolean | null>(null)
   const [detail, setDetail] = React.useState(table.post !== null)
   const { against, order, show } = table
 
+  // Measured on Table's own root, which spans the workspace. The workspace's
+  // ref is not attached yet when this runs on a first load (a parent's ref
+  // lands after its children's layout effects), so a link straight to Table
+  // stayed hidden.
+  const rootRef = React.useRef<HTMLDivElement>(null)
   React.useLayoutEffect(() => {
-    const el = foldRef.current
+    const el = rootRef.current
     if (!el) return
     const measure = () => setFold(el.clientWidth < FOLD)
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [foldRef])
+  }, [])
 
   const all: Row[] = read.scored
   const people = data.people
@@ -161,11 +170,11 @@ export function NumbersTable({
       if (document.querySelector('[role="menu"], [role="listbox"][data-open], [role="dialog"], [role="alertdialog"]')) return
       e.preventDefault()
       if (fold && detail) setDetail(false)
-      else back()
+      else onBack()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [back, fold, detail])
+  }, [onBack, fold, detail])
 
   const columns: DataListColumn<Row>[] = [
     { id: "post", header: "Post", width: "minmax(0,1fr)", cell: (r) => <DataListTitle>{r.post.hook}</DataListTitle>, skeleton: "title" },
@@ -189,7 +198,7 @@ export function NumbersTable({
       wide: true,
       cell: (r) => (
         <span className="flex w-full items-center">
-          <MultipleBar multiple={r.multiple} emphasis={r.post.id === current} />
+          <MultipleBar multiple={r.multiple} tone={r.post.id === current ? "ink" : "muted"} />
         </span>
       ),
     },
@@ -228,7 +237,7 @@ export function NumbersTable({
       rest={notRead ? "I count replies; who wrote them isn't read yet. Show every post instead." : all.length === 0 ? "Pick a longer period." : "Clear the filters."}
     >
       {all.length === 0 && read.days < 90 ? (
-        <Button size="xs" onClick={() => setPeriod("90")}>
+        <Button size="xs" onClick={() => onPeriodChange("90")}>
           Show 90 days
         </Button>
       ) : all.length === 0 ? null : (
@@ -267,7 +276,7 @@ export function NumbersTable({
   const shows = (people === null ? (["all", "replies"] as const) : (["all", "replies", "returning"] as const)) satisfies readonly Show[]
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col" style={fold === null ? { visibility: "hidden" } : undefined}>
       <Toolbar label="Filters" size="filter">
         <ToolbarGroup>
           <FilterMenu
@@ -446,7 +455,7 @@ function PostDetail({ row, read, people }: { row: Row; read: Read; people: Perso
 
       <section aria-label="How it climbed" className="flex flex-col gap-kit-related border-t border-kit-hairline pt-kit-group">
         <h3 className="text-kit-meta font-kit-strong text-kit-ink">How it climbed</h3>
-        <Climb climb={post.climb} label="Views by morning since it went out" />
+        <Climb values={post.climb} aria-label="Views by morning since it went out" />
       </section>
 
       <section aria-label="Who replied" className="flex flex-col gap-kit-related border-t border-kit-hairline pt-kit-group">

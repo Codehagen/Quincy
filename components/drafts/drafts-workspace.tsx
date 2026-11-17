@@ -608,7 +608,7 @@ function InlineRow({
         aria-controls={open ? panelId : undefined}
         onClick={() => onToggle(open)}
         className={
-          `relative grid w-full scroll-mt-2 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-kit-control px-3 py-1.5 text-left pointer-coarse:min-h-11 ${FOCUS_RING} focus-visible:outline-offset-0 ` +
+          `relative grid w-full scroll-mt-9 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-kit-control px-3 py-1.5 text-start pointer-coarse:min-h-11 ${FOCUS_RING} focus-visible:outline-offset-0 ` +
           "@[40rem]/kit-workspace:grid-cols-[1rem_minmax(0,1fr)_8rem_2.75rem_6.25rem_3.25rem] " +
           "transition-[background-color] duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none " +
           (open ? "" : "hover:bg-kit-row-hover")
@@ -639,7 +639,7 @@ function InlineRow({
         <span className="hidden @[40rem]/kit-workspace:flex">
           <NextCell row={row} />
         </span>
-        <span className="self-start pt-0.5 text-right font-kit-mono text-kit-mono-sm text-kit-ink-muted tabular-nums @[40rem]/kit-workspace:self-center @[40rem]/kit-workspace:pt-0">
+        <span className="self-start pt-0.5 text-end font-kit-mono text-kit-mono-sm text-kit-ink-muted tabular-nums @[40rem]/kit-workspace:self-center @[40rem]/kit-workspace:pt-0">
           {row.draft.from.at}
         </span>
       </button>

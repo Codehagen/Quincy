@@ -222,15 +222,20 @@ to undo.", a recorder's state. Never mount a `role="status"` per message.
 ## StatTile and Sparkline (Numbers only)
 
 `/numbers` is the one dashboard (decisions.md, Never), and these are its
-two generic parts. `StatTile`: `label`, `group` ("Depth" / "Volume"),
-`value` (the figure, said: "9 replies"), `sentence` (one line against the
-person's own usual, two lines held), `trend` (a Sparkline), `quiet` (the
-value is a stand-in such as "Not read yet"), `onOpen` + `opensLabel` (a
-button that opens what is behind the number, chevron always shown). A
-tile with nothing behind it has no `onOpen`. `Sparkline`: `values`,
-`emphasis` (the steps in ink), `usual` (a flat muted line); decorative,
-because the tile's sentence says the numbers. No hue, no good or bad
-colour. Tiles go 4-up from a 60rem workspace and 2-up below it.
+two generic parts. `StatTile` is compound: the root is the object, and
+`StatTile.Label` (its `group`, "Depth" / "Volume", at the row's end),
+`StatTile.Value` (the figure, said: "9 replies"; `tone="muted"` when it is
+a stand-in such as "Not read yet"), `StatTile.Against` (one line against
+the person's own usual, two lines held), `StatTile.Spark` (a Sparkline, or
+empty; its height is held) and `StatTile.Opens` (what opening does, said
+to assistive tech) are its lines. With `onClick` the root is a button
+that opens what is behind the number, chevron always shown; a tile with
+nothing behind it has no `onClick`. Every part takes `ref` and
+`className` and spreads the rest. Under 13rem of tile the group gives the
+label the row. `Sparkline`: `values`, `emphasis` (the steps in ink),
+`usual` (a flat muted line); decorative, because the tile's sentence says
+the numbers. No hue, no good or bad colour. Tiles go 4-up from a 60rem
+workspace and 2-up below it.
 
 ## Touch and motion
 

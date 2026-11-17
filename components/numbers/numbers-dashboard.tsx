@@ -22,8 +22,8 @@ import {
 } from "@/lib/numbers-read"
 import { Avatar, Button, Menu, MenuPanel, MenuRadioGroup, MenuRadioItem, MenuTrigger, Sparkline, StatTile } from "@/components/kit"
 
-import { MultipleBar, MultipleScale, WeekColumns, WeekDots } from "./charts"
-import { GridPanel } from "./numbers-parts"
+import { MultipleBar, MultipleScale, WeekChart, WeekDots } from "./charts"
+import { NumbersPanel } from "./numbers-parts"
 
 /**
  * The Dashboard: four tiles you scan in one glance, then a grid of panels
@@ -48,16 +48,15 @@ const OPENS: Record<Measure, string> = {
 /** How many posts "What worked" ranks. */
 const BEST_ROWS = 5
 
-export function NumbersDashboard({
-  read,
-  openTable,
-  returnTo,
-}: {
+export type NumbersDashboardProps = {
   read: Read
-  openTable: (next: Partial<TableState>, returnTo: string) => void
-  /** The element that opened Table, refocused on the way back. */
+  /** A tile or a "What worked" row asks for Table: what to show, and the `data-return` of what asked. */
+  onOpenTable: (next: Partial<TableState>, returnTo: string) => void
+  /** The `data-return` of what opened Table, refocused on the way back. */
   returnTo: string | null
-}) {
+}
+
+export function NumbersDashboard({ read, onOpenTable, returnTo }: NumbersDashboardProps) {
   const [measure, setMeasure] = React.useState<Measure>("replies")
   // The trend draws only what can be read: "Came back" is not, yet.
   const charted = read.tiles.filter((t) => !t.notRead)
@@ -79,15 +78,16 @@ export function NumbersDashboard({
     <>
       <div role="group" aria-label={`The last ${read.days} days against your usual`} className="grid grid-cols-2 gap-kit-related @[60rem]/kit-workspace:grid-cols-4">
         {read.tiles.map((t) => (
-          <NumberTile key={t.measure} tile={t} inWindow={inWindow} days={read.days} onOpen={() => openTable(TABLE_FOR[t.measure], `tile-${t.measure}`)} />
+          <NumberTile key={t.measure} tile={t} inWindow={inWindow} days={read.days} onOpen={() => onOpenTable(TABLE_FOR[t.measure], `tile-${t.measure}`)} />
         ))}
       </div>
 
       <div className="grid grid-cols-1 gap-kit-related @[60rem]/kit-workspace:grid-cols-3">
-        <GridPanel
-          title={`${picked.label} per week`}
-          meta={
-            <Menu>
+        <NumbersPanel className="@[60rem]/kit-workspace:col-span-2">
+          <NumbersPanel.Header>
+            <NumbersPanel.Title>{`${picked.label} per week`}</NumbersPanel.Title>
+            <NumbersPanel.Meta>
+              <Menu>
               <MenuTrigger
                 aria-label={`Chart: ${picked.label}. Change what it shows`}
                 render={
@@ -105,22 +105,21 @@ export function NumbersDashboard({
                   ))}
                 </MenuRadioGroup>
               </MenuPanel>
-            </Menu>
-          }
-          className="@[60rem]/kit-workspace:col-span-2"
-        >
-          <WeekColumns
+              </Menu>
+            </NumbersPanel.Meta>
+          </NumbersPanel.Header>
+          <WeekChart
             key={picked.measure}
             label={`${picked.label} per week`}
             weeks={read.weeks.map((w, i) => ({ label: w.label, inWindow: w.inWindow, value: picked.weekly[i] ?? null }))}
             usual={usualPerWeek(picked, read.days)}
-            say={picked.say}
+            format={picked.say}
           />
-        </GridPanel>
+        </NumbersPanel>
 
         <PeoplePanel read={read} />
 
-        <BestPanel read={read} openPost={(id) => openTable({ post: id, show: "all", order: "best" }, `row-${id}`)} />
+        <BestPanel read={read} onOpenPost={(id) => onOpenTable({ post: id, show: "all", order: "best" }, `row-${id}`)} />
 
         <QuincyPanel now={read.quincy.now} usual={read.quincy.usual} days={read.days} />
       </div>
@@ -132,7 +131,14 @@ function NumberTile({ tile, inWindow, days, onOpen }: { tile: Tile; inWindow: bo
   const group = tile.kind === "depth" ? "Depth" : "Volume"
   // Not read yet: said, never faked, and not a way in (there is nothing behind it).
   if (tile.notRead) {
-    return <StatTile label={tile.label} group={group} value="Not read yet" quiet sentence={tile.notRead} />
+    return (
+      <StatTile>
+        <StatTile.Label group={group}>{tile.label}</StatTile.Label>
+        <StatTile.Value tone="muted">Not read yet</StatTile.Value>
+        <StatTile.Against>{tile.notRead}</StatTile.Against>
+        <StatTile.Spark />
+      </StatTile>
+    )
   }
   const sentence =
     tile.value === null
@@ -141,24 +147,26 @@ function NumberTile({ tile, inWindow, days, onOpen }: { tile: Tile; inWindow: bo
         ? againstMedianPost(tile.value, tile.baseline.usual)
         : againstUsual(tile.value, tile.baseline.usual, tile.unit, days)
   return (
-    <StatTile
-      label={tile.label}
-      group={group}
-      value={tile.value === null ? "None" : tile.say(tile.value)}
-      quiet={tile.value === null}
-      sentence={sentence}
-      trend={<Sparkline values={tile.weekly} emphasis={inWindow} usual={usualPerWeek(tile, days)} />}
-      onOpen={onOpen}
-      opensLabel={OPENS[tile.measure]}
-      data={{ "data-return": `tile-${tile.measure}` }}
-    />
+    <StatTile onClick={onOpen} data-return={`tile-${tile.measure}`}>
+      <StatTile.Label group={group}>{tile.label}</StatTile.Label>
+      <StatTile.Value tone={tile.value === null ? "muted" : "ink"}>{tile.value === null ? "None" : tile.say(tile.value)}</StatTile.Value>
+      <StatTile.Against>{sentence}</StatTile.Against>
+      <StatTile.Spark>
+        <Sparkline values={tile.weekly} emphasis={inWindow} usual={usualPerWeek(tile, days)} />
+      </StatTile.Spark>
+      <StatTile.Opens>{OPENS[tile.measure]}</StatTile.Opens>
+    </StatTile>
   )
 }
 
 function PeoplePanel({ read }: { read: Read }) {
   const people = read.people
   return (
-    <GridPanel title="People who keep showing up" meta={people ? `${people.length} replied` : null}>
+    <NumbersPanel>
+      <NumbersPanel.Header>
+        <NumbersPanel.Title>People who keep showing up</NumbersPanel.Title>
+        {people ? <NumbersPanel.Meta>{`${people.length} replied`}</NumbersPanel.Meta> : null}
+      </NumbersPanel.Header>
       {people === null ? (
         <p className="text-kit-dense text-pretty text-kit-ink-muted">
           Not read yet. I count the replies under each post, but I don&apos;t read who wrote them, so I can&apos;t tell you who keeps coming back.
@@ -192,18 +200,18 @@ function PeoplePanel({ read }: { read: Read }) {
           ))}
         </ul>
       )}
-    </GridPanel>
+    </NumbersPanel>
   )
 }
 
-function BestPanel({ read, openPost }: { read: Read; openPost: (id: string) => void }) {
+function BestPanel({ read, onOpenPost }: { read: Read; onOpenPost: (id: string) => void }) {
   const rows = [...read.scored].sort((a, b) => b.post.views - a.post.views).slice(0, BEST_ROWS)
   return (
-    <GridPanel
-      title="What worked"
-      meta={read.medianViews === null ? "No median yet" : `Your median post: ${fmt(read.medianViews)} views`}
-      className="@[60rem]/kit-workspace:col-span-2"
-    >
+    <NumbersPanel className="@[60rem]/kit-workspace:col-span-2">
+      <NumbersPanel.Header>
+        <NumbersPanel.Title>What worked</NumbersPanel.Title>
+        <NumbersPanel.Meta>{read.medianViews === null ? "No median yet" : `Your median post: ${fmt(read.medianViews)} views`}</NumbersPanel.Meta>
+      </NumbersPanel.Header>
       {rows.length === 0 ? (
         <p className="text-kit-dense text-kit-ink-muted">Nothing went out in the last {read.days} days.</p>
       ) : (
@@ -222,9 +230,9 @@ function BestPanel({ read, openPost }: { read: Read; openPost: (id: string) => v
                   <button
                     type="button"
                     data-return={`row-${post.id}`}
-                    onClick={() => openPost(post.id)}
+                    onClick={() => onOpenPost(post.id)}
                     aria-label={`${post.hook}. ${fmt(post.views)} views${multiple ? `, ${formatMultiple(multiple)} your median` : ""}, ${post.replies} ${post.replies === 1 ? "reply" : "replies"}. Open it.`}
-                    className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_4rem] items-center gap-x-kit-related rounded-kit-chip px-2 py-1.5 text-start outline-hidden transition-[background-color] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus motion-reduce:transition-none @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_4rem_4rem]"
+                    className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(5rem,9rem)_4rem] items-center pointer-coarse:min-h-11 gap-x-kit-related rounded-kit-chip px-2 py-1.5 text-start outline-hidden transition-[background-color] duration-(--kit-duration-state) ease-kit-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus motion-reduce:transition-none @[40rem]/kit-workspace:grid-cols-[minmax(0,1fr)_minmax(7rem,12rem)_4rem_4rem]"
                   >
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="truncate text-kit-dense text-kit-ink">{post.hook}</span>
@@ -240,7 +248,7 @@ function BestPanel({ read, openPost }: { read: Read; openPost: (id: string) => v
           </ul>
         </div>
       )}
-    </GridPanel>
+    </NumbersPanel>
   )
 }
 
@@ -253,7 +261,11 @@ function QuincyPanel({ now, usual, days }: { now: QuincyWeek; usual: QuincyWeek 
     { term: "Cost", value: dollars(now.costMicros), usual: usual ? dollars(usual.costMicros) : null },
   ]
   return (
-    <GridPanel title="What I did" meta={`Last ${days} days`}>
+    <NumbersPanel>
+      <NumbersPanel.Header>
+        <NumbersPanel.Title>What I did</NumbersPanel.Title>
+        <NumbersPanel.Meta>{`Last ${days} days`}</NumbersPanel.Meta>
+      </NumbersPanel.Header>
       <dl className="flex flex-col">
         {rows.map((r) => (
           <div key={r.term} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-kit-related border-b border-kit-hairline py-1.5 last:border-b-0">
@@ -268,6 +280,6 @@ function QuincyPanel({ now, usual, days }: { now: QuincyWeek; usual: QuincyWeek 
       <p className="text-kit-meta text-pretty text-kit-ink-muted">
         {now.drafted > 0 ? `You approved ${now.approved} of ${now.drafted} drafts. ` : ""}I draft, you send: nothing went out without you.
       </p>
-    </GridPanel>
+    </NumbersPanel>
   )
 }

@@ -15,7 +15,7 @@ import * as React from "react"
  * No hue: blue is the pen. Above or below the usual is position, never
  * green and red. Tokens re-point in dark mode, so there are no `dark:` variants.
  */
-export type SparklineProps = {
+export type SparklineProps = Omit<React.ComponentPropsWithRef<"span">, "children"> & {
   /** One value per step, oldest first. Null is a gap. */
   values: (number | null)[]
   /** Per step: true draws it in ink. Leave out to ink the whole line. */
@@ -27,7 +27,7 @@ export type SparklineProps = {
 const W = 100
 const H = 28
 
-export function Sparkline({ values, emphasis, usual = null }: SparklineProps) {
+export function Sparkline({ values, emphasis, usual = null, className, ...rest }: SparklineProps) {
   const nums = values.filter((v): v is number => v !== null)
   const max = Math.max(1, ...nums, usual ?? 0)
   const n = values.length
@@ -54,7 +54,8 @@ export function Sparkline({ values, emphasis, usual = null }: SparklineProps) {
   const last = values[lastI]
 
   return (
-    <div data-slot="kit-sparkline" className="relative h-7 w-full" aria-hidden>
+    // A span, so it can sit inside a pressable StatTile (a button holds phrasing content only).
+    <span data-slot="kit-sparkline" aria-hidden className={`relative block h-7 w-full${className ? ` ${className}` : ""}`} {...rest}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
         {usual !== null ? (
           <line x1={0} x2={W} y1={y(usual)} y2={y(usual)} className="stroke-kit-ink-muted" strokeWidth={1} vectorEffect="non-scaling-stroke" />
@@ -80,6 +81,6 @@ export function Sparkline({ values, emphasis, usual = null }: SparklineProps) {
           style={{ left: `${x(lastI)}%`, top: `${(y(last) / H) * 100}%` }}
         />
       ) : null}
-    </div>
+    </span>
   )
 }

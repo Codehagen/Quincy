@@ -47,11 +47,12 @@ export type DraftVerbsProps = {
   onSave: () => void
   onCancel: () => void
   editRef: React.Ref<HTMLButtonElement>
-  /** The page's one ink action (actions.md), decided by the open draft. */
-  approveIsAction: boolean
-  placeIsAction: boolean
-  postIsAction: boolean
+  /** Which verb here is the page's one ink action (actions.md), decided by the open draft; none when unset. */
+  action?: DraftAction
 }
+
+/** The verbs that can be the page's one ink action. */
+export type DraftAction = "approve" | "place" | "post"
 
 export function DraftVerbs({
   row,
@@ -64,10 +65,9 @@ export function DraftVerbs({
   onSave,
   onCancel,
   editRef,
-  approveIsAction,
-  placeIsAction,
-  postIsAction,
+  action,
 }: DraftVerbsProps) {
+  const approveIsAction = action === "approve"
   if (editing) {
     // The counter is ours, under the post: a ring is the composer's, not the feed's, and the column must read as the feed.
     return (
@@ -129,7 +129,7 @@ export function DraftVerbs({
             // The repair for "approved before that slot existed": a press, rather than reopening and approving again.
             <Button
               size="sm"
-              variant={placeIsAction ? "action" : "quiet"}
+              variant={action === "place" ? "action" : "quiet"}
               pending={store.placing === v.id}
               pendingLabel="Giving it a time…"
               onClick={() => store.place(v.id)}
@@ -141,7 +141,7 @@ export function DraftVerbs({
             <PostNow
               label={v.label}
               idea={row.draft.idea}
-              isAction={postIsAction}
+              variant={action === "post" ? "action" : "quiet"}
               pending={store.posting === v.id}
               onPost={() => store.postNow(v.id)}
             />
@@ -248,14 +248,14 @@ export function Status({ line, sending, onReopen }: { line: GoingOutLine; sendin
 export function PostNow({
   label,
   idea,
-  isAction,
+  variant = "quiet",
   pending,
   onPost,
 }: {
   label: string
   idea: string
-  /** Only when nothing else will send this version (actions.md). */
-  isAction: boolean
+  /** `action` only when nothing else will send this version (actions.md). */
+  variant?: "action" | "quiet"
   pending: boolean
   onPost: () => void
 }) {
@@ -263,7 +263,7 @@ export function PostNow({
     <AlertDialog>
       <AlertDialogTrigger
         render={
-          <Button size="sm" variant={isAction ? "action" : "quiet"} icon={SentIcon} pending={pending} pendingLabel="Posting…">
+          <Button size="sm" variant={variant} icon={SentIcon} pending={pending} pendingLabel="Posting…">
             Post now
           </Button>
         }

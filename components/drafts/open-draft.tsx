@@ -7,7 +7,7 @@ import { duplicates, type Draft, type Version } from "@/lib/drafts"
 import { goingOutLine, goingOutOfVersion } from "@/lib/going-out"
 
 import { DraftFeed, type FeedAccount, type FeedField } from "./draft-feed"
-import { DraftVerbs, Notices, STRANDED } from "./draft-verbs"
+import { DraftVerbs, Notices, STRANDED, type DraftAction } from "./draft-verbs"
 import type { Row } from "./draft-rows"
 import type { DraftsStore } from "./use-drafts"
 
@@ -70,9 +70,7 @@ export function OpenDraft({ row, store, accounts }: { row: Row; store: DraftsSto
           twin={twins[v.channel]}
           going={g}
           line={line}
-          approveIsAction={!editing && v.id === firstWriting}
-          placeIsAction={v.id === placeId}
-          postIsAction={v.id === postId}
+          action={!editing && v.id === firstWriting ? "approve" : v.id === placeId ? "place" : v.id === postId ? "post" : undefined}
         />
       ))}
     </article>
@@ -123,9 +121,7 @@ function VersionFeed({
   going,
   line,
   first,
-  approveIsAction,
-  placeIsAction,
-  postIsAction,
+  action,
 }: {
   row: Row
   v: Version
@@ -136,9 +132,8 @@ function VersionFeed({
   line: ReturnType<typeof goingOutLine>
   /** The first channel version: the one the pane brings into view when the draft opens. */
   first: boolean
-  approveIsAction: boolean
-  placeIsAction: boolean
-  postIsAction: boolean
+  /** Which of its verbs is the page's one ink action, if any. */
+  action?: DraftAction
 }) {
   const titleId = React.useId()
   const text = store.textOf(v)
@@ -219,9 +214,7 @@ function VersionFeed({
             onSave={save}
             onCancel={cancel}
             editRef={editRef}
-            approveIsAction={approveIsAction}
-            placeIsAction={placeIsAction}
-            postIsAction={postIsAction}
+            action={action}
           />
         </div>
       </MarginRoom>

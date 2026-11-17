@@ -49,7 +49,6 @@ export function NumbersWorkspace({ data }: { data: NumbersData }) {
   const [q, setQ] = useQueryStates(query)
   const period = q.period
   const read = React.useMemo(() => readNumbers(data, period, MIN_WEEKS), [data, period])
-  const ref = React.useRef<HTMLDivElement>(null)
   /** Table was entered by a push from here, so going back is a step back in history. */
   const pushed = React.useRef(false)
   const [returnTo, setReturnTo] = React.useState<string | null>(null)
@@ -67,7 +66,7 @@ export function NumbersWorkspace({ data }: { data: NumbersData }) {
     },
     [setQ],
   )
-  const setTable = React.useCallback((next: Partial<TableState>) => void setQ(next), [setQ])
+  const setTable = React.useCallback((next: TableState) => void setQ(next), [setQ])
   const back = React.useCallback(() => {
     // Came in by a push: step back, so Forward still returns to the Table.
     if (pushed.current) {
@@ -83,25 +82,30 @@ export function NumbersWorkspace({ data }: { data: NumbersData }) {
   const inTable = q.view === "table" && !nothing
 
   return (
-    <WorkspacePage ref={ref}>
-      <NumbersToolbar line={kind ? null : freshness(data)} period={period} setPeriod={setPeriod} back={inTable ? back : undefined} />
+    <WorkspacePage>
+      {kind ? (
+        <NumbersToolbar />
+      ) : (
+        <NumbersToolbar period={period} onPeriodChange={setPeriod} onBack={inTable ? back : undefined}>
+          {freshness(data)}
+        </NumbersToolbar>
+      )}
       {kind ? (
         <EmptyNumbers kind={kind} />
       ) : inTable ? (
         <NumbersTable
           data={data}
           read={read}
-          table={{ post: q.post, show: q.show, order: q.order, against: q.against }}
-          setTable={setTable}
-          setPeriod={setPeriod}
-          back={back}
-          foldRef={ref}
+          value={{ post: q.post, show: q.show, order: q.order, against: q.against }}
+          onValueChange={setTable}
+          onPeriodChange={setPeriod}
+          onBack={back}
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-kit-group px-kit-group py-kit-group">
-            <StateLine data={data} enoughHistory={read.enoughHistory} minWeeks={MIN_WEEKS} />
-            <NumbersDashboard read={read} openTable={openTable} returnTo={returnTo} />
+            <StateLine data={data} enoughHistory={read.enoughHistory} />
+            <NumbersDashboard read={read} onOpenTable={openTable} returnTo={returnTo} />
           </div>
         </div>
       )}
