@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { getBillingSnapshot } from "@/lib/billing"
 import { getSession } from "@/lib/session"
 import { resolveTimeZone } from "@/lib/timezone"
+import { MANAGED_PAYMENTS } from "@/lib/billing-flags"
 import { isBillingConfigured, PLAN_PRICE_USD } from "@/lib/stripe"
 import { TRIAL_DAYS } from "@/lib/trial"
 import { BillingActions } from "@/components/billing/billing-actions"
@@ -125,7 +126,7 @@ async function Billing() {
   return (
     <KitPage
       title="Billing"
-      summary={`${copy.badge}. One plan, $${PLAN_PRICE_USD} a month, cancel any time.`}
+      summary={`${copy.badge}. One plan, $${PLAN_PRICE_USD} a month${MANAGED_PAYMENTS ? " plus VAT where it applies" : ""}, cancel any time.`}
     >
       <Stage lead={copy.title}>
         <Card>

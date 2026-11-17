@@ -8,6 +8,8 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
+import { MANAGED_PAYMENTS } from "@/lib/billing-flags"
+
 /**
  * A named thing a step touches — a channel you connect, or a kind of material
  * that arrives. Rendered by the same rule
@@ -50,6 +52,12 @@ export const PRICE = {
   period: "a month",
   /** Stated because the seller is Norwegian and the charge is not in kroner. */
   currency: "US dollars, billed monthly",
+  /**
+   * Only while Stripe is the merchant of record and actually adds it
+   * (lib/billing-flags.ts). Without that, nobody collects VAT and the figure
+   * is the whole charge, so the sentence would be false.
+   */
+  tax: MANAGED_PAYMENTS ? "plus VAT where it applies" : null,
 } as const
 
 /**
@@ -200,11 +208,11 @@ export const REFUSALS = [
  * The three questions a stranger actually has at a price — when am I charged,
  * what happens if I do nothing, and how do I leave.
  *
- * Sourced from `docs/billing.md` and `lib/entitlement.ts`. Two things are
- * deliberately absent: there is no tax statement, because Codebase AS has no
- * MVA or Stripe Tax handling and $49 is currently the charged amount; and there
- * is no "cancel and pay nothing more" flourish, because cancelling ends the
- * renewal and does not refund the period already paid for.
+ * Sourced from `docs/billing.md` and `lib/entitlement.ts`. The tax line lives
+ * on `PRICE.tax`, not here, and shows only while Stripe is the merchant of
+ * record. There is deliberately no "cancel and pay nothing more" flourish,
+ * because cancelling ends the renewal and does not refund the period already
+ * paid for.
  */
 export const QUESTIONS = [
   {

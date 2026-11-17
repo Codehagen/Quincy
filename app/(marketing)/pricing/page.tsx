@@ -52,7 +52,8 @@ export default function PricingPage() {
         </h1>
 
         <p className="max-w-[45ch] text-body-lg text-pretty text-muted-foreground">
-          {PRICE.figure} {PRICE.period} in {PRICE.currency}, after a free first
+          {PRICE.figure} {PRICE.period} in {PRICE.currency}
+          {PRICE.tax ? `, ${PRICE.tax}` : ""}, after a free first
           day that does not ask for a card. Here is what you would spend that
           day doing.
         </p>

@@ -33,6 +33,7 @@ import {
 import type { MailResult } from "./mail"
 import { hasOpenSubscription } from "./subscription-status"
 import { startTrial } from "./trial"
+import { MANAGED_PAYMENTS } from "./billing-flags"
 import { PLAN_LOOKUP_KEY, PLAN_NAME, stripeClient } from "./stripe"
 import { EMAIL_VERIFICATION_EXPIRES_IN_SECONDS } from "./auth-constants"
 import { isUnreachableTestAddress, spendInviteFor } from "./waitlist"
@@ -527,6 +528,25 @@ export const auth = betterAuth({
           params: {
             allow_promotion_codes: true,
             payment_method_collection: "if_required",
+            /**
+             * Stripe as merchant of record (lib/billing-flags.ts). Three
+             * settings that only mean something together:
+             *
+             * - `managed_payments` makes Link the seller, so the tax on top
+             *   of $49 is calculated, collected and paid by Stripe.
+             * - `tax_id_collection` lets a business enter its VAT number and
+             *   pay $49 flat, which is most of who buys this.
+             * - `adaptive_pricing` off keeps the charge in US dollars. It is
+             *   on by default under Managed Payments and would show a local
+             *   price instead, at Stripe's exchange rate.
+             */
+            ...(MANAGED_PAYMENTS
+              ? {
+                  managed_payments: { enabled: true },
+                  tax_id_collection: { enabled: true },
+                  adaptive_pricing: { enabled: false },
+                }
+              : {}),
           },
         }),
       },

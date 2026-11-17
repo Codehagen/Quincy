@@ -320,6 +320,43 @@ carries them there, and the failure is silent: webhooks return 200 and the
 period columns come back null. With `--latest` the listener reports the same
 version lib/stripe.ts pins, which is the only configuration actually under test.
 
+## Tax: Stripe is the merchant of record
+
+Codebase AS is Norwegian and sells to people everywhere. Without help, the
+first consumer in Germany or the UK makes it register for VAT there (the EU's
+€10,000 threshold does not apply to a seller outside the EU), and the first
+in Norway does the same at home once turnover passes 50,000 kr. Stripe
+Managed Payments takes that on: Link is the seller, Stripe adds the tax that
+applies on top of $49, files it and pays it to each country, and the account
+receives $49 less fees. Norway is a supported business location, and an AI
+tool sold as a service is an eligible product.
+
+`STRIPE_MANAGED_PAYMENTS=1` (lib/billing-flags.ts) turns it on. Three things
+change, all in `getCheckoutSessionParams` in lib/auth.ts:
+
+- `managed_payments: { enabled: true }` on the Checkout session.
+- `tax_id_collection` — a business that enters its VAT number pays $49 flat
+  and accounts for the VAT itself (reverse charge).
+- `adaptive_pricing: { enabled: false }` — the charge stays in US dollars.
+  Managed Payments turns local-currency prices on by default.
+
+The pricing page, the home page and /settings/billing say "plus VAT where it
+applies" only while the flag is on, because only then is it true.
+
+Before setting the flag in an environment:
+
+1. The account is approved for Managed Payments (Settings in the dashboard).
+2. The Quincy product carries tax code `txcd_10105002` (AI as a service,
+   cloud, business use). Managed Payments refuses a product without an
+   eligible code.
+3. One test-mode Checkout has gone through end to end with the flag on,
+   including a VAT number, since the combination with promotion codes and
+   `payment_method_collection: "if_required"` is not covered by Stripe's
+   docs.
+
+Two things change for the customer: the card statement reads
+`LINK.COM* QUINCY`, and receipts, refunds and payment support come from Link.
+
 ## Environment
 
 ```

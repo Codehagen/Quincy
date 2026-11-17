@@ -136,7 +136,8 @@ export function HomePage() {
 
       <Section labelledBy="price-title" id="pricing">
         <SectionHeading id="price-title" size="price" title={`${PRICE.figure} ${PRICE.period}.`}>
-          One plan. {PRICE.currency}. It posts to X and LinkedIn.
+          One plan. {PRICE.currency}
+          {PRICE.tax ? `, ${PRICE.tax}` : ""}. It posts to X and LinkedIn.
         </SectionHeading>
         <SectionPicture width="full" gap="lg">
           <NeverList />
