@@ -22,9 +22,9 @@ import { GOOD_STATUSES } from "@/lib/subscription-status"
  * mirrors the plugin's restore (clear `cancel_at` when Stripe set one,
  * otherwise turn `cancel_at_period_end` off), so the two cannot disagree.
  *
- * Managed Payments: Stripe documents updating a subscription through the API
- * as supported. Neither action has been run against a live Managed Payments
- * subscription yet.
+ * Managed Payments: both actions were run against a live Managed Payments
+ * subscription on 2026-11-17 (cancel, keep, cancel). Stripe showed
+ * cancel_at_period_end true, then false with cancel_at cleared, then true.
  *
  * The subscription id never comes from the client. It is read from our own
  * row for the signed-in user, so a caller can only change their own plan.
