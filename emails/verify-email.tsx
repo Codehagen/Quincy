@@ -1,6 +1,6 @@
-import { Button, Heading, Hr, Link, Text } from "@react-email/components"
+import { Heading, Link, Text } from "@react-email/components"
 
-import { Shell } from "./shell"
+import { Action, Rule, Shell } from "./shell"
 
 interface VerifyEmailProps {
   name: string
@@ -15,7 +15,7 @@ export default function VerifyEmail({ name, url }: VerifyEmailProps) {
     >
       <Heading
         as="h1"
-        className="text-ink mt-[24px] mb-0 text-[28px] leading-[1.2]"
+        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
       >
         Confirm your email.
       </Heading>
@@ -25,24 +25,21 @@ export default function VerifyEmail({ name, url }: VerifyEmailProps) {
         drafting in your voice.
       </Text>
 
-      <Button
-        href={url}
-        className="bg-brass text-ink mt-[24px] box-border rounded-[8px] px-[20px] py-[14px] text-center text-[16px] font-semibold no-underline"
-      >
+      <Action href={url}>
         Confirm email
-      </Button>
+      </Action>
 
-      <Text className="mt-[24px] text-[14px] leading-[1.5] text-muted">
+      <Text className="mt-[24px] text-[14px] leading-[1.5] text-inkMuted">
         Or paste this into your browser:
         <br />
-        <Link href={url} className="text-brassDeep break-all underline">
+        <Link href={url} className="text-ink break-all underline">
           {url}
         </Link>
       </Text>
 
-      <Hr className="border-rule my-[28px] border-t border-none border-solid" />
+      <Rule />
 
-      <Text className="m-0 text-[14px] leading-[1.5] text-muted">
+      <Text className="m-0 text-[14px] leading-[1.5] text-inkMuted">
         If you did not create a Quincy account, ignore this — nothing happens
         until the link is used. Replies to this message reach a real person.
       </Text>

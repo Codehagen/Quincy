@@ -1,6 +1,6 @@
-import { Button, Heading, Hr, Link, Text } from "@react-email/components"
+import { Heading, Link, Text } from "@react-email/components"
 
-import { Shell } from "./shell"
+import { Action, Rule, Shell } from "./shell"
 
 interface ReconnectChannelProps {
   name: string
@@ -42,7 +42,7 @@ export default function ReconnectChannel({
     >
       <Heading
         as="h1"
-        className="text-ink mt-[24px] mb-0 text-[28px] leading-[1.2]"
+        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
       >
         {expiresOn
           ? `Renew ${channel} access.`
@@ -56,24 +56,21 @@ export default function ReconnectChannel({
         schedule are exactly where you left them.
       </Text>
 
-      <Button
-        href={url}
-        className="bg-brass text-ink mt-[24px] box-border rounded-[8px] px-[20px] py-[14px] text-center text-[16px] font-semibold no-underline"
-      >
+      <Action href={url}>
         Reconnect {channel}
-      </Button>
+      </Action>
 
-      <Text className="mt-[24px] text-[14px] leading-[1.5] text-muted">
+      <Text className="mt-[24px] text-[14px] leading-[1.5] text-inkMuted">
         Or paste this into your browser:
         <br />
-        <Link href={url} className="text-brassDeep break-all underline">
+        <Link href={url} className="text-ink break-all underline">
           {url}
         </Link>
       </Text>
 
-      <Hr className="border-rule my-[28px] border-t border-none border-solid" />
+      <Rule />
 
-      <Text className="m-0 text-[14px] leading-[1.5] text-muted">
+      <Text className="m-0 text-[14px] leading-[1.5] text-inkMuted">
         Until you reconnect, Quincy keeps drafting — it just cannot post. It has
         never posted anything you did not approve, and that does not change.
         Replies to this message reach a real person.

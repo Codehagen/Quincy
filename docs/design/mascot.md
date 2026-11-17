@@ -14,7 +14,9 @@ mascot-timing.md.
 Use `Friend` from `@/components/mascot` for the character, everywhere. Use
 `QuincyMark` (friend + "Quincy" in Inter 560) wherever the product names
 itself: the marketing header (`components/marketing/header.tsx`), a
-sign-in page.
+sign-in page. Mail cannot run a component, so the email header
+(`emails/shell.tsx`) rebuilds the `md` lockup from a PNG of `MARK` and the
+word; see mascot-iterating.md.
 
 `Friend` picks the drawing from `size` (`SMOOTH_FROM = 32`, `friend.tsx`):
 

@@ -1,6 +1,7 @@
 /**
- * Writes the app's icons from the mascot engine, so the favicon and the home
- * screen icon are the same bitmap the app draws (components/mascot/engine.ts).
+ * Writes the app's icons and the mail header's friend from the mascot engine,
+ * so the favicon, the home screen icon and the friend in every email are the
+ * same bitmap the app draws (components/mascot/engine.ts).
  *
  *   npx tsx scripts/mascot-icons.ts
  *
@@ -9,16 +10,22 @@
  * - app/apple-icon.png  — 180×180, opaque paper ground (iOS paints a
  *                         transparent icon black), 10px per grid pixel with
  *                         a 10px margin, so every pixel edge is whole.
+ * - public/email/friend.png — 96×96, the mail header's friend (emails/shell.tsx).
+ *                         6px per grid pixel and no margin, shown at 32 CSS px:
+ *                         2, 4 and 6 device pixels per grid pixel at 1x, 2x and
+ *                         3x, so every edge lands on a whole device pixel. A
+ *                         still of MARK on an opaque ground, not a GIF: see
+ *                         emailFriend() below.
  *
  * A file, not an ImageResponse route: the icon only changes when the bitmap
  * does, and a static PNG costs no function and no font. No dependency: the
  * PNG is an indexed-colour image deflated with node's zlib.
  */
-import { writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { deflateSync } from "node:zlib"
 
-import { GRID, HEX, MARK, iconSvg } from "../components/mascot/engine"
+import { GRID, HEX, MARK, iconSvg, toIndices } from "../components/mascot/engine"
 
 const ROOT = join(import.meta.dirname, "..")
 
@@ -84,6 +91,29 @@ function appleIcon() {
   return png(size, [HEX.paper, HEX.ink, HEX.sash], pixels)
 }
 
+/**
+ * The friend for mail. Two choices in it are deliberate:
+ *
+ * - **Still, not animated.** Outlook on Windows shows only a GIF's first frame
+ *   and other clients replay it on every open; a header that blinks at the
+ *   reader is decoration in a message whose job is one link. MARK is the
+ *   friend at rest, which is also the first frame of `idle`.
+ * - **An opaque ground, not transparency.** The eyes are holes and the body is
+ *   ink. Clients that force a dark mode (Gmail's apps, Outlook.com) darken the
+ *   message's background but leave images alone, so on a transparent PNG the
+ *   ink body and the eyes both vanish into the dark ground. On the ground
+ *   colour the friend stays whole everywhere; in light mode the square is the
+ *   same #FDFDFC as the page and does not show.
+ */
+function emailFriend() {
+  const scale = 6
+  const size = GRID * scale
+  // toIndices: 0 ground, 1 ink, 2 sash, 3 keep-ink.
+  return png(size, [HEX.paper, HEX.ink, HEX.sash, HEX.ink], toIndices(MARK, scale))
+}
+
 writeFileSync(join(ROOT, "app/icon.svg"), iconSvg())
 writeFileSync(join(ROOT, "app/apple-icon.png"), appleIcon())
-console.log("wrote app/icon.svg and app/apple-icon.png")
+mkdirSync(join(ROOT, "public/email"), { recursive: true })
+writeFileSync(join(ROOT, "public/email/friend.png"), emailFriend())
+console.log("wrote app/icon.svg, app/apple-icon.png and public/email/friend.png")

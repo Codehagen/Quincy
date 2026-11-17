@@ -65,7 +65,7 @@ with no moment behind it is decoration, and mascot.md forbids it.
 npx tsx scripts/mascot-icons.ts
 ```
 
-It writes two files from `MARK`; never edit either by hand:
+It writes three files from `MARK`; never edit any of them by hand:
 
 - `app/icon.svg` — `iconSvg()`: crisp 16-grid paths; ink is `#111110`, and
   `#F2F2F1` under `prefers-color-scheme: dark`, because a tab has no
@@ -73,6 +73,13 @@ It writes two files from `MARK`; never edit either by hand:
 - `app/apple-icon.png` — 180×180, 10px per grid pixel, 10px margin, on
   paper: iOS paints a transparent icon black. Nothing tests this file, so
   run the script after any change to `MARK` or `HEX`.
+- `public/email/friend.png` — 96×96, 6px per grid pixel, no margin, the
+  friend in every email's header (`emails/shell.tsx`, shown at 32px: whole
+  device pixels at 1x, 2x and 3x). A still, because Outlook shows only a
+  GIF's first frame and a blinking header is noise in a message with one
+  link. On an opaque ground, because clients that force a dark mode darken
+  the page but not the image, and a transparent friend loses its ink body
+  and its eyes there. Nothing tests this file either.
 
 `app/favicon.ico` is gone on purpose. Next serves it as `/favicon.ico`
 beside `icon.svg`, it held the old mark, and the script has no ICO encoder,

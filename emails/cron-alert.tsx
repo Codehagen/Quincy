@@ -35,7 +35,7 @@ export function CronAlertEmail({ job, failure, consequence }: CronAlertProps) {
     >
       <Heading
         as="h1"
-        className="text-ink mt-[24px] mb-0 text-[28px] leading-[1.2]"
+        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
       >
         {unconfigured
           ? `The ${job} cron cannot run.`
@@ -52,7 +52,7 @@ export function CronAlertEmail({ job, failure, consequence }: CronAlertProps) {
         {consequence}
       </Text>
 
-      <Text className="mt-[12px] text-[14px] leading-[1.55] text-muted">
+      <Text className="mt-[12px] text-[14px] leading-[1.55] text-inkMuted">
         {unconfigured
           ? "Set CRON_SECRET in the deployment's environment."
           : "The counts are in the run's own response and in the deployment logs for this job."}{" "}

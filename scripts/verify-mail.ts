@@ -78,9 +78,9 @@ async function main() {
   console.log("\n=== contrast (WCAG AA, 4.5:1 for body text) ===")
 
   for (const [label, fg, bg] of [
-    ["ink on paper", MAIL_COLORS.ink, MAIL_COLORS.paper],
-    ["muted on paper", MAIL_COLORS.muted, MAIL_COLORS.paper],
-    ["brassDeep link on paper", MAIL_COLORS.brassDeep, MAIL_COLORS.paper],
+    ["ink on ground", MAIL_COLORS.ink, MAIL_COLORS.ground],
+    ["muted ink on ground", MAIL_COLORS.inkMuted, MAIL_COLORS.ground],
+    ["label on the ink pill", MAIL_COLORS.primaryOn, MAIL_COLORS.primary],
   ] as const) {
     const ratio = contrast(fg, bg)
     check(label, ratio >= 4.5, `${ratio.toFixed(2)}:1`)
@@ -141,7 +141,7 @@ async function main() {
     )
     check("exactly one h1", (html.match(/<h1/g) ?? []).length === 1)
     // "16px minimum body" is about the paragraph you are meant to read, not
-    // every string on the page — the eyebrow and the footnote are labels and
+    // every string on the page — the footnotes are labels and
     // sit below it deliberately. The failure this guards against is the 10px
     // footer, so the floor is asserted separately from the body size.
     check("body copy is 16px", html.includes("font-size:16px"))
@@ -150,8 +150,19 @@ async function main() {
       !/font-size:(?:[0-9]|1[0-2])px/.test(html)
     )
     check(
-      "link carries the corrected brass",
-      html.includes(rgb(MAIL_COLORS.brassDeep))
+      "the action is the ink pill",
+      html.includes(`background-color:${rgb(MAIL_COLORS.primary)}`) &&
+        html.includes("border-radius:9999px")
+    )
+    // The friend sits beside the word "Quincy", which is the name, so the
+    // image is decorative. Explicit size, so the header does not jump when
+    // the client fetches it, and an absolute URL, since mail has no origin.
+    const friend = html.match(/<img[^>]*\/email\/friend\.png[^>]*>/)?.[0] ?? ""
+    check("header friend has an absolute URL", /src="https?:\/\//.test(friend))
+    check("header friend is decorative", friend.includes('alt=""'))
+    check(
+      "header friend is sized",
+      friend.includes('width="32"') && friend.includes('height="32"')
     )
     // Only the token-bearing mails show the raw URL as a fallback; the welcome
     // links from words instead, which is correct for it.

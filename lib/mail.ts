@@ -143,30 +143,100 @@ export async function deliver({
     }
   }
 
-  try {
-    const { data, error } = await resend.emails.send(
-      {
-        from: MAIL_FROM,
-        to: [to],
-        replyTo: MAIL_REPLY_TO,
-        subject,
-        react,
-        text,
-      },
-      { idempotencyKey }
-    )
+  /**
+   * The category, read off the key: `verify-email/…` is tagged
+   * `verify-email`. Every key already starts with the event, so the tag
+   * cannot drift from it, and Resend's log can then be filtered by kind of
+   * mail. Tag values allow only ASCII letters, digits, `_` and `-`, which
+   * every event name here already is; anything else is dropped rather than
+   * turned into a rejected send.
+   */
+  const category = idempotencyKey.split("/")[0]
+  const tags = /^[A-Za-z0-9_-]{1,256}$/.test(category)
+    ? [{ name: "category", value: category }]
+    : undefined
 
-    if (error) {
-      return { ok: false, reason: "rejected", message: error.message }
+  let last: MailResult = {
+    ok: false,
+    reason: "rejected",
+    message: "Not attempted",
+  }
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await sleep(backoffMs(attempt))
     }
 
-    return { ok: true, id: data!.id }
-  } catch (cause) {
-    return {
-      ok: false,
-      reason: "rejected",
-      message:
-        cause instanceof Error ? cause.message : "Unknown transport error",
+    try {
+      const { data, error } = await resend.emails.send(
+        {
+          from: MAIL_FROM,
+          to: [to],
+          replyTo: MAIL_REPLY_TO,
+          subject,
+          react,
+          text,
+          tags,
+        },
+        { idempotencyKey }
+      )
+
+      if (!error) {
+        return { ok: true, id: data!.id }
+      }
+
+      last = { ok: false, reason: "rejected", message: error.message }
+
+      if (!isRetryable(error)) {
+        return last
+      }
+    } catch (cause) {
+      // The transport underneath the SDK: a reset socket or a DNS blip.
+      // Retried like a 5xx, since the idempotency key makes a second try
+      // safe even if the first one did reach Resend.
+      last = {
+        ok: false,
+        reason: "rejected",
+        message:
+          cause instanceof Error ? cause.message : "Unknown transport error",
+      }
     }
   }
+
+  return last
+}
+
+/**
+ * Three tries in all, and that number is the ceiling.
+ *
+ * Only a 429, a 5xx, or a request Resend says is still in flight under the same
+ * key are worth another go; every other error is the request's fault and will
+ * fail the same way again. Retrying is safe because the idempotency key rides
+ * along unchanged: if a try that looked failed actually went out, the next one
+ * gets the original result back instead of a second copy.
+ *
+ * Bounded twice over — attempts and total wait — because these run inside a
+ * signup or a password reset with a person waiting on the other side. The
+ * worst case adds about two seconds.
+ */
+const MAX_ATTEMPTS = 3
+
+function backoffMs(attempt: number) {
+  // 400ms, then 1200ms, each with up to 200ms of jitter so two lambdas that
+  // hit the same 429 do not retry in lockstep.
+  return 400 * 3 ** (attempt - 1) + Math.floor(Math.random() * 200)
+}
+
+function isRetryable(error: { statusCode: number | null; name: string }) {
+  // A spent daily or monthly quota also answers 429, and waiting two seconds
+  // does not refill it.
+  if (error.name.endsWith("_quota_exceeded")) return false
+  if (error.name === "concurrent_idempotent_requests") return true
+  if (error.name === "rate_limit_exceeded") return true
+  const status = error.statusCode ?? 0
+  return status === 429 || status >= 500
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

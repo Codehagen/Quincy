@@ -1,6 +1,6 @@
-import { Button, Heading, Hr, Link, Text } from "@react-email/components"
+import { Heading, Link, Text } from "@react-email/components"
 
-import { Shell } from "./shell"
+import { Action, Rule, Shell } from "./shell"
 
 interface WelcomeProps {
   name: string
@@ -28,7 +28,7 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
     <Shell title="Welcome to Quincy" preview="Give it something to write about">
       <Heading
         as="h1"
-        className="text-ink mt-[24px] mb-0 text-[28px] leading-[1.2]"
+        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
       >
         Welcome to Quincy.
       </Heading>
@@ -41,12 +41,12 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
 
       <Heading
         as="h2"
-        className="text-ink mt-[32px] mb-0 text-[18px] leading-[1.3]"
+        className="text-ink mt-[32px] mb-0 text-[18px] leading-[1.3] font-semibold"
       >
         Getting started
       </Heading>
 
-      <Text className="mt-[8px] mb-[20px] text-[14px] leading-[1.5] text-muted">
+      <Text className="mt-[8px] mb-[20px] text-[14px] leading-[1.5] text-inkMuted">
         Five things worth doing first. None takes long.
       </Text>
 
@@ -91,14 +91,9 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
         is the main way in. Every page is a window onto the same conversation.
       </Text>
 
-      <Button
-        href={`${appUrl}/studio`}
-        className="bg-brass text-ink mt-[24px] box-border rounded-[8px] px-[20px] py-[14px] text-center text-[16px] font-semibold no-underline"
-      >
-        Open Studio
-      </Button>
+      <Action href={`${appUrl}/studio`}>Open Studio</Action>
 
-      <Hr className="border-rule my-[28px] border-t border-none border-solid" />
+      <Rule />
 
       {/*
        * Signed, and the claim is literal: MAIL_REPLY_TO is christer@ — a Zoho
@@ -111,7 +106,7 @@ export default function Welcome({ name, appUrl }: WelcomeProps) {
         tunes the voice.
       </Text>
 
-      <Text className="mt-[16px] mb-0 text-[15px] leading-[1.6] text-muted">
+      <Text className="mt-[16px] mb-0 text-[15px] leading-[1.6] text-inkMuted">
         — Christer
       </Text>
     </Shell>

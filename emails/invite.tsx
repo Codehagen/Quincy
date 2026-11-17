@@ -1,6 +1,6 @@
-import { Button, Heading, Hr, Text } from "@react-email/components"
+import { Heading, Text } from "@react-email/components"
 
-import { Shell } from "./shell"
+import { Action, Rule, Shell } from "./shell"
 
 interface InviteProps {
   /** The signup link, invite code already on it. */
@@ -32,7 +32,7 @@ export default function Invite({ url, expiresIn }: InviteProps) {
     <Shell title="Your Quincy invite" preview="Your invite is ready">
       <Heading
         as="h1"
-        className="text-ink mt-[24px] mb-0 text-[28px] leading-[1.2]"
+        className="text-ink mt-[40px] mb-0 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em]"
       >
         You are in.
       </Heading>
@@ -44,21 +44,18 @@ export default function Invite({ url, expiresIn }: InviteProps) {
         Nothing goes out in your name until you approve it.
       </Text>
 
-      <Button
-        href={url}
-        className="text-paper bg-ink mt-[24px] rounded-[10px] px-[20px] py-[12px] text-[15px] font-semibold no-underline"
-      >
+      <Action href={url}>
         Create your account
-      </Button>
+      </Action>
 
-      <Text className="mt-[16px] text-[14px] leading-[1.5] text-muted">
+      <Text className="mt-[16px] text-[14px] leading-[1.5] text-inkMuted">
         The link works once and runs out in {expiresIn}. It is tied to this
         address, so create the account with the one this mail arrived at.
       </Text>
 
-      <Hr className="border-rule my-[24px]" />
+      <Rule />
 
-      <Text className="text-[14px] leading-[1.5] text-muted">
+      <Text className="text-[14px] leading-[1.5] text-inkMuted">
         If you would rather not, do nothing and the invite lapses. Replies to
         this message reach a real person.
       </Text>
