@@ -17,7 +17,7 @@ import {
   TextLink,
 } from "@/components/kit"
 import { timeIn, zoneLabel, zoneOptions } from "@/lib/zones"
-import { MCP_CLIENT_NAME_MAX } from "@/lib/mcp-gate"
+import { MCP_CLIENT_NAME_MAX } from "@/lib/mcp-shared"
 import { COULD_NOT_REACH } from "@/lib/action-error"
 import {
   changePassword,

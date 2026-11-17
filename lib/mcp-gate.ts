@@ -81,6 +81,16 @@ if (process.env.NODE_ENV === "production" && !CONFIGURED_BASE_URL) {
   )
 }
 
+/**
+ * Re-exported for the server code that already imports them from here. Client
+ * components must import them from lib/mcp-shared.ts instead: this module
+ * throws at load in a production build without BETTER_AUTH_URL, and the
+ * browser never has it, so a client import took /settings and /consent down.
+ */
+import { MCP_CLIENT_NAME_MAX, MCP_CONSENT_ENDPOINT } from "./mcp-shared"
+
+export { MCP_CLIENT_NAME_MAX, MCP_CONSENT_ENDPOINT }
+
 export const MCP_RESOURCE = `${(
   CONFIGURED_BASE_URL ?? "https://hirequincy.com"
 ).replace(/\/+$/, "")}/api/mcp`
@@ -92,21 +102,6 @@ export const MCP_RESOURCE = `${(
  */
 export const MCP_CONSENT_PAGE = "/consent"
 
-/**
- * Where that page posts the answer.
- *
- * `@better-auth/mcp` is `@better-auth/oauth-provider` configured for MCP, so
- * every protocol path is the provider's `/oauth2/*` — there is no `/mcp/*`
- * namespace any more. The body is
- * `{ accept: boolean, oauth_query: string }`, where `oauth_query` is the
- * **whole signed query string** the authorize endpoint put on the consent
- * page's URL. The provider verifies that signature before it reads a single
- * field, which is why the page can hand the query back untouched instead of
- * being trusted to restate it.
- *
- * It answers `{ redirect: true, url }` either way — allowed or denied.
- */
-export const MCP_CONSENT_ENDPOINT = "/api/auth/oauth2/consent"
 
 /**
  * What `/.well-known/oauth-authorization-server` advertises, per RFC 8414.
@@ -216,14 +211,6 @@ export function accountVerdict(
   return { ok: true }
 }
 
-/**
- * The longest name an agent may register under.
- *
- * The name is shown on the consent screen and on /settings, and it is the only
- * handle a person has on a client. Eighty characters is a label; past that it
- * is a paragraph aimed at whoever reads the Allow button.
- */
-export const MCP_CLIENT_NAME_MAX = 80
 
 /**
  * What "Register an agent" on /settings will accept.

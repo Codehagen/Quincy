@@ -4,7 +4,7 @@ import * as React from "react"
 import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import { MCP_CONSENT_ENDPOINT } from "@/lib/mcp-gate"
+import { MCP_CONSENT_ENDPOINT } from "@/lib/mcp-shared"
 import { Button, ButtonLink, Text } from "@/components/kit"
 import {
   Address,
