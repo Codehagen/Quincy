@@ -169,3 +169,51 @@ export function splitAtFold(text: string, channel: string) {
   if (foldIndex === null) return { visible: text, hidden: "" }
   return { visible: text.slice(0, foldIndex), hidden: text.slice(foldIndex) }
 }
+
+/**
+ * Where the feed cuts a post, and why.
+ *
+ * `fold`: the feed hides the rest behind "more". `limit`: the platform will
+ * not take the rest at all. `null`: the whole post shows.
+ */
+export type FeedCut = {
+  visible: string
+  hidden: string
+  kind: "fold" | "limit" | null
+}
+
+/** Lines a collapsed post shows before "…more" on a fold channel (a blank line is a line). */
+const FOLD_LINES = 3
+
+/**
+ * Where the feed cuts this text, said once for the drawing of the post and
+ * for the notice under it, so the two can never disagree (/drafts draws the
+ * cut inside the feed column and says "N characters sit behind the fold"
+ * from the same answer).
+ *
+ * A fold channel (LinkedIn) cuts at its character fold in `CHANNEL_RULES`
+ * or after three lines, whichever comes first, and backs up to the last
+ * space so the cut never lands inside a word. A channel with no fold (X)
+ * renders a post whole, so its only cut is the limit, when the text is over
+ * it.
+ */
+export function feedCut(text: string, channel: string): FeedCut {
+  const rules = CHANNEL_RULES[channel]
+  if (rules?.fold != null) {
+    const byChars = splitAtFold(text, channel)
+    const lines = text.split("\n")
+    const byLines = lines.length > FOLD_LINES ? lines.slice(0, FOLD_LINES).join("\n").length : null
+    let at = Math.min(byChars.hidden ? byChars.visible.length : Infinity, byLines ?? Infinity)
+    if (at === Infinity || text.slice(at).trim() === "") return { visible: text, hidden: "", kind: null }
+    if (/\S/.test(text[at - 1] ?? "") && /\S/.test(text[at] ?? "")) {
+      const space = text.slice(0, at).search(/\s\S*$/)
+      if (space > 0) at = space
+    }
+    return { visible: text.slice(0, at), hidden: text.slice(at), kind: "fold" }
+  }
+  if (rules?.limit != null && countGraphemes(text) > rules.limit) {
+    const at = foldIndexOf(text, rules.limit)
+    if (at != null) return { visible: text.slice(0, at), hidden: text.slice(at), kind: "limit" }
+  }
+  return { visible: text, hidden: "", kind: null }
+}

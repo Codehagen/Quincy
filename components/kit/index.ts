@@ -21,6 +21,7 @@ export { Skeleton, SkeletonLines, type SkeletonWidth } from "./skeleton"
 export { Highlight } from "./highlight"
 export { MarginNote, type MarginNoteProps } from "./margin-note"
 export { Beats, BeatBracket, type Beat } from "./beats"
+export { MarginRoom, type MarginRoomProps } from "./margin-room"
 export {
   Button,
   type ButtonProps,
@@ -243,6 +244,7 @@ export {
   Panel,
   PanelHeader,
   PanelBody,
+  revealInPanel,
   type PanelProps,
   type PanelHeaderProps,
   type PanelBodyProps,
@@ -252,3 +254,9 @@ export { Announcer, useAnnounce, type AnnouncerProps } from "./announcer"
 export { WorkspacePage, WorkspacePanes, type WorkspacePageProps } from "./workspace-page"
 export { useLetterKeys, type LetterKeyHandler, type LetterKeyMap } from "./use-letter-keys"
 export { ICON_DENSE, ICON_DENSE_CHEVRON } from "./control-styles"
+
+// Numbers (2026-11-17, docs/design/workspace.md "StatTile and Sparkline"):
+// the one page with tiles (decisions.md, "Never"), promoted from
+// /prototypes/numbers-lab after the owner picked Dashboard with Table.
+export { StatTile, type StatTileProps } from "./stat-tile"
+export { Sparkline, type SparklineProps } from "./sparkline"

@@ -113,6 +113,13 @@ export type Draft = {
   id: string
   /** What the piece is about, in your words. Not a headline. */
   idea: string
+  /**
+   * What kind of post it is ("Story", "Opinion"), copied from the angle at
+   * draft time. Empty for drafts written before the column existed, and
+   * for an angle with no settled kind. Optional so a hand-built Draft (a
+   * test, a chat snapshot) need not invent one.
+   */
+  kind?: string
   /** Where it came from, so a draft can say what it is downstream of. */
   from: {
     /** The angle from lib/riffs.ts this was drafted from, verbatim. */
@@ -369,6 +376,7 @@ export async function getDrafts(user: {
   return pieces.map((piece) => ({
     id: piece.id,
     idea: piece.idea,
+    kind: piece.kind,
     from: {
       riffHook: piece.riffHook,
       sourceId: piece.sourceId,

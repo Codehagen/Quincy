@@ -101,3 +101,31 @@ export function readBeats(text: string): PostBeats | null {
   if (did.every((l) => l.figure) || meant.every((l) => l.figure)) return null
   return { did, happened, meant }
 }
+
+/**
+ * Where the note goes: on one paragraph (its index), or beside the whole
+ * post when the problem is the shape rather than a line.
+ */
+export type MissingBeatNote = { at: number | "all"; note: string }
+
+/**
+ * The editor's note when `readBeats` finds no story: one handwritten line
+ * naming the beat that is missing (decided on /prototypes/drafts-lab, round
+ * 1, "A note where the beats are not"). Six words or fewer, lower case,
+ * about the lines it sits beside, as editor-marks.md asks of every note.
+ *
+ * It names what is missing and never fills it in, so it is not a guessed
+ * bracket: "three or none" still holds for the brackets themselves. A
+ * single paragraph gets no note; there is no shape to read yet.
+ *
+ * - two paragraphs: the middle beat is missing.
+ * - three paragraphs with no number on its own line (or `readBeats` would
+ *   have bracketed it): what happened has no number yet.
+ * - four or more: one paragraph too many for three beats.
+ */
+export function missingBeatNote(paragraphs: readonly Paragraph[]): MissingBeatNote | null {
+  if (paragraphs.length <= 1) return null
+  if (paragraphs.length === 2) return { at: "all", note: "where's the middle beat?" }
+  if (paragraphs.length === 3) return { at: 1, note: "what happened? no number yet" }
+  return { at: "all", note: `${paragraphs.length} paragraphs. one too many?` }
+}

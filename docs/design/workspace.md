@@ -219,6 +219,19 @@ read. Every message changes this node's text: the count after a search
 (once the typing stops, ~500ms, not on every key), "Set aside “…”. Press U
 to undo.", a recorder's state. Never mount a `role="status"` per message.
 
+## StatTile and Sparkline (Numbers only)
+
+`/numbers` is the one dashboard (decisions.md, Never), and these are its
+two generic parts. `StatTile`: `label`, `group` ("Depth" / "Volume"),
+`value` (the figure, said: "9 replies"), `sentence` (one line against the
+person's own usual, two lines held), `trend` (a Sparkline), `quiet` (the
+value is a stand-in such as "Not read yet"), `onOpen` + `opensLabel` (a
+button that opens what is behind the number, chevron always shown). A
+tile with nothing behind it has no `onOpen`. `Sparkline`: `values`,
+`emphasis` (the steps in ink), `usual` (a flat muted line); decorative,
+because the tile's sentence says the numbers. No hue, no good or bad
+colour. Tiles go 4-up from a 60rem workspace and 2-up below it.
+
 ## Touch and motion
 
 - Every control keeps a 44px hit area on a coarse pointer (Button, the
@@ -234,7 +247,8 @@ to undo.", a recorder's state. Never mount a `role="status"` per message.
 ## Never
 
 - A metrics dashboard: tiles of counts, a chart of items per week, a bare
-  total (decisions.md, Never).
+  total (decisions.md, Never). Numbers is the one exception, and its tiles
+  are sentences against the person's own usual.
 - A Card per pane, or a shadow between panes.
 - `role="grid"` for a list whose rows hold no controls; a Button inside a
   DataList row.

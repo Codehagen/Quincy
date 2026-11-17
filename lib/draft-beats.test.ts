@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isFigureLine, paragraphsOf, readBeats } from "./draft-beats"
+import { isFigureLine, missingBeatNote, paragraphsOf, readBeats } from "./draft-beats"
 
 const STORY =
   "I cut our onboarding email down to one question.\n\nReplies in the first week:\n31\nYour median is 6.\n\nPeople answer a question. They skip a brochure."
@@ -62,5 +62,41 @@ describe("readBeats", () => {
   it("needs exactly three paragraphs", () => {
     expect(readBeats("a\n\nReplies:\n31\n\nb\n\nc")).toBeNull()
     expect(readBeats("Replies:\n31\n\nb")).toBeNull()
+  })
+})
+
+describe("missingBeatNote", () => {
+  const note = (text: string) => missingBeatNote(paragraphsOf(text))
+
+  it("says nothing about one paragraph", () => {
+    expect(note("Just one thought, on one line.")).toBeNull()
+  })
+
+  it("asks for the middle beat when there are two", () => {
+    expect(note("I did a thing.\n\nIt meant something.")).toEqual({ at: "all", note: "where's the middle beat?" })
+  })
+
+  it("marks the middle paragraph when three have no number", () => {
+    expect(note("I did a thing.\n\nSomething happened.\n\nIt meant something.")).toEqual({
+      at: 1,
+      note: "what happened? no number yet",
+    })
+  })
+
+  it("counts the paragraphs when there are too many", () => {
+    expect(note("a\n\nb\n\nc\n\nd")).toEqual({ at: "all", note: "4 paragraphs. one too many?" })
+  })
+
+  it("reads a number standing alone as part of the paragraph before it", () => {
+    // "Replies:\n\n31" is one beat, so this is two paragraphs, not three.
+    expect(note("Replies in a week:\n\n31\n\nPeople answer questions.")?.note).toBe("where's the middle beat?")
+  })
+
+  it("keeps every note to six words or fewer, lower case", () => {
+    for (const t of ["a\n\nb", "a\n\nb\n\nc", "a\n\nb\n\nc\n\nd\n\ne"]) {
+      const n = note(t)!
+      expect(n.note.split(/\s+/).length).toBeLessThanOrEqual(6)
+      expect(n.note).toBe(n.note.toLowerCase())
+    }
   })
 })

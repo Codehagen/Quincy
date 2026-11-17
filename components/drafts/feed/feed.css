@@ -1,0 +1,403 @@
+/* ══ The feed, drawn as the platform's own (components/drafts/feed) ═════
+   Decided on /prototypes/drafts-lab, round 2, "C · Feed" (2026-11-16):
+   inside the feed column a draft reads as a real X post or LinkedIn post.
+   Measured from the platforms' light and dark themes; this file is the only
+   place their colours and type live, and nothing outside the column reads
+   it. The kit must never carry these values. The colours track our theme
+   (next-themes puts .dark on <html>). Icons are drawn in feed.tsx as paths
+   of the same form; no logo, no asset. */
+
+.xf,
+.lf {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: normal;
+  font-feature-settings: normal;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── X: a 598 column, a hairline each side ── */
+.xf {
+  --xf-bg: #ffffff;
+  --xf-text: #0f1419;
+  --xf-dim: #536471;
+  --xf-line: #eff3f4;
+  --xf-thread: #cfd9de;
+  --xf-blue: #1d9bf0;
+  --xf-bar: #eff3f4;
+  /* The marks measure past the column's 1px edge. */
+  --kit-card-pad: 1px;
+  background: var(--xf-bg);
+  color: var(--xf-text);
+  border-inline: 1px solid var(--xf-line);
+}
+.dark .xf {
+  --xf-bg: #000000;
+  --xf-text: #e7e9ea;
+  --xf-dim: #71767b;
+  --xf-line: #2f3336;
+  --xf-thread: #333639;
+  --xf-bar: #202327;
+}
+.xf-tabs {
+  display: flex;
+  height: 53px;
+  border-bottom: 1px solid var(--xf-line);
+}
+.xf-tab {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--xf-dim);
+}
+.xf-tab[data-on] {
+  font-weight: 700;
+  color: var(--xf-text);
+}
+.xf-tab[data-on]::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 56px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--xf-blue);
+}
+.xf-post {
+  display: flex;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--xf-line);
+}
+.xf-post[data-thread-below] {
+  border-bottom: 0;
+}
+.xf-post[data-thread-above] {
+  padding-top: 0;
+}
+.xf-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 40px;
+  margin-inline-end: 12px;
+}
+.xf-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: var(--xf-line);
+  color: var(--xf-dim);
+  font-size: 15px;
+  font-weight: 700;
+}
+.xf-line-above {
+  width: 2px;
+  height: 8px;
+  margin-bottom: 4px;
+  background: var(--xf-thread);
+}
+.xf-line-below {
+  flex: 1;
+  width: 2px;
+  margin-top: 4px;
+  background: var(--xf-thread);
+}
+.xf-main {
+  /* From the text's right edge to the column's outer edge: 16 padding + 1 hairline. */
+  --kit-card-pad: 17px;
+  flex: 1;
+  min-width: 0;
+}
+.xf-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 15px;
+  line-height: 20px;
+  min-width: 0;
+}
+.xf-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xf-handle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xf-dim {
+  color: var(--xf-dim);
+}
+.xf-more {
+  margin-inline-start: auto;
+  align-self: center;
+  color: var(--xf-dim);
+}
+.xf .feed-text {
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.xf .feed-paras {
+  gap: 20px;
+}
+.xf .feed-more {
+  color: var(--xf-blue);
+}
+.xf-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  margin: 12px 0 8px;
+  color: var(--xf-dim);
+}
+.xf-actions > span {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+}
+.xf-actions-end {
+  display: flex !important;
+  gap: 12px;
+}
+.xf-bar {
+  display: block;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--xf-bar, #eff3f4);
+}
+.xf-skel .xf-head {
+  align-items: center;
+  gap: 8px;
+}
+.xf-skel .xf-avatar {
+  background: var(--xf-bar);
+}
+
+/* ── LinkedIn: a card on the grey feed ── */
+.lf {
+  --lf-feed: #f4f2ee;
+  --lf-card: #ffffff;
+  --lf-text: rgb(0 0 0 / 0.9);
+  --lf-dim: rgb(0 0 0 / 0.6);
+  --lf-line: rgb(140 140 140 / 0.2);
+  --xf-bar: #e9e5df;
+  --kit-card-pad: 0px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--lf-feed);
+  color: var(--lf-text);
+}
+.dark .lf {
+  --lf-feed: #000000;
+  --lf-card: #1b1f23;
+  --lf-text: rgb(255 255 255 / 0.9);
+  --lf-dim: rgb(255 255 255 / 0.6);
+  --lf-line: rgb(255 255 255 / 0.12);
+  --xf-bar: #2b3035;
+}
+.lf-card {
+  border-radius: 8px;
+  background: var(--lf-card);
+  box-shadow: 0 0 0 1px var(--lf-line);
+}
+.lf-head {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+.lf-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  background: var(--xf-bar);
+  color: var(--lf-dim);
+  font-size: 16px;
+  font-weight: 600;
+}
+.lf-name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.lf-small {
+  font-size: 12px;
+  line-height: 16px;
+}
+.lf-dim {
+  color: var(--lf-dim);
+}
+.lf-body {
+  --kit-card-pad: 16px;
+  padding: 8px 16px 0;
+}
+.lf .feed-text {
+  font-size: 14px;
+  line-height: 20px;
+}
+.lf .feed-paras {
+  gap: 20px;
+}
+.lf .feed-more {
+  color: var(--lf-dim);
+}
+.lf-actions {
+  display: flex;
+  justify-content: space-around;
+  margin: 8px 12px 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--lf-line);
+  color: var(--lf-dim);
+}
+.lf-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.lf-skel .lf-avatar {
+  background: var(--xf-bar);
+}
+
+/* ── Shared: the words, the cut, the field ── */
+.feed-text p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.feed-paras {
+  display: flex;
+  flex-direction: column;
+}
+/* Behind the cut: the platform's secondary text colour, which passes contrast
+   (#536471 on white, #71767b on black), not a half-opacity ink, which did not. */
+.feed-behind {
+  color: var(--xf-dim, var(--lf-dim));
+}
+.lf .feed-behind {
+  color: var(--lf-dim);
+}
+/* On a phone the global floor sets every field to 16px (no zoom on focus),
+   so the read text matches it there, or E would make the post jump. */
+@media (max-width: 767px) {
+  .xf .feed-text,
+  .lf .feed-text {
+    font-size: 16px;
+    line-height: 21px;
+  }
+  .xf .feed-paras,
+  .lf .feed-paras {
+    gap: 21px;
+  }
+}
+.feed-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--xf-dim, var(--lf-dim));
+}
+.lf .feed-fold {
+  color: var(--lf-dim);
+}
+.feed-fold-rule {
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed currentColor;
+}
+/* The words as the field: exactly the post's text, the caret inside. */
+.feed-field {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  field-sizing: content;
+  outline: none;
+}
+.xf .feed-field {
+  margin-top: 2px;
+  caret-color: var(--xf-blue);
+}
+/* Focus is shown round the post, in our ring, since the field has no box of its own. */
+.xf-post:has(.feed-field:focus-visible),
+.lf-card:has(.feed-field:focus-visible) {
+  outline: 2px solid var(--color-kit-focus);
+  outline-offset: -2px;
+}
+/* The platform's chrome is a picture of itself here: nothing in it can be
+   pressed, selected or hovered, so it never steals a click or reads as a
+   control we did not build. */
+.xf-tabs,
+.xf-actions,
+.xf-more,
+.xf-avatar,
+.xf-skel,
+.lf-actions,
+.lf-avatar,
+.lf-skel {
+  pointer-events: none;
+  user-select: none;
+}
+/* The account line truncates the name and handle, never "now" or the dots. */
+.xf-head > * {
+  flex: none;
+}
+.xf-head > .xf-name,
+.xf-head > .xf-handle {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.lf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Optical: X's icons sit on the row's centre line, the last two as a pair at the end;
+   the "more" dots line up with the name's cap height, not its baseline. */
+.xf-actions svg,
+.lf-action svg {
+  display: block;
+  flex: none;
+}
+.xf-more {
+  margin-top: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xf *,
+  .lf * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* The connected account's picture fills its circle. */
+.feed-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+}

@@ -1,63 +1,47 @@
-import { redirect } from "next/navigation"
+import { Suspense } from "react"
 
 import { constructMetadata } from "@/lib/metadata"
-import { getNumbers } from "@/lib/numbers"
+import { loadNumbers } from "@/lib/numbers-load"
 import { getSession } from "@/lib/session"
-import { resolveTimeZone } from "@/lib/timezone"
-import { NumbersScreen } from "@/components/numbers/numbers-screen"
+import { NumbersReading, NumbersWorkspace } from "@/components/numbers/numbers-workspace"
 
 /**
- * What actually landed — the shape first, then the cause.
+ * How it is going, against your own usual. **The one dashboard**
+ * (docs/design/decisions.md, "Never"; picked 2026-11-16 from
+ * /prototypes/numbers-lab: "Dashboard is the page, and Table is what it
+ * opens"): a period switch, four tiles (Replies, Came back, Posts, Views per
+ * post; Depth before Volume), and panels for the weekly trend, the people
+ * who keep showing up, what worked and what Quincy did. A tile opens Table
+ * filtered to its measure; a "What worked" row opens that post.
  *
- * This surface was a `SurfacePlaceholder` for months, promising to "read
- * backwards into Riffs, so the next round starts from what performed instead of
- * from nothing". Three readings were built at /prototypes/numbers against this
- * account's real corpus, and two of them are here, in the order you need them:
+ * Every number is a sentence against the person's own usual: no follower
+ * count, no bare total, no colour for good or bad (docs/vision.md).
  *
- * 1. **Baseline** — the distribution. Every post as a deviation from your own
- *    median, on one log2 scale, with the chart/table toggle above it. This is
- *    the *shape* of what you have published: a long quiet floor with a few
- *    spikes standing out of it.
- * 2. **Ledger** — the cause. Rows are angles, posts are the evidence filed
- *    under them. This is the part that keeps the placeholder's promise: the
- *    distribution tells you that a few posts carry the rest, and the ledger
- *    tells you what those posts had in common.
- *
- * They are not two pages stapled together. Baseline's own closing note asked
- * exactly the question Ledger answers — "six of the posts below the line are
- * link replies that were never competing for reach; filtering those out is the
- * next question this page has to answer" — and that sentence is now derived
- * from the corpus rather than asserted.
- *
- * Two things the page refuses to do:
- *
- * - **Compare you to anybody else.** Every number is a multiple of your own
- *   median. A follower count is not something you control.
- * - **Claim a join it does not have.** The angles are inferred from the shape of
- *   each opening line, because `scheduled_post` has published nothing yet and
- *   there is no `riff_angle` → post edge to read. The page says so, above the
- *   rows, rather than in a comment nobody reads. When a riff does produce a
- *   post, `getNumbers` swaps the inference for the join and this layout does not
- *   change.
- *
- * A kit page since 2026-11-16 (plans/029). This file reads; the markup is
- * components/numbers/numbers-screen.tsx, so a filled corpus can be laid out
- * from fixtures in app/prototypes/setup-pages.
+ * This file reads (lib/numbers-load.ts, SELECTs only: nothing written,
+ * nothing bought); the arithmetic is lib/numbers-read.ts and the markup is
+ * components/numbers/numbers-workspace.tsx. Who replied is not stored yet,
+ * so "Came back" and the people panel say "Not read yet".
  */
+
 export const metadata = constructMetadata({
   title: "Numbers",
   noIndex: true,
 })
 
-export default async function NumbersPage() {
+async function Numbers() {
+  // The layout is the gate (app/(app)/layout.tsx): it redirects to /login.
   const session = await getSession()
-  if (!session) {
-    redirect("/login?next=/numbers")
-  }
+  if (!session) return null
+  const data = await loadNumbers(session.user.id)
+  return <NumbersWorkspace data={data} />
+}
 
-  // Dates are formatted on the server in the reader's zone. See lib/timezone.
-  const zone = resolveTimeZone(session.user.timezone)
-  const numbers = await getNumbers(session.user.id, zone)
-
-  return <NumbersScreen numbers={numbers} />
+export default function NumbersPage() {
+  // Suspense twice over: the read, and `useQueryStates` (the period and the
+  // Table live in the URL). The fallback is the LiveDot line, never bars.
+  return (
+    <Suspense fallback={<NumbersReading />}>
+      <Numbers />
+    </Suspense>
+  )
 }

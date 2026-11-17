@@ -1,76 +1,112 @@
 import { Suspense } from "react"
 
+import { listConnections } from "@/lib/channels"
 import { getDrafts } from "@/lib/drafts"
+import { initialsOf } from "@/lib/initials"
 import { getSession } from "@/lib/session"
-import { DraftsInbox } from "@/components/drafts/drafts-inbox"
+import { DraftsWorkspace } from "@/components/drafts/drafts-workspace"
+import type { FeedAccount } from "@/components/drafts/draft-feed"
+import type { FeedAccounts } from "@/components/drafts/open-draft"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
  * Where the writing gets approved.
  *
- * The step after Riffs: an angle you decided was worth writing comes back as a
- * piece, written once per channel in a version native to each. You read them and
- * approve what survives. Nothing here schedules anything — that is Lineup, and
- * keeping the two apart is what stops you picking a time for writing you have
- * not finished reading.
+ * The step after Ideas: an idea you decided was worth writing comes back as
+ * a piece, written once per channel in a version native to each. You read
+ * them and approve what survives. Approving places a version in the next
+ * free slot you made on Lineup; nothing here invents a time.
  *
  * **Approval is per version.** Three texts going to three places is three
  * judgements, and one "Approve all" would mean approving writing you have not
- * read. The count on the rail is a fraction for the same reason.
+ * read.
  *
  * **The page has no editing beyond the text.** No reordering, no adding a
  * channel, no rewrite prompt. Steering belongs upstream on /ideas where the
- * decision is still open; by the time a piece is written, the question is whether
- * these words go out, and a page that asks two questions answers neither.
+ * decision is still open; by the time a piece is written, the question is
+ * whether these words go out.
  *
- * **A kit page since 2026-11-16** (plans/029: a page moves whole). The
- * two-pane inbox became list and detail in one Stage (docs/design/page.md):
- * the pieces as ListRows, the open piece under them as one DraftCard per
- * version. The argument that killed the old card grid still holds — five of
- * seven real pieces have one version — so the versions stack, never sit side
- * by side. See components/drafts/drafts-inbox.tsx.
+ * **A workspace since 2026-11-17** (docs/design/workspace.md; decided on
+ * /prototypes/drafts-lab): a toolbar, a dense table of drafts, and the open
+ * draft drawn as the real feed it will land in (X's column, LinkedIn's
+ * card), edited in place, with Quincy's marks in the margin. Under the fold
+ * it is one column grouped by what happens next. See
+ * components/drafts/drafts-workspace.tsx.
  *
  * **The paste box is not here, and that was a mistake worth recording.** It
- * shipped on this page in plans/016 — a control that creates a draft, on the page
- * whose own rule two paragraphs up is that it asks one question. plans/017 moved
- * it to /ideas, where the decision it needs is still open. Everything that
- * arrives here has already been decided on; this page only asks whether the words
- * go out.
+ * shipped on this page in plans/016, a control that creates a draft on the
+ * page whose rule is that it asks one question. plans/017 moved it to
+ * /ideas, where the decision it needs is still open.
  */
 export const metadata = constructMetadata({
   title: "Drafts",
   noIndex: true,
 })
 
-/** Two characters at most, from the name or else the address, for the card's Avatar. */
-function initialsOf(user: { name?: string | null; email: string }) {
-  return (user.name?.trim() || user.email)
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("")
+/**
+ * The reads sit under the page's own Suspense, not only the layout's: on a
+ * client navigation from another app page the layout's boundary is above
+ * what re-renders, so the uncached reads would block the navigation (Next's
+ * instant-navigation check flags exactly that). The same boundary covers
+ * `useQueryState`, which reads which piece is open (`?piece=`).
+ */
+export default function DraftsPage() {
+  return (
+    <Suspense>
+      <Drafts />
+    </Suspense>
+  )
 }
 
-export default async function DraftsPage() {
+async function Drafts() {
   // The layout is the gate (app/(app)/layout.tsx), and it keeps the query
   // (?piece=…) on the way to /login; a redirect here dropped it.
   const session = await getSession()
   if (!session) return null
 
-  const drafts = await getDrafts(session.user)
+  const [drafts, connections] = await Promise.all([getDrafts(session.user), listConnections(session.user.id)])
 
-  /**
-   * The screen renders KitPage itself, because the summary counts what is
-   * still waiting and that count changes with every Approve
-   * (docs/design/page.md, "Where KitPage renders").
-   *
-   * `useQueryState` reads which piece is open; Suspense is what keeps that from
-   * opting the whole route out of static rendering.
-   */
-  return (
-    <Suspense>
-      <DraftsInbox initial={drafts} initials={initialsOf(session.user)} />
-    </Suspense>
-  )
+  return <DraftsWorkspace drafts={drafts} accounts={feedAccounts(session.user, connections)} />
+}
+
+/**
+ * Who each channel's post is from, as the feed will show it: the connected
+ * account's own name, handle and picture, as the channel reported them at
+ * connect time (`channel_connection`). Not only `active` rows: a connection
+ * waiting on a reconnect is still the account the post goes out as.
+ *
+ * Where a field is not stored, it is left out rather than made up:
+ * - LinkedIn stores no handle (its profile has none), so its post shows the
+ *   name alone, as LinkedIn does.
+ * - Nothing stores LinkedIn's headline, so the line under the name is empty.
+ * - With no connection for a channel, the post is from the person's own
+ *   name, with no handle: a handle Quincy has not seen would be a guess in
+ *   their name.
+ */
+function feedAccounts(
+  user: { name?: string | null; email: string },
+  connections: Awaited<ReturnType<typeof listConnections>>
+): FeedAccounts {
+  const ownName = user.name?.trim() || user.email.split("@")[0] || user.email
+  const fallback: FeedAccount = {
+    name: ownName,
+    handle: null,
+    initials: initialsOf(user),
+    avatarUrl: null,
+    headline: null,
+  }
+  const byChannel: Record<string, FeedAccount> = {}
+  for (const c of connections) {
+    if (c.state === "revoked") continue
+    const name = c.displayName?.trim() || ownName
+    byChannel[c.channel] = {
+      name,
+      // Stored as X reports it, "@name"; the feed header adds its own "@".
+      handle: c.handle?.replace(/^@/, "").trim() || null,
+      initials: initialsOf({ name, email: user.email }),
+      avatarUrl: c.avatarUrl,
+      headline: null,
+    }
+  }
+  return { byChannel, fallback }
 }

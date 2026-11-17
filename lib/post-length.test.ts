@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   containsUrl,
   countGraphemes,
+  feedCut,
   measurePost,
   splitAtFold,
 } from "./post-length"
@@ -138,5 +139,57 @@ describe("splitAtFold", () => {
     const { visible } = splitAtFold(text, "linkedin")
     expect(visible).toBe("a".repeat(139) + "🇳🇴")
     expect(countGraphemes(visible)).toBe(140)
+  })
+})
+
+describe("feedCut", () => {
+  it("leaves a short X post whole", () => {
+    expect(feedCut("I held the importer back a week.", "x")).toEqual({
+      visible: "I held the importer back a week.",
+      hidden: "",
+      kind: null,
+    })
+  })
+
+  it("cuts an X post only at the limit, never at a fold", () => {
+    const text = "a".repeat(300)
+    const cut = feedCut(text, "x")
+    expect(cut.kind).toBe("limit")
+    expect(countGraphemes(cut.visible)).toBe(280)
+    expect(cut.visible + cut.hidden).toBe(text)
+  })
+
+  it("counts graphemes at the limit, so a flag is never split", () => {
+    const text = "a".repeat(279) + "🇳🇴" + "b".repeat(10)
+    const cut = feedCut(text, "x")
+    expect(cut.visible).toBe("a".repeat(279) + "🇳🇴")
+  })
+
+  it("folds LinkedIn after three lines when that comes first", () => {
+    const text = "one\ntwo\nthree\nfour"
+    const cut = feedCut(text, "linkedin")
+    expect(cut.kind).toBe("fold")
+    expect(cut.visible).toBe("one\ntwo\nthree")
+    expect(cut.hidden).toBe("\nfour")
+  })
+
+  it("folds LinkedIn at the character fold, backed up to a space", () => {
+    const words = Array.from({ length: 40 }, () => "words").join(" ")
+    const cut = feedCut(words, "linkedin")
+    expect(cut.kind).toBe("fold")
+    expect(cut.visible.length).toBeLessThanOrEqual(140)
+    expect(cut.visible.endsWith("words")).toBe(true)
+    expect(cut.hidden.startsWith(" ")).toBe(true)
+    expect(cut.visible + cut.hidden).toBe(words)
+  })
+
+  it("does not fold when only whitespace sits past the cut", () => {
+    expect(feedCut("one\ntwo\nthree\n", "linkedin").kind).toBeNull()
+  })
+
+  it("agrees with splitAtFold on where the characters run out", () => {
+    const text = "x".repeat(200)
+    // No space to back up to: the cut stays where the fold is.
+    expect(feedCut(text, "linkedin").visible).toBe(splitAtFold(text, "linkedin").visible)
   })
 })

@@ -110,3 +110,23 @@ export function PanelBody({ children, label, scrollKey }: PanelBodyProps) {
     </div>
   )
 }
+
+/**
+ * Scroll the PanelBody that holds `el` (never the page) the least that
+ * shows it, instantly: past what sits above it, but no further. An element
+ * taller than the pane goes to the pane's top. Instant, so reduced motion
+ * has nothing to reduce. The pane's counterpart of `revealDataListRow`:
+ * /drafts calls it when a draft opens (the first version's post and its
+ * verbs) and when E opens a field.
+ */
+export function revealInPanel(el: HTMLElement | null, { pad = 16 }: { pad?: number } = {}) {
+  const pane = el?.closest<HTMLElement>('[data-slot="kit-panel-body"]')
+  if (!el || !pane) return
+  const r = el.getBoundingClientRect()
+  const p = pane.getBoundingClientRect()
+  if (r.bottom > p.bottom - pad) {
+    pane.scrollTop += Math.min(r.top - p.top - pad, r.bottom - p.bottom + pad)
+  } else if (r.top < p.top + pad) {
+    pane.scrollTop -= p.top + pad - r.top
+  }
+}
