@@ -37,6 +37,9 @@ export function ConnectorDetail({
   const interrupts = c.status.s === "failed" || c.status.s === "reauth" || c.status.s === "setup"
   const more = c.actions.filter((a) => !a.hold && !["connect", "install"].includes(a.id))
   const hold = connected ? c.actions.find((a) => a.hold) : undefined
+  // Reading and its number belong to a connector that reads; one that
+  // stopped or is half set up shows its fix instead.
+  const reads = c.status.s === "connected" || c.status.s === "waiting" || c.status.s === "paused"
 
   return (
     <div className="flex flex-col gap-kit-group">
@@ -46,7 +49,7 @@ export function ConnectorDetail({
           <div className="flex min-w-0 flex-col">
             <Text weight="strong">{c.name}</Text>
             <Text variant="small" tone="muted">
-              {c.kind === "source" ? "Source" : "Channel"} · {c.line}
+              {c.line}
             </Text>
           </div>
         </div>
@@ -71,38 +74,50 @@ export function ConnectorDetail({
 
       <Text tone="muted">{c.gives}</Text>
 
-      {c.metric && connected ? (
+      {c.metric && reads ? (
         <Well>
           <MetricRow m={c.metric} />
         </Well>
       ) : null}
 
-      {c.reading && connected ? (
-        <div className="flex flex-col gap-kit-tight">
+      {c.reading && reads ? (
+        // The switch beside its own words, so the "proposed" tag sits with
+        // the label it qualifies rather than on a line of its own.
+        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-kit-related select-none">
+          <span className="flex min-w-0 items-center gap-kit-controls text-kit-body text-kit-ink">
+            {c.reading.label}
+            {!c.reading.real ? <Proposed show={show} why={c.reading.ref} /> : null}
+          </span>
           <Switch
-            label={c.reading.label}
+            aria-label={`${c.reading.label}: ${c.name}`}
             checked={c.reading.on}
             onCheckedChange={(on) => store.toggleReading(c.id, on)}
           />
-          {!c.reading.real ? (
-            <span>
-              <Proposed show={show} why={c.reading.ref} />
-            </span>
-          ) : null}
-        </div>
+        </label>
       ) : null}
 
       {more.length > 0 && (connected || c.status.s === "builtin" || c.status.s === "soon") ? (
+        // The verbs as quiet pills side by side: one left edge with the text
+        // above (a ghost button's padding pushed its label off it). Separated
+        // from the reading by a hairline, which divides; it does not lift.
         <div className="flex flex-col gap-kit-related border-t border-kit-hairline pt-kit-group">
-          {more.map((a) => (
-            <div key={a.id} className="flex items-center gap-kit-controls">
-              <Button size="sm" variant="ghost">
-                {a.label}
-              </Button>
-              {!a.real ? <Proposed show={show} why={a.ref} /> : null}
-              {show ? <span className="truncate font-kit-mono text-kit-mono-sm text-kit-ink-muted">{a.real ? a.ref : ""}</span> : null}
-            </div>
-          ))}
+          <div className="flex flex-wrap items-center gap-kit-controls">
+            {more.map((a) => (
+              <span key={a.id} className="inline-flex items-center gap-kit-controls">
+                <Button size="sm">{a.label}</Button>
+                {!a.real ? <Proposed show={show} why={a.ref} /> : null}
+              </span>
+            ))}
+          </div>
+          {show ? (
+            <ul className="flex flex-col gap-0.5 font-kit-mono text-kit-mono-sm text-kit-ink-muted">
+              {more.map((a) => (
+                <li key={a.id} className="truncate">
+                  {a.label}: {a.ref}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

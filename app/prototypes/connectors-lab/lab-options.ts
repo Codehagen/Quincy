@@ -24,7 +24,7 @@ export const DEFAULT_OPTIONS: LabOptions = {
   metric: "on",
   tags: "on",
   frame: "panel",
-  mark: "dot",
+  mark: "words",
   header: "ink",
   proposed: "show",
 }

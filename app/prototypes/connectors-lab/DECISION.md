@@ -142,9 +142,67 @@ ink | quiet · Mark proposed show | hide.
 
 ## Picked
 
-- Direction:
-- Values:
-- Merge (one page, or keep two):
+- Direction: **2 · Table** (owner, 2026-11-17: "for labs liker jeg table.
+  Bruk ui sdk om du trenger det og gjør en surfaces på det også."). Grid
+  stays as its fold under 900px of workspace, and as the phone layout.
+- Merge: one page, Connectors, with All · Connected · Sources · Channels.
+- Connected mark: **words** ("Connected", no dot). A connection is
+  permission, not a running ritual; the dot stays for work in progress.
+- Header pill: ink "Ask for one" (proposed) when nothing needs you; a
+  connector that stopped, needs reconnecting or is half set up takes the
+  ink with its fix, and on a first run X's Connect does.
+
+### ui-sdk
+
+Nothing new was needed. The grouped list with type-ahead, one tab stop and
+selection that follows focus is the kit's DataList, which is already on
+ui-sdk's Listbox. The tabs stay on Base UI's Tabs (arrow keys, Home, End),
+the pane on Panel, the switch on Base UI's Switch. No component mixes the
+two. Twenty-three rows need no virtualisation; a command-style filter
+would only repeat the search field and `/`.
+
+### Surfaces, settled (a surfaces pass, 2026-11-17)
+
+- **Rows** are the DataList's own: rest has no fill; hover
+  `bg-kit-row-hover`; selected `bg-kit-selected` with the 3px ink bar and
+  a 560 title; 36 tall (44 on touch), 1px apart, inset 8 with the 8px
+  radius (`rounded-kit-control-inner`) on a square pane, so there is no
+  outer radius to derive from.
+- **Needs you** is said in the group head, not with a tinted row: the head
+  is ink with the alert glyph, the state cell is ink with its glyph
+  ("Reconnect", "Stopped", "Half set up"). A tint would read as selected,
+  which is the well grey's job; red is for destruction only.
+- **Group heads**: the name at 560 and its count, tabular, muted; 12px meta,
+  on the 20 edge. Order: Needs you · Connected · Built in · Ready to
+  connect · Coming later. An empty group is not drawn.
+- **Coming later** rows: the title `quiet` (muted) and the glyph muted.
+- **Glyphs**: 16px monochrome marks in the rows, never a tile (a 36 tile in
+  a 36 row has no air). The pane's head keeps the 36 GlyphTile on
+  `shadow-kit-control`: ring plus a short fall, one ring in dark.
+- **Borders vs shadows**: every line in the workspace divides and none lifts,
+  so they stay hairline borders (`border-kit-hairline`): under the toolbars,
+  under the head band and the pane strip (one 32 band across both panes),
+  the pane's start edge, and the two dividers inside the pane (above the
+  verbs, above Disconnect). Nothing in the workspace takes an object shadow;
+  the panes are regions of one surface, never Cards.
+- **Pane strip**: the kind on the left, the state at the end (StatusPill's
+  register: glyph and word, no fill). The head under it says the name and
+  what it does, so nothing is said twice.
+- **Pane insides**: 20 padding; the metric row in a `Well`
+  (`bg-kit-well`, 12 radius, 12 × 10 inside): the pane is square, so the
+  Well's radius is its own, not derived. The number at 560 ink, tabular,
+  then "· usual 22" muted. The Reading switch sits beside its label with
+  the "proposed" tag next to the words. Verbs are quiet pills side by side
+  (`shadow-kit-control`), so their labels hold one left edge with the text
+  above; the lab's refs list sits under them in 11 mono. Disconnect is a
+  hold, last, under its own hairline.
+- **The open row** with nothing picked is the one holding the page's ink
+  pill (a fix, or X's Connect on a first run), else the first row.
+- **A connector that stopped or is half set up** shows its sentence in ink
+  and its fix, never the Reading switch or its number.
+- **Light and dark**: tokens only. In dark, the control and tile shadows
+  collapse to one white ring (the kit's elevation tokens); the selected row
+  is the dark well; the Well is darker than the pane (a recess), as in light.
 
 ## What the pick asks of the kit
 

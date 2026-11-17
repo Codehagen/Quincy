@@ -179,17 +179,31 @@ function TableSurface({ store, opts }: { store: ConnectorsStore; opts: LabOption
 
   const groups: DataListGroup<Connector>[] = GROUPS.map((g) => {
     const items = store.shown.filter(g.test)
+    // The group head: the name at 560 and its count, muted. "Needs you"
+    // alone is ink with the alert glyph: it is the one group that should
+    // interrupt, and it says so in the head rather than with a tinted row
+    // (a tint would read as selected, which is the well grey's job).
+    const you = g.key === "you"
     return {
       key: g.key,
       name: g.name(items.length),
-      label: <span className="text-kit-meta font-kit-strong text-kit-ink-muted">{g.label}</span>,
+      label: (
+        <span className={`inline-flex items-center gap-1.5 ${you ? "text-kit-ink" : "text-kit-ink-muted"}`}>
+          {you ? <HugeiconsIcon icon={Alert02Icon} {...ICON_DENSE} aria-hidden /> : null}
+          <span className="font-kit-strong">{g.label}</span>
+          <span className="tabular-nums">{items.length}</span>
+        </span>
+      ),
       items,
     }
   }).filter((g) => g.items.length > 0)
   const flat = groups.flatMap((g) => g.items)
 
-  // The open row: the one picked, else the first that needs you, else the first.
-  const openId = store.selectedId && flat.some((c) => c.id === store.selectedId) ? store.selectedId : (flat[0]?.id ?? null)
+  // The open row: the one picked; else the row that holds the page's one
+  // action (a fix, or X's Connect on a first run), so the ink pill is on
+  // screen from the start; else the first row.
+  const fallback = owner && owner !== "header" && flat.some((c) => c.id === owner) ? owner : (flat[0]?.id ?? null)
+  const openId = store.selectedId && flat.some((c) => c.id === store.selectedId) ? store.selectedId : fallback
   const open = store.all.find((c) => c.id === openId) ?? null
 
   const move = (by: 1 | -1) => {
@@ -249,11 +263,11 @@ function TableSurface({ store, opts }: { store: ConnectorsStore; opts: LabOption
             </Panel>
             <Panel label="Open connector" width="clamp(380px, 38cqi, 520px)" edge="start">
               <PanelBody label="The open connector" scrollKey={openId}>
+                {/* The strip: the kind on the left, the state at the end. The head
+                    under it says the name and what it does, so nothing is said twice. */}
                 <PanelHeader end={open && store.phase === "live" ? <State c={open} opts={opts} /> : undefined}>
                   {open && store.phase === "live" ? (
-                    <span className="truncate">
-                      {open.kind === "source" ? "Source" : "Channel"} · {open.line}
-                    </span>
+                    <span className="truncate">{open.kind === "source" ? "Source" : "Channel"}</span>
                   ) : (
                     <span aria-hidden />
                   )}
