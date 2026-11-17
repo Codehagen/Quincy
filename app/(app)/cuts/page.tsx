@@ -1,8 +1,10 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
 import { Card, KitPage, List, Mono, NavRow, Stage, Text } from "@/components/kit"
 import { SampleButton } from "@/components/editor/sample-button"
 import { UploadDrop } from "@/components/editor/upload-drop"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { listProjects } from "@/lib/editor/projects"
 import { sampleAvailable } from "@/lib/editor/sample"
 import { constructMetadata } from "@/lib/metadata"
@@ -19,11 +21,33 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function CutsPage({
+const SUMMARY = "Drop a recording and it becomes something you can cut."
+
+/**
+ * The reads sit under the page's own Suspense: on a client navigation the
+ * layout's boundary is above what re-renders, so reads awaited outside one
+ * held the navigation. The fallback is the page's frame and title.
+ */
+export default function CutsPage({
   searchParams,
 }: {
   searchParams: Promise<{ all?: string }>
 }) {
+  return (
+    <Suspense
+      fallback={
+        <KitPage title="Cuts" summary={SUMMARY}>
+          <StageSkeleton lines={["64%", "40%"]} />
+          <StageSkeleton lines={["46%", "58%", "38%"]} />
+        </KitPage>
+      }
+    >
+      <Cuts searchParams={searchParams} />
+    </Suspense>
+  )
+}
+
+async function Cuts({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
   const session = await getSession()
   if (!session) redirect("/login?next=/cuts")
 
@@ -44,7 +68,7 @@ export default async function CutsPage({
   return (
     <KitPage
       title="Cuts"
-      summary="Drop a recording and it becomes something you can cut."
+      summary={SUMMARY}
     >
       <Stage
         lead="A recording in."

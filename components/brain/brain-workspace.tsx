@@ -13,6 +13,7 @@ import {
   strategySlug,
 } from "@/lib/strategy-format"
 import {
+  Button,
   ButtonLink,
   Card,
   EmptyState,
@@ -147,7 +148,7 @@ export function BrainWorkspace({
     parseAsString.withDefault("human").withOptions({ clearOnDefault: true })
   )
 
-  const { data: pages = [], isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: brainKeys.list(userId),
     queryFn: fetchBrain,
     // The brain changes when you save it, and saving invalidates this key. Left
@@ -155,6 +156,7 @@ export function BrainWorkspace({
     // moved.
     staleTime: 5 * 60 * 1000,
   })
+  const pages = data ?? []
 
   const byKind = (kind: BrainPage["kind"]) =>
     pages.filter((p) => p.kind === kind)
@@ -277,6 +279,9 @@ export function BrainWorkspace({
           find,
           groups,
           isPending,
+          // Only with nothing to show: a failed refetch keeps the pages it had.
+          failed: isError && data === undefined,
+          onRetry: () => void refetch(),
           gaps,
           corpusPosts,
           proposeNotice,
@@ -365,6 +370,8 @@ function renderEditor({
   find,
   groups,
   isPending,
+  failed,
+  onRetry,
   gaps,
   corpusPosts,
   proposeNotice,
@@ -375,6 +382,8 @@ function renderEditor({
   find: (slug: string) => BrainPageJSON | null
   groups: Group[]
   isPending: boolean
+  failed: boolean
+  onRetry: () => void
   gaps: StoryGap[]
   corpusPosts: number
   proposeNotice: string | null
@@ -384,6 +393,17 @@ function renderEditor({
   const singleton = SINGLETONS.find((s) => s.slug === active)
   const page = find(active)
   const group = groups.find((g) => g.value === active && g.value !== STORY_INDEX)
+
+  // First, not just before the empty state: with no pages read, every branch
+  // below would draw a blank editor or an empty group, and a blank editor
+  // saved would write over a page that is there.
+  if (failed) {
+    return (
+      <EmptyState bold="Couldn’t load the brain." rest="Nothing is lost. Check your connection, then try again.">
+        <Button onClick={onRetry}>Try again</Button>
+      </EmptyState>
+    )
+  }
 
   if (group) {
     return <GroupOverview group={group} onSelect={onSelect} />

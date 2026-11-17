@@ -54,7 +54,7 @@ function itemFor(day: ChangelogDay) {
 
   return [
     "<item>",
-    `<title>${escapeXml(`${day.label} — ${day.entries.length} ${day.entries.length === 1 ? "change" : "changes"}`)}</title>`,
+    `<title>${escapeXml(`${day.label} · ${day.entries.length} ${day.entries.length === 1 ? "change" : "changes"}`)}</title>`,
     `<link>${escapeXml(link)}</link>`,
     // Not a permalink in the RSS sense — it is a fragment on one page rather
     // than a page of its own — so `isPermaLink` says so. A reader that treated
@@ -94,7 +94,7 @@ export function GET() {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
     "<channel>",
-    "<title>Quincy — Changelog</title>",
+    "<title>Changelog · Quincy</title>",
     `<link>${BASE_URL}/changelog</link>`,
     "<description>Everything that shipped in Quincy, dated, including the fixes.</description>",
     "<language>en</language>",

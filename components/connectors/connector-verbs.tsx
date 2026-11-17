@@ -35,6 +35,7 @@ import { Friend } from "@/components/mascot"
 import { QuincyAsks } from "@/components/quincy"
 import { disconnectSentence, isConnected, type ConnectorDetail } from "@/lib/connectors"
 import { isSettled, MAX_ANSWER_CHARS, sayOutcome } from "@/lib/shipped-outcome"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 
 import { MEETING_SOURCES } from "@/lib/meeting-sources"
 
@@ -384,8 +385,9 @@ function CirclebackVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "c
     setError(null)
     startTransition(async () => {
       // Idempotent: a second press returns the same URL (startCirclebackSetup).
-      const result = await startCirclebackSetup()
-      if (!result.ok) setError(result.message)
+      const result = await startCirclebackSetup().catch(() => null)
+      if (!result) setError(COULD_NOT_REACH)
+      else if (!result.ok) setError(result.message)
     })
   }
 
@@ -527,7 +529,9 @@ function XPostsVerbs({ detail }: { detail: Extract<ConnectorDetail, { id: "x-pos
   const run = () => {
     setReceipt(null)
     startTransition(async () => {
-      setReceipt(await importFromX())
+      setReceipt(
+        await importFromX().catch(() => ({ ok: false as const, message: COULD_NOT_REACH }))
+      )
     })
   }
 
@@ -602,7 +606,9 @@ function BookmarksVerbs() {
   const enable = (on: boolean) => {
     setSaid(null)
     startTransition(async () => {
-      const result = on ? await enableRhythm({ rhythmId: BOOKMARKS }) : await disableRhythm(BOOKMARKS)
+      const result = await (on ? enableRhythm({ rhythmId: BOOKMARKS }) : disableRhythm(BOOKMARKS)).catch(
+        () => ({ ok: false as const, message: COULD_NOT_REACH })
+      )
       if (!result.ok) setSaid({ ok: false, message: result.message })
       router.refresh()
     })
@@ -611,7 +617,7 @@ function BookmarksVerbs() {
   const runNow = () => {
     setSaid(null)
     startRun(async () => {
-      const result = await runRhythmNow(BOOKMARKS)
+      const result = await runRhythmNow(BOOKMARKS).catch(() => ({ ok: false as const, message: COULD_NOT_REACH }))
       setSaid({ ok: result.ok, message: result.message ?? (result.ok ? "Done." : "") })
       router.refresh()
     })

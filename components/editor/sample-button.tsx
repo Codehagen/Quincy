@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { Text, TextButton } from "@/components/kit"
 import { createSampleProjectAction } from "@/app/(app)/cuts/actions"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 
 /**
  * "Try it with a sample recording", under the drop zone.
@@ -34,7 +35,8 @@ export function SampleButton() {
                 setError(result.error)
               }
             } catch {
-              setError("The sample could not be opened. Try again.")
+              // The action threw rather than answering: the call never landed.
+              setError(COULD_NOT_REACH)
             }
           })
         }}

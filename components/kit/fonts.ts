@@ -16,6 +16,9 @@ import { Caveat, Inter } from "next/font/google"
  */
 export const kitSans = Inter({
   subsets: ["latin"],
+  // The real italic: globals.css sets font-synthesis: none, so without it
+  // every <em> renders upright.
+  style: ["normal", "italic"],
   display: "swap",
   variable: "--kit-font-inter",
 })

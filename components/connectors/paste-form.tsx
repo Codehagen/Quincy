@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { Button, Field, Input, Text, type ButtonProps, type InputProps } from "@/components/kit"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 
 /**
  * One string pasted into a connector and handed to a server action: a signing
@@ -61,7 +62,13 @@ function PasteFormRoot({ action, onSuccess, children }: PasteFormProps) {
     if (!value.trim()) return
     setError(undefined)
     startTransition(async () => {
-      const result = await action(value)
+      let result: ActionResult
+      try {
+        result = await action(value)
+      } catch {
+        setError(COULD_NOT_REACH)
+        return
+      }
       if (!result.ok) {
         setError(result.message)
         return

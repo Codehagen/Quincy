@@ -3,6 +3,7 @@ import { constructMetadata } from "@/lib/metadata"
 
 export const metadata = constructMetadata({
   title: "Reset password",
+  noIndex: true,
 })
 
 export default async function ResetPasswordPage({

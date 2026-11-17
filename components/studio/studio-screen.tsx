@@ -50,6 +50,10 @@ const SCRIPTED =
  */
 const MAX_FILE_BYTES = 3 * 1024 * 1024
 
+/** For the stored greeting's useSyncExternalStore: nothing to listen to, and no storage on the server. */
+const noSubscribe = () => () => {}
+const noServerPrelude = () => null
+
 const GENERIC_GREETING: StudioGreeting = {
   opening: ["Hand me the raw material: a merged PR, a call, a half-thought. I'll draft it in your voice, and nothing goes out until you approve it."],
   chips: ["Turn what I shipped today into a post", "What should I be writing about this week?"],
@@ -162,18 +166,30 @@ export function StudioScreen({ conversationId, initialMessages, greeting: served
   /* ── The greeting survives the first answer and the move to /c/[id] ──── */
 
   const greetingKey = `quincy:greeting:${conversationId}`
-  const [storedPrelude, setStoredPrelude] = React.useState<string[] | null>(null)
-  React.useEffect(() => {
-    if (greeting || isNew) return
+  // Read during render, not in an effect that set state after the messages
+  // had painted: on a client move to /c/[id] the prelude is there in the
+  // first frame. The server cannot see sessionStorage, so its snapshot is
+  // null. The raw string is the snapshot because it compares stable; the
+  // parse happens once per string below. Nothing writes the key while this
+  // screen reads it, so there is nothing to subscribe to.
+  const readPrelude = React.useCallback(() => {
+    if (greeting || isNew) return null
     try {
-      const raw = sessionStorage.getItem(greetingKey)
-      // After hydration on purpose: the server cannot see sessionStorage.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setStoredPrelude(JSON.parse(raw) as string[])
+      return sessionStorage.getItem(greetingKey)
     } catch {
-      // A prelude that cannot be read back is done without.
+      return null
     }
   }, [greeting, isNew, greetingKey])
+  const rawPrelude = React.useSyncExternalStore(noSubscribe, readPrelude, noServerPrelude)
+  const storedPrelude = React.useMemo(() => {
+    if (!rawPrelude) return null
+    try {
+      return JSON.parse(rawPrelude) as string[]
+    } catch {
+      // A prelude that cannot be read back is done without.
+      return null
+    }
+  }, [rawPrelude])
   const prelude = greeting?.opening ?? storedPrelude
 
   const composerInput = React.useRef<HTMLTextAreaElement>(null)
@@ -268,7 +284,8 @@ export function StudioScreen({ conversationId, initialMessages, greeting: served
             </MessageList>
           </div>
         )}
-        <div className="mx-auto w-full max-w-kit-page shrink-0 px-kit-page-gutter pb-[max(env(safe-area-inset-bottom),var(--spacing-kit-group))]">
+        {/* The gutter, or the notch's inset when a phone lies on its side. */}
+        <div className="mx-auto w-full max-w-kit-page shrink-0 pr-[max(var(--spacing-kit-page-gutter),env(safe-area-inset-right))] pb-[max(env(safe-area-inset-bottom),var(--spacing-kit-group))] pl-[max(var(--spacing-kit-page-gutter),env(safe-area-inset-left))]">
           {SCRIPTED ? (
             // Said on screen, so a canned reply is never taken for a live one.
             <div className="mb-kit-controls px-1.5">

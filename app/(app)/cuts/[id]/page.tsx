@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { notFound, redirect } from "next/navigation"
 
 import { Studio, type MediaEntry } from "@/components/editor/studio"
@@ -21,11 +22,31 @@ export const metadata = constructMetadata({
  * after mount — puts a spinner in front of a page whose data the server already
  * had, and every URL in it expires anyway, so there is nothing to cache.
  */
-export default async function CutPage({
+export default function CutPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  // Its own boundary, with `params` read under it: on a client navigation
+  // the layout's is above what re-renders. The fallback holds the editor's
+  // area and nothing else; a drawn editor that swapped would move more than
+  // it saved.
+  return (
+    <Suspense
+      fallback={
+        <div className="h-full min-h-0 w-full">
+          <span role="status" className="sr-only">
+            Opening the cut
+          </span>
+        </div>
+      }
+    >
+      <Cut params={params} />
+    </Suspense>
+  )
+}
+
+async function Cut({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   const { id } = await params
 

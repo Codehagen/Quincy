@@ -118,7 +118,12 @@ export function RhythmSettings({
       })
       router.refresh()
     } catch {
-      setMessage({ text: "Something went wrong.", ok: false })
+      // A throw is the round trip failing, which can happen after the run
+      // started, so the sentence cannot say it did not run.
+      setMessage({
+        text: "I lost the connection, so I can’t tell whether it ran. Reload to see the last run before trying again.",
+        ok: false,
+      })
     } finally {
       setRunning(false)
     }

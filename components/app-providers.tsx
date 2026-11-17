@@ -6,6 +6,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { ToastProvider } from "@/components/kit"
+import { ThemeHotkey } from "@/components/theme-provider"
 
 function makeQueryClient() {
   return new QueryClient({
@@ -55,7 +56,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             timeout: once one has opened, neighbours open instantly for
             this long — otherwise moving down a list feels sluggish. */}
         <TooltipPrimitive.Provider delay={200} closeDelay={0} timeout={300}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <ThemeHotkey />
+            {children}
+          </ToastProvider>
         </TooltipPrimitive.Provider>
       </NuqsAdapter>
     </QueryClientProvider>

@@ -28,6 +28,20 @@ export function ForgotPasswordForm() {
 
   const emailRef = usePointerAutofocus<HTMLInputElement>()
 
+  // The form is about to be replaced, and focus with it: hand it to the answer.
+  const titleRef = React.useRef<HTMLElement>(null)
+  React.useEffect(() => {
+    if (sentTo) titleRef.current?.focus()
+  }, [sentTo])
+
+  // Both branches open with this region at the same position, so React keeps
+  // the one node and its text change is what gets announced.
+  const live = (
+    <p aria-live="polite" className="sr-only">
+      {sentTo ? "Check your inbox" : ""}
+    </p>
+  )
+
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
 
@@ -71,11 +85,13 @@ export function ForgotPasswordForm() {
   if (sentTo) {
     return (
       <div className="flex flex-col gap-kit-group">
+        {live}
         {/* Deliberately conditional, matching the server's own response:
             "If this email exists in our system…". The account may not exist,
             and this screen must not say otherwise. */}
         <AuthCard
           title="Check your inbox"
+          titleRef={titleRef}
           lead={
             <>
               If there is an account for <Address>{sentTo}</Address>, a link to
@@ -92,6 +108,7 @@ export function ForgotPasswordForm() {
 
   return (
     <div className="flex flex-col gap-kit-group">
+      {live}
       <AuthCard
         title="Reset your password"
         lead="Tell me your email and I will send a link to choose a new one."

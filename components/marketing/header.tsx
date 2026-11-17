@@ -54,9 +54,19 @@ export function MarketingHeader() {
         <NavLink href="/#how" narrow="hide">
           How it works
         </NavLink>
-        <Suspense fallback={<SignedOut />}>
-          <Auth />
-        </Suspense>
+        {/* One grid cell holds the signed-out cluster, hidden, under the real
+            answer, so the slot is always as wide as the wider of the two and
+            "Open Studio" streaming in for a signed-in visitor moves nothing. */}
+        <span className="grid items-center justify-items-end">
+          <span aria-hidden inert className="invisible col-start-1 row-start-1 flex items-center gap-5 sm:gap-6">
+            <SignedOut />
+          </span>
+          <span className="col-start-1 row-start-1 flex items-center gap-5 sm:gap-6">
+            <Suspense fallback={<SignedOut />}>
+              <Auth />
+            </Suspense>
+          </span>
+        </span>
       </nav>
     </header>
   )

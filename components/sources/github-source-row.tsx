@@ -14,6 +14,7 @@ import {
   type MergeQuestion,
 } from "@/app/(app)/sources/actions"
 import { isSettled, MAX_ANSWER_CHARS, sayOutcome } from "@/lib/shipped-outcome"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 import type { Connection } from "@/lib/sources"
 import {
   Button,
@@ -228,7 +229,11 @@ export function GithubSourceRow({
   const save = () => {
     setLoginError(undefined)
     startTransition(async () => {
-      const result = await saveGithubLogin(login)
+      const result = await saveGithubLogin(login).catch(() => null)
+      if (!result) {
+        setLoginError(COULD_NOT_REACH)
+        return
+      }
       if (!result.ok) {
         setLoginError(result.message)
         return

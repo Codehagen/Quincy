@@ -91,7 +91,7 @@ export function TabList({ children, size = "md", ...props }: TabListProps) {
       className={`${SEGMENT_TRACK} group/kit-tab-list ${size === "xs" ? `${DENSE_HEIGHT.xs} text-kit-dense` : SEGMENT_HEIGHT[size]} inline-flex`}
     >
       <TabsPrimitive.Indicator
-        className={`${SEGMENT_THUMB} top-1 bottom-1 left-(--active-tab-left) w-(--active-tab-width)`}
+        className={`${SEGMENT_THUMB} top-1 bottom-1 left-0 translate-x-(--active-tab-left) w-(--active-tab-width)`}
       />
       {children}
     </TabsPrimitive.List>

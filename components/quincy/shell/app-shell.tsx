@@ -31,6 +31,7 @@ import { browserTimeZone, hhmmIn, resolveTimeZone } from "@/lib/timezone"
 
 import type { ShellUser } from "./account-menu"
 import { AppSidebar } from "./app-sidebar"
+import { PendingLabel } from "@/components/kit/pending-label"
 import { CONVERSATIONS_HREF, isActive, navItemFor } from "./nav"
 import { ShellStateProvider, useShell } from "./shell-state"
 
@@ -102,8 +103,13 @@ function Frame({ conversations, user, waiting, banner, children }: Omit<AppShell
   const sidebar = <AppSidebar user={user} waiting={waiting} />
   useKeepFocus(open, isMobile)
 
+  // The side insets on the frame, not on the columns: a landscape iPhone is
+  // md and up, so the desktop sidebar would sit under the notch. Padding the
+  // frame moves both columns clear and leaves the sidebar's own width, the
+  // thing that animates, alone. The phone bar sits inside it, so it needs
+  // no inset of its own; the sheet is portalled and takes its own.
   return (
-    <div className="flex h-dvh w-full">
+    <div className="flex h-dvh w-full ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)]">
       <SkipLink />
 
       {/* Desktop. Collapsing slides the column shut (width, so the page
@@ -346,7 +352,9 @@ function HistoryRow({ title, updatedAt }: { title: string; updatedAt: Date }) {
 
   return (
     <span className="flex w-screen max-w-full items-baseline gap-kit-related">
-      <span className="min-w-0 flex-1 truncate">{title}</span>
+      <span className="min-w-0 flex-1 truncate">
+        <PendingLabel>{title}</PendingLabel>
+      </span>
       <time
         dateTime={updatedAt.toISOString()}
         className="shrink-0 text-kit-small text-kit-ink-muted tabular-nums"
@@ -422,7 +430,7 @@ function MobileSheet({ children }: { children: React.ReactNode }) {
             return false
           }}
           onClick={closeOnCurrentRow}
-          className={`${PORTAL_TYPE} fixed inset-y-0 left-0 z-50 w-kit-sidebar bg-kit-ground shadow-kit-lifted outline-hidden transition-[translate,opacity] duration-(--kit-duration-enter) ease-kit-out data-ending-style:-translate-x-full data-starting-style:-translate-x-full motion-reduce:data-ending-style:translate-x-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-starting-style:translate-x-0 motion-reduce:data-starting-style:opacity-0`}
+          className={`${PORTAL_TYPE} fixed inset-y-0 left-0 z-50 box-content w-kit-sidebar ps-[env(safe-area-inset-left,0px)] bg-kit-ground shadow-kit-lifted outline-hidden transition-[translate,opacity] duration-(--kit-duration-enter) ease-kit-out data-ending-style:-translate-x-full data-starting-style:-translate-x-full motion-reduce:data-ending-style:translate-x-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-starting-style:translate-x-0 motion-reduce:data-starting-style:opacity-0`}
         >
           {children}
         </Dialog.Popup>

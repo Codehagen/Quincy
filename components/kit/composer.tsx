@@ -240,7 +240,7 @@ export function Composer({
           e.preventDefault()
           submit()
         }}
-        className={`block max-h-[40vh] min-h-11 w-full resize-none bg-transparent px-1.5 pt-1 [field-sizing:content] outline-hidden ${INPUT_TEXT}`}
+        className={`block max-h-[40dvh] min-h-11 w-full resize-none bg-transparent px-1.5 pt-1 [field-sizing:content] outline-hidden ${INPUT_TEXT}`}
       />
 
       <div className="flex items-center gap-kit-controls">

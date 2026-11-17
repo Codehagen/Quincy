@@ -4,6 +4,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
 import { FOCUS_RING } from "./control-styles"
+import { PendingLabel } from "./pending-label"
 
 // One row look for lists and navigation, after the landing's idea rows
 // (IdeasPicture): 16px side inset, quiet grey hover (gated on hover-capable
@@ -167,11 +168,11 @@ export function NavRow({
       ) : null}
       {description ? (
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-kit-strong">{children}</span>
+          <span className="truncate font-kit-strong"><PendingLabel>{children}</PendingLabel></span>
           <span className="truncate text-kit-small text-kit-ink-muted">{description}</span>
         </span>
       ) : (
-        <span className="min-w-0 flex-1 truncate font-kit-strong">{children}</span>
+        <span className="min-w-0 flex-1 truncate font-kit-strong"><PendingLabel>{children}</PendingLabel></span>
       )}
       {meta != null ? <span className="shrink-0">{meta}</span> : null}
       {count ? (

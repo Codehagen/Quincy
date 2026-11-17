@@ -15,7 +15,6 @@ function ThemeProvider({
       disableTransitionOnChange
       {...props}
     >
-      <ThemeHotkey />
       {children}
     </NextThemesProvider>
   )
@@ -43,6 +42,10 @@ function insideLetterKeys(target: EventTarget | null) {
   return target instanceof Element && target.closest("[data-letter-keys]") !== null
 }
 
+/**
+ * D flips the theme. Mounted by AppProviders only, so the app and the
+ * prototypes answer to it and a public page never changes under a stray key.
+ */
 function ThemeHotkey() {
   const { resolvedTheme, setTheme } = useTheme()
 
@@ -77,4 +80,4 @@ function ThemeHotkey() {
   return null
 }
 
-export { ThemeProvider }
+export { ThemeProvider, ThemeHotkey }

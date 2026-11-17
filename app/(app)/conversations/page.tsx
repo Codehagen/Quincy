@@ -15,6 +15,7 @@ import {
   Stage,
 } from "@/components/kit"
 import { Friend } from "@/components/mascot"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 export const metadata = constructMetadata({
@@ -39,7 +40,13 @@ export const metadata = constructMetadata({
  */
 export default function ConversationsPage() {
   return (
-    <Suspense fallback={<KitPage title="Conversations">{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Conversations">
+          <StageSkeleton lead={null} lines={["18%", "64%", "52%", "70%", "18%", "58%", "46%"]} />
+        </KitPage>
+      }
+    >
       <Conversations />
     </Suspense>
   )

@@ -258,7 +258,7 @@ christer@hirequincy.com
 export default function PrivacyPage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pt-4 pb-20">
-      <Markdown preset="wiki">{POLICY}</Markdown>
+      <Markdown preset="kit-page">{POLICY}</Markdown>
     </div>
   )
 }

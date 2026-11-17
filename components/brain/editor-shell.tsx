@@ -6,6 +6,7 @@ import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { brainKeys } from "@/lib/brain-keys"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 import { Button, Card, Text } from "@/components/kit"
 
 export type SaveState = "idle" | "saving" | "saved" | "error"
@@ -72,9 +73,11 @@ export function EditorShell({
             <div className="flex shrink-0 items-center gap-kit-controls">
               {/* Reserved space, always rendered. Swapping a status line in and
                   out on save would shift the button by its own height at the
-                  exact moment the pointer is over it. */}
+                  exact moment the pointer is over it. The visible note only
+                  fades, so it is hidden from assistive tech; the live region
+                  beside it is what changes text, which is what gets announced. */}
               <span
-                aria-live="polite"
+                aria-hidden
                 className={
                   "inline-flex items-center gap-1 text-kit-small text-kit-ink-muted transition-opacity duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none " +
                   (state === "saved" ? "opacity-100" : "opacity-0")
@@ -82,6 +85,9 @@ export function EditorShell({
               >
                 <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2} aria-hidden />
                 Saved
+              </span>
+              <span aria-live="polite" className="sr-only">
+                {state === "saved" ? "Saved" : ""}
               </span>
 
               {actions}
@@ -146,7 +152,15 @@ export function useBrainForm<T>(
   const onSave = React.useCallback(async () => {
     setState("saving")
     setError(undefined)
-    const result = await save(value)
+    let result: Awaited<ReturnType<typeof save>>
+    try {
+      result = await save(value)
+    } catch {
+      // A throw (network, 5xx) would otherwise leave Save spinning forever.
+      setError(COULD_NOT_REACH)
+      setState("error")
+      return
+    }
 
     if (result.ok) {
       setCommitted(value)
@@ -177,6 +191,14 @@ export function useBrainForm<T>(
     const timer = setTimeout(() => setState("idle"), 2000)
     return () => clearTimeout(timer)
   }, [state])
+
+  // Unsaved work survives a reload only if the tab asks first.
+  React.useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [dirty])
 
   // Clear the rejection the moment the value moves. A rejected save leaves a
   // sentence on screen describing a form that no longer exists, and the reader

@@ -43,6 +43,7 @@ import {
   formatClock,
   formatTimecode,
 } from "./studio-parts"
+import { useFrameThrottle } from "./use-frame-throttle"
 import type { Player } from "./use-player"
 import {
   REVEAL_TRAVEL_MS,
@@ -139,7 +140,6 @@ export function StudioLanes({
   scene,
   player,
   playing,
-  hoverUs,
   onHover,
   onSeek,
   selectedId,
@@ -162,7 +162,6 @@ export function StudioLanes({
   scene: Scene
   player: Player
   playing: boolean
-  hoverUs: number | null
   onHover: (timeUs: number | null) => void
   onSeek: (timeUs: Us) => void
   selectedId: string | null
@@ -345,6 +344,36 @@ export function StudioLanes({
     const rect = event.currentTarget.getBoundingClientRect()
     const ratio = (event.clientX - rect.left) / rect.width
     return Math.min(span, Math.max(0, ratio * span))
+  }
+
+  /**
+   * The hover head, drawn straight to the DOM.
+   *
+   * It follows every pointermove, and as state it re-rendered every clip and
+   * chip on the lane per move to slide one 1px line. Translate in pixels from
+   * the left edge: a percentage translate is relative to the head's own width.
+   */
+  const hoverHead = React.useRef<HTMLDivElement | null>(null)
+  const hoverLabel = React.useRef<HTMLSpanElement | null>(null)
+
+  const onLanePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(rect.width, Math.max(0, event.clientX - rect.left))
+    const timeUs = pointerToUs(event)
+
+    const head = hoverHead.current
+    if (head) {
+      head.style.translate = `${x}px 0`
+      head.style.visibility = "visible"
+    }
+    if (hoverLabel.current) hoverLabel.current.textContent = formatClock(timeUs)
+
+    onHover(timeUs)
+  }
+
+  const onLanePointerLeave = () => {
+    if (hoverHead.current) hoverHead.current.style.visibility = "hidden"
+    onHover(null)
   }
 
   /* ── Drag to zoom ─────────────────────────────────────────────────────
@@ -539,6 +568,8 @@ export function StudioLanes({
 
       <div
         ref={scrollRef}
+        // The editor's shortcuts still apply to a focused clip (studio.tsx).
+        data-editor-keys=""
         className="min-w-0 flex-1 overflow-x-auto"
         onWheel={onWheel}
         onPointerDownCapture={onLanePointerDownCapture}
@@ -547,8 +578,8 @@ export function StudioLanes({
         <div
           className="relative"
           style={{ width: `${zoom * 100}%` }}
-          onPointerMove={(event) => onHover(pointerToUs(event))}
-          onPointerLeave={() => onHover(null)}
+          onPointerMove={onLanePointerMove}
+          onPointerLeave={onLanePointerLeave}
           onPointerDown={(event) => {
             // Clicking the lane itself is "I am looking somewhere else now", so
             // it drops the effect selection as well as moving the playhead.
@@ -585,18 +616,17 @@ export function StudioLanes({
           {/* The hover head. Quieter than the playhead — it is a question, not
               a position — and it carries the timecode so the preview does not
               have to be read for "where am I". */}
-          {hoverUs !== null ? (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-10 w-px"
-              style={{ left: `${(hoverUs / span) * 100}%` }}
-            >
-              <div className="h-full w-px bg-kit-ink-muted" />
-              <span className="absolute -top-5 left-1 rounded border border-kit-hairline bg-kit-object px-1 text-kit-mono text-kit-ink-muted tabular-nums">
-                {formatClock(hoverUs)}
-              </span>
-            </div>
-          ) : null}
+          <div
+            ref={hoverHead}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute inset-y-0 left-0 z-10 w-px"
+          >
+            <div className="h-full w-px bg-kit-ink-muted" />
+            <span
+              ref={hoverLabel}
+              className="absolute -top-5 left-1 rounded border border-kit-hairline bg-kit-object px-1 text-kit-mono text-kit-ink-muted tabular-nums"
+            />
+          </div>
 
           {scene.tracks.map((track) => (
             <React.Fragment key={track.id}>
@@ -1069,6 +1099,7 @@ function EffectEdge({
   onResize: (chip: EffectChip, edge: "start" | "end", deltaUs: number) => void
 }) {
   const drag = React.useRef<{ x: number; usPerPx: number } | null>(null)
+  const preview = useFrameThrottle(onPreview)
 
   const capture = (element: HTMLElement, pointerId: number, on: boolean) => {
     try {
@@ -1132,12 +1163,13 @@ function EffectEdge({
       }}
       onPointerMove={(event) => {
         if (!drag.current) return
-        onPreview(previewFor(deltaFrom(event.clientX)))
+        preview.schedule(previewFor(deltaFrom(event.clientX)))
       }}
       onPointerUp={(event) => {
         if (!drag.current) return
         const deltaUs = deltaFrom(event.clientX)
         drag.current = null
+        preview.cancel()
         onPreview(null)
         // A click on an edge is not a zero-microsecond resize. Without this
         // every press writes a revision and undo fills with edits nobody made.
@@ -1146,6 +1178,7 @@ function EffectEdge({
       }}
       onPointerCancel={(event) => {
         drag.current = null
+        preview.cancel()
         onPreview(null)
         capture(event.currentTarget, event.pointerId, false)
       }}
@@ -1155,6 +1188,8 @@ function EffectEdge({
         "absolute inset-y-0 z-10 w-3 cursor-ew-resize opacity-0",
         "transition-opacity duration-150 ease-out",
         "group-hover/chip:opacity-100 focus-visible:opacity-100",
+        // Touch has no hover to reveal them, so they show at rest there.
+        "pointer-coarse:opacity-60 pointer-coarse:focus-visible:opacity-100",
         "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
         // Inside the box rather than straddling its edge. Chips butt against
         // each other on a packed row, and a handle hanging 6px past the end
@@ -1404,6 +1439,7 @@ function TrimHandle({
   onTrimCommit: (trim: TrimDrag) => void
 }) {
   const drag = React.useRef<{ x: number; pxPerUs: number } | null>(null)
+  const trimFrame = useFrameThrottle(onTrim)
 
   const capture = (element: HTMLElement, pointerId: number, on: boolean) => {
     try {
@@ -1459,7 +1495,7 @@ function TrimHandle({
       }}
       onPointerMove={(event) => {
         if (!drag.current) return
-        onTrim({
+        trimFrame.schedule({
           trackId,
           elementId: clip.id,
           edge,
@@ -1470,11 +1506,13 @@ function TrimHandle({
         if (!drag.current) return
         const deltaUs = deltaFrom(event.clientX)
         drag.current = null
+        trimFrame.cancel()
         onTrimCommit({ trackId, elementId: clip.id, edge, deltaUs })
         capture(event.currentTarget, event.pointerId, false)
       }}
       onPointerCancel={(event) => {
         drag.current = null
+        trimFrame.cancel()
         onTrim(null)
         capture(event.currentTarget, event.pointerId, false)
       }}
@@ -1484,7 +1522,9 @@ function TrimHandle({
         "absolute inset-y-0 z-20 w-3 cursor-ew-resize opacity-0",
         "transition-opacity duration-150 ease-out",
         "group-hover:opacity-100 focus-visible:opacity-100",
-        trimming && "opacity-100",
+        // Touch has no hover to reveal them, so they show at rest there.
+        "pointer-coarse:opacity-60 pointer-coarse:focus-visible:opacity-100",
+        trimming && "opacity-100 pointer-coarse:opacity-100",
         edge === "start" ? "-left-1.5" : "-right-1.5"
       )}
     >

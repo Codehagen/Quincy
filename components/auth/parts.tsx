@@ -13,17 +13,23 @@ import { Card, Text } from "@/components/kit"
 export function AuthCard({
   title,
   lead,
+  titleRef,
   children,
 }: {
   title: string
   lead?: React.ReactNode
+  /**
+   * Opt-in: makes the h1 focusable from script, for a screen that replaces
+   * the form it answers, so focus lands on the answer instead of the page.
+   */
+  titleRef?: React.Ref<HTMLElement>
   children?: React.ReactNode
 }) {
   return (
     <Card>
       <div className="flex flex-col gap-kit-group">
         <div className="flex flex-col gap-kit-related">
-          <Text as="h1" variant="title">
+          <Text as="h1" variant="title" ref={titleRef} tabIndex={titleRef ? -1 : undefined}>
             {title}
           </Text>
           {lead != null ? (

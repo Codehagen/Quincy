@@ -157,7 +157,7 @@ async function installationRepos(token: string): Promise<RepoRow[]> {
     if (rows.length < 100) return all
   }
 
-  console.log(
+  console.warn(
     `[github-backfill] stopped at ${MAX_REPO_PAGES} pages of repositories; ` +
       `some were not looked at`
   )

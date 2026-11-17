@@ -18,6 +18,7 @@ import {
 } from "@/components/kit"
 import { timeIn, zoneLabel, zoneOptions } from "@/lib/zones"
 import { MCP_CLIENT_NAME_MAX } from "@/lib/mcp-gate"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 import {
   changePassword,
   registerAgent,
@@ -359,7 +360,13 @@ export function SettingsBriefing({
                       return
                     }
                     startTransition(async () => {
-                      const result = await saveName(nameDraft)
+                      // A throw (network, 5xx) would reach the error boundary
+                      // and take the form with it; say so beside the field.
+                      const result = await saveName(nameDraft).catch(() => null)
+                      if (!result) {
+                        setProblem(COULD_NOT_REACH)
+                        return
+                      }
                       if (!result.ok) {
                         setProblem(result.message)
                         return
@@ -427,7 +434,11 @@ export function SettingsBriefing({
                       return
                     }
                     startTransition(async () => {
-                      const result = await saveTimezone(zoneDraft)
+                      const result = await saveTimezone(zoneDraft).catch(() => null)
+                      if (!result) {
+                        setProblem(COULD_NOT_REACH)
+                        return
+                      }
                       if (!result.ok) {
                         setProblem(result.message)
                         return
@@ -497,6 +508,7 @@ export function SettingsBriefing({
               <Editor show={open === "password"}>
                 <PasswordForm
                   key={passwordKey}
+                  email={email}
                   pending={pending}
                   problem={open === "password" ? problem : null}
                   currentProblem={
@@ -507,7 +519,11 @@ export function SettingsBriefing({
                     startTransition(async () => {
                       setProblem(null)
                       setCurrentPasswordProblem(null)
-                      const result = await changePassword(current, next)
+                      const result = await changePassword(current, next).catch(() => null)
+                      if (!result) {
+                        setProblem(COULD_NOT_REACH)
+                        return
+                      }
                       if (!result.ok) {
                         if (result.field === "currentPassword") {
                           setCurrentPasswordProblem(result.message)
@@ -578,8 +594,9 @@ export function SettingsBriefing({
                             onClick={() =>
                               startTransition(async () => {
                                 setProblem(null)
-                                const result = await revokeSessions(group.ids)
-                                if (!result.ok) setProblem(result.message)
+                                const result = await revokeSessions(group.ids).catch(() => null)
+                                if (!result) setProblem(COULD_NOT_REACH)
+                                else if (!result.ok) setProblem(result.message)
                                 else setRefocusSessions(true)
                               })
                             }
@@ -598,8 +615,9 @@ export function SettingsBriefing({
                       onClick={() =>
                         startTransition(async () => {
                           setProblem(null)
-                          const result = await revokeOtherSessions()
-                          if (!result.ok) setProblem(result.message)
+                          const result = await revokeOtherSessions().catch(() => null)
+                          if (!result) setProblem(COULD_NOT_REACH)
+                          else if (!result.ok) setProblem(result.message)
                           else setRefocusSessions(true)
                         })
                       }
@@ -666,7 +684,11 @@ export function SettingsBriefing({
                   const result = await registerAgent({
                     name: agentName,
                     redirectUri: agentRedirect,
-                  })
+                  }).catch(() => null)
+                  if (!result) {
+                    setProblem(COULD_NOT_REACH)
+                    return
+                  }
                   if (!result.ok) {
                     setProblem(result.message)
                     return
@@ -806,12 +828,15 @@ export function SettingsBriefing({
  * every keystroke re-judges it, so the error clears the moment it is fixed.
  */
 function PasswordForm({
+  email,
   pending,
   problem,
   currentProblem,
   onCurrentEdited,
   onSubmit,
 }: {
+  /** For password managers: they file the new password under this account. */
+  email: string
   pending: boolean
   problem: string | null
   /** The server's refusal of the current password, shown on that field. */
@@ -845,6 +870,7 @@ function PasswordForm({
         onSubmit(current, next)
       }}
     >
+      <input type="email" autoComplete="username" value={email} readOnly hidden />
       <Field
         label="Current password"
         error={

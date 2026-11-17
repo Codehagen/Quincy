@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { cookies } from "next/headers"
 import { createIdGenerator } from "ai"
 import { eq } from "drizzle-orm"
@@ -10,6 +11,7 @@ import { getSession } from "@/lib/session"
 import { composeStudioGreeting, GREETED_COOKIE } from "@/lib/studio-greeting"
 import { waitingWork } from "@/lib/waiting-work"
 import { initialsOf } from "@/lib/initials"
+import { StudioLoading } from "@/components/studio/studio-loading"
 import { StudioScreen } from "@/components/studio/studio-screen"
 
 const newConversationId = createIdGenerator({ prefix: "conv", size: 16 })
@@ -32,7 +34,17 @@ export const metadata = constructMetadata({
  * `cookies()` for the greeted flag), which is what `connection()` used to
  * force when the id generator was the only per-request read.
  */
-export default async function StudioPage() {
+export default function StudioPage() {
+  // Its own boundary: on a client navigation the layout's is above what
+  // re-renders, so reads awaited outside one held the navigation.
+  return (
+    <Suspense fallback={<StudioLoading />}>
+      <Studio />
+    </Suspense>
+  )
+}
+
+async function Studio() {
   // The layout is the gate (app/(app)/layout.tsx): a missing session
   // redirects there to /login with the path and query kept. Returning nothing
   // here leaves that one redirect to answer.

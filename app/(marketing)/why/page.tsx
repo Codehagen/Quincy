@@ -27,7 +27,7 @@ import { Markdown } from "@/components/ui/markdown"
  * that means editorially: **this file publishes whatever is in that document.**
  * Anything written there is written for strangers now.
  *
- * 65ch and `.typeset-wiki`, matching components/brain/prose-editor.tsx — long
+ * 65ch and the `kit-page` preset, as the brain reads its pages — long
  * prose is the one thing in this app that already had its measure settled. It
  * deliberately reads as a document rather than a landing section; the
  * credibility comes from it looking like something written for ourselves.
@@ -54,7 +54,7 @@ export default async function WhyPage() {
 
   return (
     <div className="mx-auto w-full max-w-[65ch] px-8 py-10">
-      <Markdown>{source}</Markdown>
+      <Markdown preset="kit-page">{source}</Markdown>
     </div>
   )
 }

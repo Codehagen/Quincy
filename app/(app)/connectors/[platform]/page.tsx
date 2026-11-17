@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { notFound, redirect } from "next/navigation"
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 
@@ -15,6 +16,7 @@ import {
   ConnectionStrip,
   type ConnectionView,
 } from "@/components/channels/connection-strip"
+import { StageSkeleton, UntitledPageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -79,13 +81,39 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function ChannelPage({
-  params,
-  searchParams,
-}: {
+type ChannelPageProps = {
   params: Promise<{ platform: string }>
   searchParams: Promise<{ connected?: string; error?: string }>
-}) {
+}
+
+/**
+ * Its own boundary, with `params` read under it: on a client navigation the
+ * layout's is above what re-renders, so reads awaited outside one held the
+ * navigation. notFound() inside still lands on the not-found page.
+ */
+export default function ChannelPage({ params, searchParams }: ChannelPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <UntitledPageSkeleton
+          status="Loading the channel"
+          actions={
+            <ButtonLink href="/connectors" icon={ArrowLeft01Icon}>
+              Connectors
+            </ButtonLink>
+          }
+        >
+          <StageSkeleton lines={["56%", "38%"]} />
+          <StageSkeleton lines={["82%", "74%", "68%", "50%"]} />
+        </UntitledPageSkeleton>
+      }
+    >
+      <Channel params={params} searchParams={searchParams} />
+    </Suspense>
+  )
+}
+
+async function Channel({ params, searchParams }: ChannelPageProps) {
   const { platform } = await params
   const session = await getSession()
   if (!session) {

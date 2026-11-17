@@ -39,6 +39,7 @@ import type {
   VideoDocument,
   VideoElement,
 } from "@/lib/editor/types"
+import { HIT_44 } from "@/components/kit/control-styles"
 import { cn } from "@/lib/utils"
 
 import { StudioChat } from "./studio-chat"
@@ -54,6 +55,7 @@ import { StudioPreview } from "./studio-preview"
 import { ZoomControls, useZoom } from "./studio-zoom"
 import { useDocument } from "./use-document"
 import { useExport } from "./use-export"
+import { useFrameThrottle } from "./use-frame-throttle"
 import { useReveal } from "./use-reveal"
 import { usePlayer, usePlayheadSelector } from "./use-player"
 
@@ -137,6 +139,9 @@ export function Studio({
    * and the agent never touches either.
    */
   const [hoverUs, setHoverUs] = React.useState<number | null>(null)
+  // One write per frame. The lane draws its own head from the pointer; this
+  // state is for the preview seek, the scrub badge and split-at-hover.
+  const { schedule: onHover } = useFrameThrottle(setHoverUs)
   /**
    * A trim edge mid-flight. Held here rather than in the document because a
    * drag is not an edit until it lands — applying every pointermove would be
@@ -715,6 +720,21 @@ export function Studio({
         return
       }
 
+      // A focused control owns its own keys: Space presses a toolbar button
+      // rather than toggling playback, and Backspace on one must not delete the
+      // selected clip. The timeline is the exception — its clips are buttons,
+      // and clicking one focuses it, so Backspace there is the delete it was
+      // selected for. Undo and Escape mean the editor from anywhere.
+      const control = target?.closest(
+        "button, a[href], select, [role=button], [role=menuitem], [role=slider], [role=option], [role=tab], [role=switch], [role=checkbox]"
+      )
+      const editorWide =
+        event.key === "Escape" ||
+        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")
+      if (control && !control.closest("[data-editor-keys]") && !editorWide) {
+        return
+      }
+
       if (event.key === " ") {
         event.preventDefault()
         player.toggle()
@@ -857,8 +877,7 @@ export function Studio({
         scene={scene}
         player={player}
         playing={player.playing}
-        hoverUs={hoverUs}
-        onHover={setHoverUs}
+        onHover={onHover}
         onSeek={player.seekTo}
         selectedId={selectedId}
         onSelect={setSelectedId}
@@ -1162,7 +1181,7 @@ function Action({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="h-7 rounded-md px-2 text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus disabled:pointer-events-none disabled:text-kit-ink-disabled"
+      className={`relative h-7 rounded-md px-2 ${HIT_44} text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus disabled:pointer-events-none disabled:text-kit-ink-disabled`}
     >
       {children}
     </button>

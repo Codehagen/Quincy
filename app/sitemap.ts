@@ -30,7 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: `${BASE_URL}/changelog`,
       ...(newest ? { lastModified: new Date(`${newest}T12:00:00Z`) } : {}),
-      changeFrequency: "daily",
+      changeFrequency: "weekly",
       priority: 0.9,
     },
     {

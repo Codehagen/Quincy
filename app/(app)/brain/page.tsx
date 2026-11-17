@@ -11,6 +11,7 @@ import { storyGaps } from "@/lib/story-gaps"
 import { strategyChannels, strategyNotice } from "@/lib/strategy"
 import { KitPage } from "@/components/kit"
 import { BrainWorkspace } from "@/components/brain/brain-workspace"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -46,7 +47,13 @@ export const metadata = constructMetadata({
  */
 export default function BrainPage() {
   return (
-    <Suspense fallback={<KitPage title="Brain">{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Brain">
+          <StageSkeleton lines={["34%", "28%", "40%", "30%", "24%", "26%"]} />
+        </KitPage>
+      }
+    >
       <Brain />
     </Suspense>
   )

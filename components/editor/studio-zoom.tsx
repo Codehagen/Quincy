@@ -4,6 +4,7 @@ import * as React from "react"
 import { MinusSignIcon, PlusSignIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
+import { HIT_44 } from "@/components/kit/control-styles"
 import { cn } from "@/lib/utils"
 
 /**
@@ -67,7 +68,8 @@ export function ZoomControls({
   canZoomOut: boolean
 }) {
   const button = cn(
-    "grid size-7 place-items-center rounded-md",
+    "relative grid size-7 place-items-center rounded-md",
+    HIT_44,
     "text-kit-ink-muted transition-colors duration-150 ease-out",
     "hover:bg-kit-row-hover hover:text-kit-ink",
     "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
@@ -94,7 +96,8 @@ export function ZoomControls({
         onClick={onFit}
         className={cn(
           "text-kit-ink-muted hover:bg-kit-row-hover hover:text-kit-ink",
-          "h-7 rounded-md px-2 text-kit-small tabular-nums",
+          "relative h-7 rounded-md px-2 text-kit-small tabular-nums",
+          HIT_44,
           "transition-colors duration-150 ease-out",
           "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus"
         )}

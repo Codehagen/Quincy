@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { notFound, redirect } from "next/navigation"
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 
@@ -33,6 +34,7 @@ import {
 } from "@/components/kit"
 import { NodeChip } from "@/components/rhythm/node-chip"
 import { Friend } from "@/components/mascot"
+import { StageSkeleton, UntitledPageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -68,11 +70,38 @@ export const metadata = constructMetadata({
   noIndex: true,
 })
 
-export default async function RhythmDetailPage({
+/**
+ * Its own boundary, with `params` read under it: on a client navigation the
+ * layout's is above what re-renders, so reads awaited outside one held the
+ * navigation. notFound() inside still lands on the not-found page.
+ */
+export default function RhythmDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  return (
+    <Suspense
+      fallback={
+        <UntitledPageSkeleton
+          status="Loading the rhythm"
+          actions={
+            <ButtonLink href="/rhythm" icon={ArrowLeft01Icon}>
+              Rhythm
+            </ButtonLink>
+          }
+        >
+          <StageSkeleton lines={["30%", "88%", "76%", "52%", "44%", "40%"]} />
+          <StageSkeleton lines={["70%", "58%", "64%"]} />
+        </UntitledPageSkeleton>
+      }
+    >
+      <RhythmDetail params={params} />
+    </Suspense>
+  )
+}
+
+async function RhythmDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getSession()
   if (!session) {

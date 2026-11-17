@@ -71,7 +71,12 @@ export function BillingActions({
             })
 
       if (failure) {
-        setError(failure.message ?? "Something went wrong. Try again.")
+        setError(
+          failure.message ??
+            (mode === "subscribe"
+              ? "Stripe didn’t open checkout. Nothing was charged. Try again."
+              : "Stripe didn’t open the billing portal. Try again.")
+        )
         setPending(false)
         return
       }

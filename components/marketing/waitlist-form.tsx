@@ -23,8 +23,9 @@ import { NAV_LINK } from "./nav-link"
  * other copy on the page (the DOM's `storage` event skips the writer).
  *
  * Validation: on blur, then on every change once it has failed. The
- * confirmation replaces the form (`role="status"`, since the focused control
- * was just removed); no entrance animation, it is page-load state.
+ * confirmation replaces the form, so focus moves to its first line and an
+ * always-mounted live region says it (a region mounted with its text is not
+ * reliably announced); no entrance animation, it is page-load state.
  *
  * No flash on refresh, and no script: localStorage cannot be read before
  * hydration, so the slot is `invisible` until the layout effect has read it
@@ -75,10 +76,20 @@ export type WaitlistFormProps = {
 }
 
 /** The confirmation's words. Rendered live, and once more invisible to hold the slot's height. */
-function Joined({ email, restored, onReset }: { email: string; restored: boolean; onReset?: () => void }) {
+function Joined({
+  email,
+  restored,
+  onReset,
+  headingRef,
+}: {
+  email: string
+  restored: boolean
+  onReset?: () => void
+  headingRef?: React.Ref<HTMLParagraphElement>
+}) {
   return (
     <>
-      <p className="text-kit-figure text-kit-ink">{restored ? "You are already on the list" : "You are on the list"}</p>
+      <p ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="text-kit-figure text-kit-ink outline-hidden">{restored ? "You are already on the list" : "You are on the list"}</p>
       <p className="text-kit-display-body text-pretty text-kit-ink-muted">
         The invite goes to <span className="font-kit-strong text-kit-ink">{email}</span>. Quincy opens in small
         groups, in the order people asked, and you will hear from a person either way.
@@ -108,6 +119,18 @@ export function WaitlistForm({ id, source, label = "Your email" }: WaitlistFormP
 
   // False in the server HTML: the slot is held, invisible, until storage is read.
   const [known, setKnown] = React.useState(false)
+
+  // Where focus goes after the swap. Only a swap this visit asked for moves
+  // focus; a confirmation restored on load leaves the page alone.
+  const headingRef = React.useRef<HTMLParagraphElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const focusNext = React.useRef<"heading" | "input" | null>(null)
+  React.useEffect(() => {
+    if (focusNext.current === "heading" && outcome === "joined") headingRef.current?.focus()
+    else if (focusNext.current === "input" && outcome === "idle") inputRef.current?.focus()
+    else return
+    focusNext.current = null
+  }, [outcome])
 
   // A layout effect: it runs after hydration (or a client navigation's
   // commit) and before the browser paints, so the first visible frame is
@@ -171,6 +194,7 @@ export function WaitlistForm({ id, source, label = "Your email" }: WaitlistFormP
       }
       writeStored(attempted)
       setJoined(attempted)
+      focusNext.current = "heading"
       setOutcome("joined")
     } catch {
       // A real network failure, or a redirect into HTML (a missing
@@ -192,12 +216,18 @@ export function WaitlistForm({ id, source, label = "Your email" }: WaitlistFormP
         <Joined email={joined || "you@company.com"} restored />
       </div>
 
+      <p aria-live="polite" className="sr-only">
+        {outcome === "joined" && !restored ? "You are on the list" : ""}
+      </p>
+
       {outcome === "joined" ? (
-        <div role="status" className={`${cell} flex flex-col items-center gap-kit-related self-start text-center`}>
+        <div className={`${cell} flex flex-col items-center gap-kit-related self-start text-center`}>
           <Joined
             email={joined}
             restored={restored}
+            headingRef={headingRef}
             onReset={() => {
+              focusNext.current = "input"
               clearStored()
               window.dispatchEvent(new Event(CLEARED_EVENT))
               setValue(joined)
@@ -217,6 +247,7 @@ export function WaitlistForm({ id, source, label = "Your email" }: WaitlistFormP
             <div className="min-w-0 flex-1">
               <Field label={label} error={error ?? undefined}>
                 <Input
+                  ref={inputRef}
                   type="email"
                   name="email"
                   inputMode="email"

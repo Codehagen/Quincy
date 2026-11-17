@@ -14,6 +14,7 @@ import {
 import type { RhythmCardState } from "@/components/rhythm/rhythm-grid"
 import { KitPage, Text, TextLink } from "@/components/kit"
 import { RhythmGrid } from "@/components/rhythm/rhythm-grid"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -66,7 +67,14 @@ const SUMMARY = `${LIVE_RHYTHMS.length} things I do on my own, and when.`
  */
 export default function RhythmPage() {
   return (
-    <Suspense fallback={<KitPage title="Rhythm" summary={SUMMARY}>{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Rhythm" summary={SUMMARY}>
+          <StageSkeleton lines={["44%", "70%", "36%"]} />
+          <StageSkeleton lines={["52%", "64%", "40%"]} />
+        </KitPage>
+      }
+    >
       <Rhythm />
     </Suspense>
   )

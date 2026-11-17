@@ -1244,6 +1244,19 @@
     text-decoration-color: currentColor;
   }
 }
+/* The same gate for the other presets. typeset.css darkens the underline on
+   a bare :hover, and it is generated, so it is undone here: back to its own
+   resting colour, then darkened again only under a fine pointer. Unlayered,
+   so it beats typeset's @layer components rule; the kit preset is left out
+   because its rest is --kit-link-line, set above. */
+.typeset:not(.typeset-kit) a:hover {
+  text-decoration-color: color-mix(in oklab, currentColor 30%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .typeset:not(.typeset-kit) a:hover {
+    text-decoration-color: currentColor;
+  }
+}
 /* Code is a tag face (Mono): 12px, never a second voice. */
 .typeset-kit :is(code, pre, kbd) {
   font-size: var(--text-kit-mono);
@@ -1302,8 +1315,9 @@ label,
 
 /* Safety net for the iOS zoom-on-focus rule. shadcn's Input and Textarea
    already ship `text-base md:text-sm`; this catches anything hand-rolled
-   later, and native <select>, which nothing has covered. */
-@media (max-width: 767px) {
+   later, and native <select>, which nothing has covered. A coarse pointer
+   too, so an iPad (wider than 767) does not zoom either. */
+@media (max-width: 767px), (pointer: coarse) {
   input,
   textarea,
   select {

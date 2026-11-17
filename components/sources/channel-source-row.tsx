@@ -7,6 +7,7 @@ import {
   type ImportFromXReceipt,
 } from "@/app/(app)/sources/actions"
 import { Button, TextLink } from "@/components/kit"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 import { Friend } from "@/components/mascot"
 import { SourceRowFrame, sourceNameId } from "@/components/sources/source-row"
 
@@ -40,7 +41,10 @@ export function ChannelSourceRow({
   const run = () => {
     setReceipt(null)
     startTransition(async () => {
-      setReceipt(await importFromX())
+      // A throw is shown as a refusal in the row, not handed to the boundary.
+      setReceipt(
+        await importFromX().catch(() => ({ ok: false as const, message: COULD_NOT_REACH }))
+      )
     })
   }
 

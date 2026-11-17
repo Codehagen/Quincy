@@ -7,6 +7,7 @@ import { resolveTimeZone } from "@/lib/timezone"
 import { isBillingConfigured, PLAN_PRICE_USD } from "@/lib/stripe"
 import { TRIAL_DAYS } from "@/lib/trial"
 import { BillingActions } from "@/components/billing/billing-actions"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { Card, KitPage, Stage, Text } from "@/components/kit"
 import { constructMetadata } from "@/lib/metadata"
 
@@ -33,7 +34,13 @@ export const metadata = constructMetadata({
  */
 export default function BillingPage() {
   return (
-    <Suspense fallback={<KitPage title="Billing">{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Billing">
+          <StageSkeleton lines={["92%", "84%", "60%"]} />
+        </KitPage>
+      }
+    >
       <Billing />
     </Suspense>
   )

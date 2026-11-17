@@ -10,6 +10,7 @@ import {
   type CirclebackSetup,
 } from "@/app/(app)/sources/actions"
 import type { Connection } from "@/lib/sources"
+import { COULD_NOT_REACH } from "@/lib/action-error"
 import { Button, Field, HoldButton, Input, Text } from "@/components/kit"
 import {
   SourcePanelRule,
@@ -54,7 +55,11 @@ export function CirclebackSourceRow({
   const begin = () => {
     setError(null)
     startTransition(async () => {
-      const result = await startCirclebackSetup()
+      const result = await startCirclebackSetup().catch(() => null)
+      if (!result) {
+        setError(COULD_NOT_REACH)
+        return
+      }
       if (!result.ok) {
         setError(result.message)
         return
@@ -81,7 +86,11 @@ export function CirclebackSourceRow({
     setSecretError(undefined)
     setError(null)
     startTransition(async () => {
-      const result = await saveCirclebackSecret(secret)
+      const result = await saveCirclebackSecret(secret).catch(() => null)
+      if (!result) {
+        setSecretError(COULD_NOT_REACH)
+        return
+      }
       if (!result.ok) {
         setSecretError(result.message)
         return

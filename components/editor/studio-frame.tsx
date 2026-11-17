@@ -15,6 +15,8 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
+import { ButtonLink, EmptyRegion, EmptyState } from "@/components/kit"
+import { HIT_44 } from "@/components/kit/control-styles"
 import { cn } from "@/lib/utils"
 
 import { formatClock, PlayButton } from "./studio-parts"
@@ -101,7 +103,24 @@ export function StudioFrame({
   const scrubbing = hoverUs !== null && hoverUs !== undefined
 
   return (
-    <div className="flex h-full min-h-0 bg-kit-ground">
+    <>
+    {/* Below md the rail, the tool panel and the 340px chat leave the preview
+        no width at all. Said plainly instead, and switched in CSS so the server
+        markup and the first client render agree. */}
+    <div className="flex h-full min-h-0 flex-col bg-kit-ground md:hidden">
+      <EmptyRegion>
+        <EmptyState
+          bold="Cuts needs a wider screen."
+          rest="Open this project on a laptop or tablet to edit it."
+        >
+          <ButtonLink href="/studio" icon={ArrowLeft01Icon}>
+            Back to Studio
+          </ButtonLink>
+        </EmptyState>
+      </EmptyRegion>
+    </div>
+
+    <div className="hidden h-full min-h-0 bg-kit-ground md:flex">
       <nav
         aria-label="Editor tools"
         className="flex w-18 shrink-0 flex-col items-center gap-1 border-r border-kit-hairline py-3"
@@ -172,7 +191,7 @@ export function StudioFrame({
             {headerEnd}
             <button
               type="button"
-              className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus"
+              className={`relative flex h-8 items-center gap-1.5 rounded-md px-2.5 ${HIT_44} text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus`}
             >
               <HugeiconsIcon aria-hidden="true" icon={Share08Icon} size={14} />
               Share
@@ -230,5 +249,6 @@ export function StudioFrame({
         {chat}
       </aside>
     </div>
+    </>
   )
 }

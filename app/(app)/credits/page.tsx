@@ -16,6 +16,7 @@ import {
   Text,
 } from "@/components/kit"
 import { Friend } from "@/components/mascot"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 import { constructMetadata } from "@/lib/metadata"
 
 export const metadata = constructMetadata({
@@ -44,7 +45,14 @@ const SUMMARY = "What Quincy spent, and what it went on."
  */
 export default function CreditsPage() {
   return (
-    <Suspense fallback={<KitPage title="Credits" summary={SUMMARY}>{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Credits" summary={SUMMARY}>
+          <StageSkeleton lines={["48%", "30%"]} />
+          <StageSkeleton lines={["72%", "58%", "66%", "44%", "62%"]} />
+        </KitPage>
+      }
+    >
       <Credits />
     </Suspense>
   )

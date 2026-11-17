@@ -294,8 +294,9 @@
   color: var(--lf-dim);
 }
 /* On a phone the global floor sets every field to 16px (no zoom on focus),
-   so the read text matches it there, or E would make the post jump. */
-@media (max-width: 767px) {
+   so the read text matches it there, or E would make the post jump. The
+   same media query as the floor, which covers a coarse pointer too. */
+@media (max-width: 767px), (pointer: coarse) {
   .xf .feed-text,
   .lf .feed-text {
     font-size: 16px;

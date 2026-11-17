@@ -41,6 +41,8 @@ export const viewport: Viewport = {
 // as woff2 and generates a metric-matched fallback, so no layout shift.
 const fontSans = Geist({
   subsets: ["latin"],
+  // The real italic: font-synthesis is off in globals.css, so none is faked.
+  style: ["normal", "italic"],
   variable: "--font-geist-sans",
 })
 

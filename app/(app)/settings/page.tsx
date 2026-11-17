@@ -21,6 +21,7 @@ import { resolveTimeZone } from "@/lib/timezone"
 import { describeUserAgent } from "@/lib/user-agent"
 import { KitPage } from "@/components/kit"
 import { SettingsBriefing } from "@/components/settings/settings-briefing"
+import { StageSkeleton } from "@/components/quincy/stage-skeleton"
 
 /**
  * Settings. See plans/024 for the decision and the two directions that lost.
@@ -46,7 +47,15 @@ const SUMMARY = "What Quincy knows about the account, and how to correct it."
  */
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<KitPage title="Settings" summary={SUMMARY}>{null}</KitPage>}>
+    <Suspense
+      fallback={
+        <KitPage title="Settings" summary={SUMMARY}>
+          <StageSkeleton lines={["40%", "56%", "34%"]} />
+          <StageSkeleton lines={["60%", "48%", "54%"]} />
+          <StageSkeleton lines={["50%", "38%"]} />
+        </KitPage>
+      }
+    >
       <Settings />
     </Suspense>
   )

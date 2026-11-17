@@ -24,7 +24,7 @@ export const metadata = {
     ...base.alternates,
     types: {
       "application/rss+xml": [
-        { url: `${BASE_URL}/changelog/rss.xml`, title: "Quincy — Changelog" },
+        { url: `${BASE_URL}/changelog/rss.xml`, title: "Changelog · Quincy" },
       ],
     },
   },
@@ -107,7 +107,7 @@ export default function ChangelogPage() {
                         container and takes layout only — a `text-*` utility in
                         here would put two rhythm systems on one paragraph. */}
                     {entry.body ? (
-                      <Markdown className="max-w-[65ch]">{entry.body}</Markdown>
+                      <Markdown preset="kit-page" className="max-w-[65ch]">{entry.body}</Markdown>
                     ) : null}
                   </li>
                 ))}

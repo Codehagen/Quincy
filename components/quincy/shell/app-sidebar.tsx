@@ -66,7 +66,7 @@ export function AppSidebar({ user, waiting }: AppSidebarProps) {
 
       {/* The account is the only thing in the foot: who the rows belong to,
           and the way into setup. No rule above it; the space is the edge. */}
-      <div className="shrink-0 px-kit-shell-pad pb-kit-shell-pad">
+      <div className="shrink-0 px-kit-shell-pad pb-[max(var(--spacing-kit-shell-pad),env(safe-area-inset-bottom,0px))]">
         <AccountMenu user={user} />
       </div>
     </nav>

@@ -84,7 +84,7 @@ export function AdaptBox({
       // The riff it just made is in the list behind this; the page re-reads.
       router.refresh()
     } catch {
-      setFailure("Something went wrong. Try again.")
+      setFailure("I couldn’t reach the server. Your post is still here: press Find the ideas again.")
     } finally {
       setPending(false)
     }

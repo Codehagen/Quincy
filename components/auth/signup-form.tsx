@@ -49,6 +49,28 @@ export function SignupForm({
   const [sentTo, setSentTo] = React.useState<string | null>(null)
 
   const nameRef = usePointerAutofocus<HTMLInputElement>()
+  const emailRef = React.useRef<HTMLInputElement>(null)
+
+  // Each swap removes the focused control, so focus follows it: to the
+  // answer's heading on the way in, back to the address on the way out.
+  const titleRef = React.useRef<HTMLElement>(null)
+  const backToForm = React.useRef(false)
+  React.useEffect(() => {
+    if (sentTo) {
+      titleRef.current?.focus()
+    } else if (backToForm.current) {
+      backToForm.current = false
+      emailRef.current?.focus()
+    }
+  }, [sentTo])
+
+  // Both branches open with this region at the same position, so React keeps
+  // the one node and its text change is what gets announced.
+  const live = (
+    <p aria-live="polite" className="sr-only">
+      {sentTo ? "Check your inbox" : ""}
+    </p>
+  )
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -114,8 +136,10 @@ export function SignupForm({
   if (sentTo) {
     return (
       <div className="flex flex-col gap-kit-group">
+        {live}
         <AuthCard
           title="Check your inbox"
+          titleRef={titleRef}
           lead={
             <>
               I sent a link to <Address>{sentTo}</Address>. Open it and you are
@@ -138,7 +162,12 @@ export function SignupForm({
           {invitedEmail ? null : (
             <AuthNote>
               Wrong address?{" "}
-              <TextButton onClick={() => setSentTo(null)}>
+              <TextButton
+                onClick={() => {
+                  backToForm.current = true
+                  setSentTo(null)
+                }}
+              >
                 Go back and fix it
               </TextButton>
             </AuthNote>
@@ -159,6 +188,7 @@ export function SignupForm({
 
   return (
     <div className="flex flex-col gap-kit-group">
+      {live}
       <AuthCard
         title="Create your account"
         lead={
@@ -225,6 +255,7 @@ export function SignupForm({
               type="email"
               autoComplete="email"
               field={email}
+              inputRef={emailRef}
               disabled={isSubmitting}
               readOnly={Boolean(invitedEmail)}
               description={

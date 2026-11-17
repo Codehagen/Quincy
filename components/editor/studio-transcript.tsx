@@ -8,6 +8,7 @@ import type {
   TranscriptLine,
   TranscriptWord,
 } from "@/lib/editor/transcript-view"
+import { HIT_44 } from "@/components/kit/control-styles"
 import { cn } from "@/lib/utils"
 
 import { formatClock } from "./studio-parts"
@@ -131,7 +132,7 @@ export function StudioTranscript({
                 type="button"
                 onClick={() => onSeek(line.startUs)}
                 title="Play from here"
-                className="w-9 shrink-0 pt-0.5 text-left text-kit-mono text-kit-ink-muted tabular-nums hover:text-kit-ink"
+                className={`relative w-9 shrink-0 pt-0.5 text-left text-kit-mono text-kit-ink-muted tabular-nums hover:text-kit-ink ${HIT_44}`}
               >
                 {formatClock(line.startUs)}
               </button>

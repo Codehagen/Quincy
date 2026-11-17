@@ -73,10 +73,15 @@ export const SEGMENT_ITEM =
   "hover:text-kit-ink data-disabled:cursor-default data-disabled:opacity-50 data-disabled:hover:text-kit-ink-muted " +
   `${FOCUS_RING} focus-visible:outline-offset-0 ${HIT_44}`
 
-/** The sliding ink pill behind the picked segment. Named-property transition. */
+/**
+ * The sliding ink pill behind the picked segment. Named-property transition,
+ * and it moves by translate, never left: Segmented and Tabs both pin it at
+ * the start and slide it, so the move stays on the compositor. State, not
+ * enter: the pill follows a press, it does not arrive.
+ */
 export const SEGMENT_THUMB =
   "pointer-events-none absolute rounded-full bg-kit-primary " +
-  "transition-[translate,left,width] duration-(--kit-duration-enter) ease-kit-out motion-reduce:transition-none"
+  "transition-[translate,width] duration-(--kit-duration-state) ease-kit-out motion-reduce:transition-none"
 
 export const SEGMENT_TRACK = `relative isolate rounded-full p-1 text-kit-body ${CONTROL_SURFACE}`
 
