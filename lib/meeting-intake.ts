@@ -76,6 +76,12 @@ export type MeetingIntake = {
   aliases?: string[]
   /** The vendor's own facts for `source_item.meta`, beside the shared ones. */
   meta?: Record<string, unknown>
+  /**
+   * The sentence to show instead of `ownSegments`' own when the match fails
+   * because the vendor could not tell voices apart at all. Only used on a
+   * failed match: a call that matched anyway is not a failure.
+   */
+  unattributed?: string
 }
 
 export async function ingestMeeting({
@@ -85,6 +91,7 @@ export async function ingestMeeting({
   url,
   aliases = [],
   meta = {},
+  unattributed,
 }: MeetingIntake): Promise<Response> {
   /**
    * `trialEndsAt` is selected because `resolveEntitlement` reads it off the
@@ -174,10 +181,11 @@ export async function ingestMeeting({
 
   // Could not tell which voice was theirs: a failed card, not a silent drop.
   if (!match.ok) {
-    await recordSourceError(connection.id, match.message)
+    const message = unattributed || match.message
+    await recordSourceError(connection.id, message)
 
     const riffId = await startMeetingRiff(owner.id, source)
-    await failSpokenRiff({ riffId, userId: owner.id, message: match.message })
+    await failSpokenRiff({ riffId, userId: owner.id, message })
 
     return Response.json({ riffId, state: "failed" }, { status: 202 })
   }

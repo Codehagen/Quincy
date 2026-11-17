@@ -109,9 +109,9 @@ export async function POST(
     return new Response("Granola did not answer", { status: 503 })
   }
 
-  const payload = parseGranolaNote(fetched.note)
+  const meeting = parseGranolaNote(fetched.note)
 
-  if (!payload) {
+  if (!meeting) {
     await recordSourceError(connection.id, "Granola sent a note Quincy could not read.")
     return Response.json({ state: "ignored", reason: "unreadable" })
   }
@@ -121,9 +121,12 @@ export async function POST(
   return ingestMeeting({
     connection,
     source: "granola",
-    payload,
+    payload: meeting.payload,
     url: typeof fetched.note.web_url === "string" ? fetched.note.web_url : "https://notes.granola.ai",
     aliases: typeof meta.accountEmail === "string" && meta.accountEmail ? [meta.accountEmail] : [],
+    unattributed: meeting.attributed
+      ? undefined
+      : "Granola recorded this call on a phone or watch, where it cannot tell voices apart, so Quincy could not tell which voice was yours.",
   })
 }
 

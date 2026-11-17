@@ -149,21 +149,40 @@ export function parseFathomMeeting(body: unknown): FathomMeeting | null {
   const recorderEmail = asString(recorder.email)
   const recorderName = asString(recorder.name)
 
+  // Fathom's own audio-to-calendar match: each transcript item can say whose
+  // address its voice belongs to. When it does, that label *is* the name an
+  // attendee is spoken as, so the join in `ownSegments` stays exact even when
+  // the calendar name ("Christer Hagen") and the transcript label ("Christer")
+  // differ, as they do on any call recorded without an invite.
+  const spokenAs = new Map<string, string>()
+  if (Array.isArray(raw.transcript)) {
+    for (const entry of raw.transcript) {
+      if (!entry || typeof entry !== "object") continue
+      const speaker = (entry as Record<string, unknown>).speaker
+      if (!speaker || typeof speaker !== "object") continue
+      const s = speaker as Record<string, unknown>
+      const email = asString(s.matched_calendar_invitee_email).toLowerCase()
+      const label = asString(s.display_name)
+      if (email && label && !spokenAs.has(email)) spokenAs.set(email, label)
+    }
+  }
+
   const attendees: MeetingAttendee[] = Array.isArray(raw.calendar_invitees)
     ? raw.calendar_invitees.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return []
         const a = entry as Record<string, unknown>
+        const email = asString(a.email)
         return [
           {
-            name: asString(a.matched_speaker_display_name) || asString(a.name),
-            email: asString(a.email),
+            name: spokenAs.get(email.toLowerCase()) || asString(a.matched_speaker_display_name) || asString(a.name),
+            email,
           },
         ]
       })
     : []
 
   if (recorderEmail && !attendees.some((a) => a.email.toLowerCase() === recorderEmail.toLowerCase())) {
-    attendees.push({ name: recorderName, email: recorderEmail })
+    attendees.push({ name: spokenAs.get(recorderEmail.toLowerCase()) || recorderName, email: recorderEmail })
   }
 
   const transcript: MeetingSegment[] = Array.isArray(raw.transcript)

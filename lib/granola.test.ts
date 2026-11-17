@@ -38,7 +38,7 @@ function note(overrides: Record<string, unknown> = {}) {
 
 describe("parseGranolaNote", () => {
   it("labels the note taker's turns with their name, and only those", () => {
-    const meeting = parseGranolaNote(note())!
+    const meeting = parseGranolaNote(note())!.payload
     expect(meeting.transcript.map((s) => s.speaker)).toEqual(["Them", "Christer Hagen", "Them"])
     expect(meeting.transcript[1].timestamp).toBe(4)
     expect(meeting.durationSeconds).toBe(30 * 60)
@@ -46,7 +46,7 @@ describe("parseGranolaNote", () => {
   })
 
   it("keeps only what the owner said once ownSegments runs", () => {
-    const meeting = parseGranolaNote(note())!
+    const meeting = parseGranolaNote(note())!.payload
     const match = ownSegments(meeting, ["christer@work.example"], "", "Granola")
     expect(match.ok).toBe(true)
     if (match.ok) expect(match.segments.map((s) => s.text)).toEqual(["Because a week is the longest I can hold a bet."])
@@ -59,9 +59,26 @@ describe("parseGranolaNote", () => {
   })
 
   it("fails the match when the user is not the owner and was not named", () => {
-    const meeting = parseGranolaNote(note({ owner: { name: "Raisin Patel", email: "raisin@granola.example" } }))!
+    const meeting = parseGranolaNote(note({ owner: { name: "Raisin Patel", email: "raisin@granola.example" } }))!.payload
     const match = ownSegments(meeting, ["someone@else.example"], "", "Granola")
     expect(match.ok).toBe(false)
+  })
+
+  it("says when Granola told voices apart", () => {
+    expect(parseGranolaNote(note())!.attributed).toBe(true)
+  })
+
+  it("says when it could not, as on a phone or watch recording", () => {
+    const meeting = parseGranolaNote(
+      note({
+        transcript: [
+          { speaker: { source: "speaker", diarization_label: "Speaker A" }, text: "One voice.", start_time: "2026-11-17T09:00:00Z" },
+          { speaker: { source: "speaker", diarization_label: "Speaker B" }, text: "Another.", start_time: "2026-11-17T09:00:05Z" },
+        ],
+      })
+    )!
+    expect(meeting.attributed).toBe(false)
+    expect(ownSegments(meeting.payload, ["christer@work.example"], "", "Granola").ok).toBe(false)
   })
 
   it("refuses a note with no id", () => {

@@ -72,6 +72,32 @@ describe("parseFathomMeeting", () => {
     expect(match.ok).toBe(true)
   })
 
+  it("finds the recorder by Fathom's own voice match when the names differ", () => {
+    const meeting = parseFathomMeeting(
+      body({
+        calendar_invitees: [],
+        transcript: [
+          { speaker: { display_name: "Speaker 2", matched_calendar_invitee_email: null }, text: "Not mine.", timestamp: "00:00:30" },
+          { speaker: { display_name: "Christer", matched_calendar_invitee_email: "christer@work.example" }, text: "Mine, and short.", timestamp: "00:01:00" },
+        ],
+      })
+    )!
+    const match = ownSegments(meeting.payload, [meeting.recorderEmail], "Christer Hagen", "Fathom")
+    expect(match.ok).toBe(true)
+    if (match.ok) expect(match.segments.map((s) => s.text)).toEqual(["Mine, and short."])
+  })
+
+  it("names an invitee Fathom did not match by the transcript label for their address", () => {
+    const meeting = parseFathomMeeting(
+      body({
+        calendar_invitees: [
+          { name: "Dana Buyer", matched_speaker_display_name: null, email: "dana@acme.example", is_external: true },
+        ],
+      })
+    )!
+    expect(meeting.payload.attendees.find((a) => a.email === "dana@acme.example")?.name).toBe("Dana")
+  })
+
   it("refuses a body that is not a meeting", () => {
     expect(parseFathomMeeting(null)).toBeNull()
     expect(parseFathomMeeting({ title: "No id" })).toBeNull()

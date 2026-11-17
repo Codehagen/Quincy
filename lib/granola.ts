@@ -19,7 +19,11 @@ import type { MeetingAttendee, MeetingPayload, MeetingSegment } from "./meetings
  * without it fails at connect, with that sentence, rather than later.
  */
 
-export const GRANOLA_API = "https://public-api.granola.ai"
+/**
+ * Overridable only so scripts/verify-meeting-sources.ts can point the route at
+ * a local stub. Production never sets it.
+ */
+export const GRANOLA_API = process.env.GRANOLA_API_BASE || "https://public-api.granola.ai"
 
 const TIMEOUT_MS = 10_000
 
@@ -237,7 +241,18 @@ function record(value: unknown): Record<string, unknown> {
  * are notes to self, and a draft written from them would publish something
  * the user wrote on purpose for nobody.
  */
-export function parseGranolaNote(note: GranolaNote): MeetingPayload | null {
+export type GranolaMeeting = {
+  payload: MeetingPayload
+  /**
+   * Whether Granola told any turn apart as the note taker's or someone else's.
+   * False on phone and watch recordings, which carry only an anonymous
+   * diarization label: there the honest failure is Granola's, not a name that
+   * did not match.
+   */
+  attributed: boolean
+}
+
+export function parseGranolaNote(note: GranolaNote): GranolaMeeting | null {
   const id = asString(note.id)
   if (!id) return null
 
@@ -280,12 +295,17 @@ export function parseGranolaNote(note: GranolaNote): MeetingPayload | null {
     ]
   })
 
+  const attributed = items.some((entry) => {
+    const attribution = record(record(entry).speaker).attribution
+    return attribution === "me" || attribution === "them"
+  })
+
   const event = record(note.calendar_event)
   const start = Date.parse(asString(event.scheduled_start_time))
   const end = Date.parse(asString(event.scheduled_end_time))
   const created = new Date(asString(note.created_at))
 
-  return {
+  const payload: MeetingPayload = {
     id,
     name: asString(note.title).trim() || asString(event.event_title).trim() || "Untitled meeting",
     createdAt: Number.isNaN(created.getTime()) ? null : created,
@@ -295,4 +315,5 @@ export function parseGranolaNote(note: GranolaNote): MeetingPayload | null {
     tags: [],
     icalUid: asString(event.calendar_event_id),
   }
+  return { payload, attributed }
 }
