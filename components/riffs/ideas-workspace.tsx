@@ -701,7 +701,7 @@ function OpenIdea({
           <Text variant="small">{refusal.message}</Text>
           <div className="flex flex-wrap gap-kit-controls">
             {refusal.reason === "entitlement" ? (
-              <ButtonLink size="xs" href="/settings/billing">
+              <ButtonLink size="xs" href="/settings?section=plan">
                 See plans
               </ButtonLink>
             ) : refusal.reason === "no-channel" ? (

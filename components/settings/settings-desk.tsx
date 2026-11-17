@@ -67,9 +67,10 @@ import { useNow } from "./use-now"
  * pane order (settings-pane.tsx). The KeyBar at the foot. Under 900px of
  * workspace the list stands alone and a row opens in a Sheet.
  *
- * `?section=profile|signin|plan|agents|account` narrows the list to one
- * section and opens its first row (the account menu's Billing row, the
- * banner, Stripe's return); `?checkout=done` is read on the server and
+ * `?section=profile|signin|plan|agents|account` picks that section's first
+ * row and scrolls it into view (the account menu's Billing row, the banner,
+ * Stripe's return). It never narrows the list: the person came to one
+ * setting and may want the next. `?checkout=done` is read on the server and
  * opens the plan with the confirmation.
  *
  * Columns, and what folds: Setting and the fact always; Value from 26rem of
@@ -204,7 +205,7 @@ function Desk({ data, fold }: { data: SettingsData; fold: boolean | null }) {
   const now = useNow(data.nowIso)
   const searchRef = React.useRef<HTMLInputElement>(null)
   const paneRef = React.useRef<HTMLDivElement>(null)
-  const [section, setSection] = useQueryState("section", parseAsStringLiteral(SECTION_IDS))
+  const [section] = useQueryState("section", parseAsStringLiteral(SECTION_IDS))
   const [q, setQ] = React.useState("")
   const [show, setShow] = React.useState<Show>("all")
   // Back from Checkout, the plan is what the person came back to.
@@ -219,7 +220,7 @@ function Desk({ data, fold }: { data: SettingsData; fold: boolean | null }) {
   const only = section
   const all = buildItems(data, now)
   const needle = q.trim().toLowerCase()
-  const matches = (i: Item) => (!only || i.group === only) && (!needle || `${i.title} ${i.value}`.toLowerCase().includes(needle))
+  const matches = (i: Item) => !needle || `${i.title} ${i.value}`.toLowerCase().includes(needle)
   const youCount = all.filter((i) => i.needsYou && matches(i)).length
   const shown = all.filter((i) => matches(i) && (show === "all" || i.needsYou))
 
@@ -231,6 +232,14 @@ function Desk({ data, fold }: { data: SettingsData; fold: boolean | null }) {
     setSeenSection(only)
     if (only && !data.billing.checkout) setSelected(all.find((i) => i.group === only)?.id ?? null)
   }
+
+  // The picked section's row, brought into view without taking focus: the
+  // list keeps every section, so a plan row near the foot would otherwise
+  // open off screen.
+  const sectionRow = only ? (data.billing.checkout ? "plan" : all.find((i) => i.group === only)?.id) : undefined
+  React.useEffect(() => {
+    if (sectionRow) revealDataListRow(sectionRow)
+  }, [sectionRow])
 
   const groupNotes = listNotes(data)
   const groups: DataListGroup<Item>[] = SECTIONS.map((s) => {
@@ -301,7 +310,7 @@ function Desk({ data, fold }: { data: SettingsData; fold: boolean | null }) {
   React.useLayoutEffect(() => {
     said.current = count
   })
-  const filterKey = `${needle}|${show}|${only ?? ""}`
+  const filterKey = `${needle}|${show}`
   const firstKey = React.useRef(true)
   React.useEffect(() => {
     if (firstKey.current) {
@@ -335,11 +344,10 @@ function Desk({ data, fold }: { data: SettingsData; fold: boolean | null }) {
   const pane = open ? (
     <SettingsPane key={open.id} item={open} note={noteOn ? notes[open.note] : undefined} data={data} now={now} onRemoved={() => afterRemove(open.id)} />
   ) : null
-  const filtered = only != null || show !== "all" || needle !== ""
+  const filtered = show !== "all" || needle !== ""
   const clear = () => {
     setQ("")
     setShow("all")
-    void setSection(null)
   }
 
   return (
