@@ -1237,8 +1237,12 @@
   text-underline-offset: var(--kit-link-offset);
   border-radius: var(--radius-kit-chip);
 }
-.typeset-kit a:hover {
-  text-decoration-color: currentColor;
+/* Gated: a tap leaves plain-CSS :hover stuck on touch (Tailwind's hover: is
+   gated already; hand-written rules are not). */
+@media (hover: hover) and (pointer: fine) {
+  .typeset-kit a:hover {
+    text-decoration-color: currentColor;
+  }
 }
 /* Code is a tag face (Mono): 12px, never a second voice. */
 .typeset-kit :is(code, pre, kbd) {
@@ -1264,6 +1268,17 @@
 /* ── Touch defaults ───────────────────────────────────────────────
    Unlayered on purpose: these must win over utility classes.
    ────────────────────────────────────────────────────────────── */
+
+/* The grey flash iOS and Android paint over every tapped control is the
+   loudest "this is a website" tell, and it fights the press feedback the
+   buttons already carry (`:active` scale). Overscroll: the app shell is a
+   fixed-height frame with its own scrollers, so a pull past the top must not
+   reload the page or rubber-band the whole frame; inner scrollers keep their
+   own bounce through `overscroll-contain`. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
 
 /* Kills the 300ms tap delay and double-tap-to-zoom on controls. Without
    it every button on the page feels a beat behind on mobile.

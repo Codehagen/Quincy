@@ -78,8 +78,10 @@ const HistoryZoneContext = React.createContext<string | null>(null)
  * Studio's own composer (ConversationHistory). A phone always has a bar,
  * because the sheet needs a way in.
  *
- * h-svh, not min-h: a definite height is what gives every scroll container
+ * h-dvh, not min-h: a definite height is what gives every scroll container
  * below a ceiling, so the chat's own viewport scrolls instead of growing.
+ * dvh, not svh: it tracks the visible area, so with the root viewport's
+ * `resizes-content` the composer rides above the on-screen keyboard.
  */
 export function AppShell({ defaultOpen, timeZone, ...props }: AppShellProps) {
   return (
@@ -101,7 +103,7 @@ function Frame({ conversations, user, waiting, banner, children }: Omit<AppShell
   useKeepFocus(open, isMobile)
 
   return (
-    <div className="flex h-svh w-full">
+    <div className="flex h-dvh w-full">
       <SkipLink />
 
       {/* Desktop. Collapsing slides the column shut (width, so the page

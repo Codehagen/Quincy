@@ -89,8 +89,12 @@
 .lineup-daystrip button:active {
   scale: 0.96;
 }
-.lineup-daystrip button:hover {
-  background: var(--kit-row-hover);
+/* Gated: a tap leaves plain-CSS :hover stuck on touch (Tailwind's hover: is
+   gated already; hand-written rules are not). */
+@media (hover: hover) and (pointer: fine) {
+  .lineup-daystrip button:hover {
+    background: var(--kit-row-hover);
+  }
 }
 /* Picked by fill and ink, never by weight: a weight change reflows the label. */
 .lineup-daystrip button[aria-pressed="true"] {

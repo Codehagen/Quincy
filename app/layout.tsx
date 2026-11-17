@@ -1,3 +1,4 @@
+import type { Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
@@ -14,6 +15,26 @@ import { cn } from "@/lib/utils"
  * looks like noise until someone shares a link.
  */
 export const metadata = constructMetadata()
+
+/**
+ * `viewportFit: "cover"` is what makes every `env(safe-area-inset-*)` in the
+ * app real: without it they are all 0px, and the composer, sheet, toast and
+ * key bar sit on the home indicator. `resizes-content` makes Android's
+ * keyboard shrink the layout as iOS's does, so a composer at the bottom of a
+ * `dvh` column stays above it. The theme colours are `--kit-ground` in each
+ * mode; they follow the OS setting, not the in-app toggle.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fdfdfc" },
+    { media: "(prefers-color-scheme: dark)", color: "#111110" },
+  ],
+}
 
 // Sans and mono from one family: they share metrics, so mono metadata
 // optically aligns with the sans labels beside it. next/font self-hosts

@@ -298,8 +298,12 @@
   cursor: grab;
   touch-action: none;
 }
-.wc-chip:hover {
-  background: var(--kit-row-hover);
+/* Gated: a tap leaves plain-CSS :hover stuck on touch (Tailwind's hover: is
+   gated already; hand-written rules are not). */
+@media (hover: hover) and (pointer: fine) {
+  .wc-chip:hover {
+    background: var(--kit-row-hover);
+  }
 }
 /* Picked: as a block, the well grey and a 1px ink ring all round, never a
    side stripe (colour.md, "Rows"). */
