@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { createIdGenerator } from "ai"
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { sourceConnection } from "./schema-app"
@@ -772,4 +772,38 @@ export async function verifyStandardSignature(
 
   const secret = await symmetricDecrypt({ key: encryptionKey(), data: connection.signingSecret })
   return verifyStandard(secret, headers, rawBody)
+}
+
+/**
+ * Write `meta[key] = value` only if `meta` has no `key` yet, and return the
+ * value that is there afterwards: this call's, or the one an earlier call
+ * pinned. One conditional statement, so two deliveries arriving together
+ * cannot both pin (the HTTP driver has no interactive transactions).
+ *
+ * `storeProviderWebhook` replaces `meta` wholesale, so a new key clears the
+ * pin, which is right: a new key may belong to a different account.
+ */
+export async function pinConnectionMeta(
+  connectionId: string,
+  key: string,
+  value: string
+): Promise<string> {
+  const [pinned] = await db
+    .update(sourceConnection)
+    .set({
+      meta: sql`${sourceConnection.meta} || jsonb_build_object(${key}::text, ${value}::text)`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(sourceConnection.id, connectionId), sql`NOT (${sourceConnection.meta} ? ${key})`))
+    .returning({ meta: sourceConnection.meta })
+
+  if (pinned) return typeof pinned.meta[key] === "string" ? (pinned.meta[key] as string) : value
+
+  const [row] = await db
+    .select({ meta: sourceConnection.meta })
+    .from(sourceConnection)
+    .where(eq(sourceConnection.id, connectionId))
+    .limit(1)
+  const existing = row?.meta[key]
+  return typeof existing === "string" ? existing : ""
 }

@@ -19,13 +19,32 @@ import type { MeetingAttendee, MeetingPayload, MeetingSegment } from "./meetings
  * without it fails at connect, with that sentence, rather than later.
  */
 
+const GRANOLA_API_DEFAULT = "https://public-api.granola.ai"
+
 /**
- * Overridable only so scripts/verify-meeting-sources.ts can point the route at
- * a local stub. Production never sets it.
+ * Where Granola's API is. Overridable only so scripts/verify-meeting-sources.ts
+ * can point the route at a local stub, and **ignored in production**: the
+ * override is where the user's key is sent, so a stray environment variable
+ * on a deployment must not be able to send it anywhere but Granola.
  */
-export const GRANOLA_API = process.env.GRANOLA_API_BASE || "https://public-api.granola.ai"
+export function granolaApiBase(env: { NODE_ENV?: string; GRANOLA_API_BASE?: string }): string {
+  if (env.NODE_ENV === "production") return GRANOLA_API_DEFAULT
+  return env.GRANOLA_API_BASE || GRANOLA_API_DEFAULT
+}
+
+export const GRANOLA_API = granolaApiBase(process.env)
 
 const TIMEOUT_MS = 10_000
+
+/**
+ * The most time reading one note may take, across every call it makes.
+ *
+ * Granola gives an endpoint fifteen seconds and the route has thirty. A note
+ * in thirty transcript pages at ten seconds each would outlive both, so the
+ * whole read shares one budget, and running out of it is a retry: Granola
+ * sends the delivery again, and a transcript is never stored cut short.
+ */
+export const NOTE_FETCH_BUDGET_MS = 12_000
 
 /** Pages of 100 transcript items. Thirty is a three-hour workshop; past that, enough. */
 const MAX_TRANSCRIPT_PAGES = 30
@@ -132,8 +151,8 @@ export function parseGranolaEvent(body: unknown): GranolaEvent | null {
  *
  * - `refused`: the key no longer works. The one case that marks the source
  *   broken, because it is the user's own key telling us so.
- * - `gone`: the note is not readable (deleted, no summary, not shared). Nothing
- *   to retry and nothing broken.
+ * - `gone`: the note is not readable (deleted, no summary, not shared, or
+ *   forbidden to this key). Nothing to retry and nothing broken.
  * - `retry`: Granola is down or rate limiting. The route answers 5xx so
  *   Granola retries, which it does for four days.
  */
@@ -149,19 +168,25 @@ export type GranolaNote = Record<string, unknown>
 export async function fetchGranolaNote(
   apiKey: string,
   noteId: string,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  budgetMs: number = NOTE_FETCH_BUDGET_MS
 ): Promise<{ ok: true; note: GranolaNote } | { ok: false; failure: NoteFailure }> {
+  // One deadline for the whole read, beside each call's own timeout.
+  const budget = AbortSignal.timeout(budgetMs)
   const get = (path: string) =>
     fetcher(`${GRANOLA_API}${path}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.any([budget, AbortSignal.timeout(TIMEOUT_MS)]),
     })
 
+  // 403 on the note is `gone`, not a retry: the plan lacks the API, or the
+  // note is not shared with this key, and neither changes in Granola's four
+  // days of retries. 401 is the key itself, which the route marks broken.
   const fail = (status: number): { ok: false; failure: NoteFailure } => ({
     ok: false,
     failure: {
       status,
-      kind: status === 401 ? "refused" : status === 404 || status === 400 ? "gone" : "retry",
+      kind: status === 401 ? "refused" : status === 404 || status === 400 || status === 403 ? "gone" : "retry",
     },
   })
 

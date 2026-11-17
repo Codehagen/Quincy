@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { createGranolaWebhook, fetchGranolaNote, parseGranolaEvent, parseGranolaNote } from "./granola"
+import {
+  createGranolaWebhook,
+  fetchGranolaNote,
+  granolaApiBase,
+  parseGranolaEvent,
+  parseGranolaNote,
+} from "./granola"
 import { ownSegments } from "./meetings"
 
 function note(overrides: Record<string, unknown> = {}) {
@@ -169,7 +175,65 @@ describe("fetchGranolaNote", () => {
     }
     expect(await kind(401)).toBe("refused")
     expect(await kind(404)).toBe("gone")
+    expect(await kind(403)).toBe("gone")
     expect(await kind(429)).toBe("retry")
     expect(await kind(500)).toBe("retry")
+  })
+
+  it("gives up as a retry when the whole read outlives its budget", async () => {
+    // Each call answers only when aborted, as a Granola that never answers would.
+    const hang = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))
+      })) as unknown as typeof fetch
+
+    const started = Date.now()
+    const result = await fetchGranolaNote("k", "not_1d3tmYTlCICgjy", hang, 50)
+    expect(!result.ok && result.failure.kind).toBe("retry")
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
+
+  it("shares one budget across the transcript pages", async () => {
+    let pages = 0
+    const fetcher = ((url: string, init?: RequestInit) => {
+      if (url.includes("include=transcript")) return Promise.resolve(new Response("", { status: 413 }))
+      if (url.includes("/transcript?")) {
+        pages += 1
+        // Each page is quick, but there is always another one.
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(
+            () => resolve(Response.json({ transcript: [{ text: "more" }], hasMore: true, cursor: `c${pages}` })),
+            20
+          )
+          init?.signal?.addEventListener("abort", () => {
+            clearTimeout(timer)
+            reject(init.signal?.reason)
+          })
+        })
+      }
+      return Promise.resolve(Response.json(note({ transcript: null })))
+    }) as unknown as typeof fetch
+
+    const result = await fetchGranolaNote("k", "not_1d3tmYTlCICgjy", fetcher, 70)
+    expect(!result.ok && result.failure.kind).toBe("retry")
+    expect(pages).toBeLessThan(30)
+  })
+})
+
+describe("granolaApiBase", () => {
+  it("lets a stub stand in outside production", () => {
+    expect(granolaApiBase({ NODE_ENV: "development", GRANOLA_API_BASE: "http://localhost:4010" })).toBe(
+      "http://localhost:4010"
+    )
+  })
+
+  it("ignores the override in production, so the key only ever goes to Granola", () => {
+    expect(granolaApiBase({ NODE_ENV: "production", GRANOLA_API_BASE: "http://localhost:4010" })).toBe(
+      "https://public-api.granola.ai"
+    )
+  })
+
+  it("falls back to Granola when nothing is set", () => {
+    expect(granolaApiBase({ NODE_ENV: "development" })).toBe("https://public-api.granola.ai")
   })
 })

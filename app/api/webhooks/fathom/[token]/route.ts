@@ -1,6 +1,7 @@
-import { parseFathomMeeting } from "@/lib/fathom"
+import { FATHOM_RECORDER_META_KEY, fathomRecorderAliases, parseFathomMeeting } from "@/lib/fathom"
 import { ingestMeeting } from "@/lib/meeting-intake"
 import {
+  pinConnectionMeta,
   recordSourceError,
   resolveByToken,
   verifyStandardSignature,
@@ -22,9 +23,10 @@ import { readStandardWebhookHeaders } from "@/lib/standard-webhooks"
  *   a row that does not exist.
  * - **Standard Webhooks**, with a timestamp, so a replay is bounded in time as
  *   well as by the dedup key. lib/standard-webhooks.ts.
- * - **The recorder is an alias.** The webhook was made for `my_recordings`
- *   only, so `recorded_by` is the key's owner, and their Fathom address joins
- *   exactly even when it is not the address they signed up to Quincy with.
+ * - **The recorder is an alias, once pinned.** The webhook was made for
+ *   `my_recordings` only, so the first delivery's `recorded_by` is the key's
+ *   owner, and is pinned on the connection. After that the recorder joins as
+ *   the user only when it is that same address (`fathomRecorderAliases`).
  */
 
 export const maxDuration = 30
@@ -40,7 +42,9 @@ export async function POST(
 
   const connection = await resolveByToken(token)
 
-  // 404, not 401: a 401 confirms the path exists.
+  // 404 for a token nobody holds, the same answer as a path that does not
+  // exist. A real token with a bad signature still answers 401 below; the
+  // token is a long random secret, so that distinction is not worth hiding.
   if (!connection || connection.source !== "fathom" || !connection.signingSecret) {
     return new Response("Not found", { status: 404 })
   }
@@ -86,12 +90,17 @@ export async function POST(
     return new Response("Not a meeting", { status: 400 })
   }
 
+  // Verified and parsed, so the recorder can be pinned if nothing is yet.
+  const pinned = meeting.recorderEmail
+    ? await pinConnectionMeta(connection.id, FATHOM_RECORDER_META_KEY, meeting.recorderEmail)
+    : ""
+
   return ingestMeeting({
     connection,
     source: "fathom",
     payload: meeting.payload,
     url: meeting.url,
-    aliases: meeting.recorderEmail ? [meeting.recorderEmail] : [],
+    aliases: fathomRecorderAliases(pinned, meeting.recorderEmail),
   })
 }
 

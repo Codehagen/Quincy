@@ -6,6 +6,7 @@ import { db } from "@/lib/db"
 import { isEntitled, resolveEntitlement } from "@/lib/entitlement"
 import {
   MAX_MEETING_CHARS,
+  overDailyCeiling,
   ownSegments,
   trimSegments,
   type MeetingPayload,
@@ -37,17 +38,7 @@ import { runMeetingRiffWorkflow } from "@/workflows/run-meeting-riff"
  * signature, and nothing here may be reached without one.
  */
 
-/**
- * How many meetings one user may turn into work in 24 hours, **across every
- * note taker**.
- *
- * Six, the number plans/019 set for Circleback. Counted over all three
- * sources rather than per source: the rate is set by somebody's calendar, and
- * connecting a second note taker to the same calendar must not double what a
- * Tuesday with eight calls can spend.
- */
-export const MAX_MEETINGS_PER_DAY = 6
-
+/** The ceiling, six meetings a day across every note taker, is in lib/meetings.ts. */
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const newSourceItemId = createIdGenerator({ prefix: "si", size: 20 })
@@ -60,8 +51,8 @@ export type MeetingIntake = {
   url: string
   /**
    * Addresses that are also this user, beside their Quincy address. Each one
-   * is an exact join, never a heuristic: Fathom's recorder on a webhook made
-   * for `my_recordings`, Granola's key owner as Granola reported it.
+   * is an exact join, never a heuristic: Fathom's recorder when it is the one
+   * pinned on the connection, Granola's key owner as Granola reported it.
    */
   aliases?: string[]
   /** The vendor's own facts for `source_item.meta`, beside the shared ones. */
@@ -113,21 +104,6 @@ export async function ingestMeeting({
   const { segments, dropped } = match.ok
     ? trimSegments(match.segments, MAX_MEETING_CHARS)
     : { segments: [], dropped: 0 }
-
-  // Counted before this meeting is stored, so the row below is the (N+1)th.
-  // Counts rows, not riffs: a call that produced nothing still paid for a
-  // selection, and a ceiling that only counts successes is one a quiet day
-  // cannot reach.
-  const [{ value: recent } = { value: 0 }] = await db
-    .select({ value: count() })
-    .from(sourceItem)
-    .where(
-      and(
-        eq(sourceItem.userId, owner.id),
-        inArray(sourceItem.source, [...MEETING_SOURCE_IDS]),
-        gte(sourceItem.createdAt, new Date(Date.now() - DAY_MS))
-      )
-    )
 
   /**
    * The material, filtered to the user's own turns. **Everyone else's words
@@ -188,7 +164,34 @@ export async function ingestMeeting({
     return Response.json({ state: "stored", reason: "unentitled" })
   }
 
-  if (recent >= MAX_MEETINGS_PER_DAY) {
+  /**
+   * Counted **after** this meeting is stored, so the count includes it. Two
+   * deliveries arriving together then both see each other's rows, and a race
+   * refuses one too many rather than drafting one too many. Counted before
+   * the insert, both would read the same N and both would start a workflow.
+   *
+   * Counts rows, not riffs: a call that produced nothing still paid for a
+   * selection, and a ceiling that only counts successes is one a quiet day
+   * cannot reach.
+   *
+   * The trade-off: a meeting refused here keeps its row, so a redelivery of
+   * it is a duplicate and will not be drafted later. That is the same answer
+   * the ceiling has always given past six, and nothing is lost but the
+   * drafting: the row holds the user's own words, the fact is true, and the
+   * material stays in the source items for anything that reads them.
+   */
+  const [{ value: recent } = { value: 0 }] = await db
+    .select({ value: count() })
+    .from(sourceItem)
+    .where(
+      and(
+        eq(sourceItem.userId, owner.id),
+        inArray(sourceItem.source, [...MEETING_SOURCE_IDS]),
+        gte(sourceItem.createdAt, new Date(Date.now() - DAY_MS))
+      )
+    )
+
+  if (overDailyCeiling(recent)) {
     return Response.json({ state: "stored", reason: "daily-ceiling" })
   }
 

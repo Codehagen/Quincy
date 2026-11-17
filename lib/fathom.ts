@@ -221,3 +221,32 @@ function parseDate(value: unknown): Date | null {
   const d = new Date(s)
   return Number.isNaN(d.getTime()) ? null : d
 }
+
+/* ── Whose recordings these are ───────────────────────────────────────── */
+
+/** The `source_connection.meta` key holding the recorder pinned on first delivery. */
+export const FATHOM_RECORDER_META_KEY = "recorderEmail"
+
+/**
+ * The recorder as an alias for the user, only when it is the recorder the
+ * connection pinned.
+ *
+ * `recorded_by` is the key's owner only while the webhook stays
+ * `my_recordings`. If it is ever widened at Fathom to shared or team
+ * recordings, the recorder becomes a colleague, and treating their address as
+ * the user's would store the colleague's words as the user's own. So the
+ * recorder is trusted once, and after that only when it is the same person.
+ *
+ * Pinned on the first verified delivery rather than at connect, because
+ * Fathom's API has no endpoint that says who owns a key, and the webhook
+ * response does not say who made it. The first delivery comes from the
+ * webhook Quincy has just created as `my_recordings`, so its recorder is the
+ * key's owner. A different recorder later is not an alias: the user is then
+ * matched by their Quincy address and name alone, and a call they cannot be
+ * found in becomes a failed card, never somebody else's words.
+ */
+export function fathomRecorderAliases(pinned: string, recorderEmail: string): string[] {
+  const recorder = recorderEmail.trim().toLowerCase()
+  if (!recorder || !pinned) return []
+  return pinned.trim().toLowerCase() === recorder ? [recorderEmail] : []
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { clockToSeconds, createFathomWebhook, parseFathomMeeting } from "./fathom"
+import { clockToSeconds, createFathomWebhook, fathomRecorderAliases, parseFathomMeeting } from "./fathom"
 import { ownSegments } from "./meetings"
 
 /** A body in the shape Fathom's "new meeting content ready" webhook sends. */
@@ -135,5 +135,34 @@ describe("createFathomWebhook", () => {
     const result = await createFathomWebhook("bad", "https://x.example", fetcher)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.message).toMatch(/refused that key/)
+  })
+})
+
+describe("fathomRecorderAliases", () => {
+  it("trusts the recorder when it is the one pinned on the connection", () => {
+    expect(fathomRecorderAliases("christer@work.example", "Christer@Work.example")).toEqual(["Christer@Work.example"])
+  })
+
+  it("does not trust a different recorder, as on a webhook widened to team recordings", () => {
+    expect(fathomRecorderAliases("christer@work.example", "dana@work.example")).toEqual([])
+  })
+
+  it("trusts nothing when nothing is pinned or nobody recorded", () => {
+    expect(fathomRecorderAliases("", "christer@work.example")).toEqual([])
+    expect(fathomRecorderAliases("christer@work.example", "")).toEqual([])
+  })
+
+  it("keeps a colleague's recording from being read as the user's own words", () => {
+    // Recorded by Dana, a teammate; the user is not on the call under any
+    // address Quincy knows, so the match fails rather than taking Dana's turns.
+    const colleague = parseFathomMeeting(
+      body({
+        recorded_by: { name: "Dana Teammate", email: "dana@work.example" },
+        calendar_invitees: [],
+        transcript: [{ speaker: { display_name: "Dana Teammate" }, text: "Here is our plan.", timestamp: "00:00:01" }],
+      })
+    )!
+    const aliases = fathomRecorderAliases("christer@work.example", colleague.recorderEmail)
+    expect(ownSegments(colleague.payload, ["christer@quincy.example", ...aliases], "Christer Hagen").ok).toBe(false)
   })
 })
