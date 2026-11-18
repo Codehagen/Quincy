@@ -48,8 +48,18 @@ describe("adaptTargets", () => {
     expect(adaptTargets([]).map((t) => t.id)).toEqual(["x", "linkedin"])
   })
 
-  it("ignores a connected channel it cannot write for", () => {
-    expect(adaptTargets(["instagram"]).map((t) => t.id)).toEqual([
+  it("writes Instagram when that is the account connected", () => {
+    expect(adaptTargets(["instagram"]).map((t) => t.id)).toEqual(["instagram"])
+  })
+
+  it("keeps X, LinkedIn, then Instagram when all three are connected", () => {
+    expect(
+      adaptTargets(["instagram", "linkedin", "x"]).map((t) => t.id)
+    ).toEqual(["x", "linkedin", "instagram"])
+  })
+
+  it("ignores a connected channel it cannot write a short post for", () => {
+    expect(adaptTargets(["substack"]).map((t) => t.id)).toEqual([
       "x",
       "linkedin",
     ])
@@ -488,14 +498,19 @@ describe("the adapt family's cooldown", () => {
     // is where the session is read, not where the money is spent — so the count
     // is across both files.
     const [actions, writes] = await Promise.all([
-      readFile(new URL("../app/(app)/ideas/actions.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/(app)/ideas/actions.ts", import.meta.url),
+        "utf8"
+      ),
       readFile(new URL("./riff-writes.ts", import.meta.url), "utf8"),
     ])
 
     const onSession = actions.match(
       /spendCooldown\(session\.user\.id, ADAPT_SPEND, 15_000\)/g
     )
-    const onUserId = writes.match(/spendCooldown\(userId, ADAPT_SPEND, 15_000\)/g)
+    const onUserId = writes.match(
+      /spendCooldown\(userId, ADAPT_SPEND, 15_000\)/g
+    )
 
     expect(onSession).toHaveLength(3)
     expect(onUserId).toHaveLength(2)

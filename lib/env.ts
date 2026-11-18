@@ -95,12 +95,18 @@ const CAPABILITIES: Capability[] = [
     vars: ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
     without: "LinkedIn cannot be connected, so nothing publishes there",
   },
+  {
+    name: "Publishing to Instagram",
+    vars: ["META_APP_ID", "META_APP_SECRET", "META_LOGIN_CONFIG_ID"],
+    without:
+      "Instagram cannot be connected, so nothing publishes there. The landing page lists it as next until these are set",
+  },
   /**
    * Off in a default deployment, and that is the intended state.
    *
    * Unlike every other capability here, the absence of this one costs nothing:
-   * X and LinkedIn are first-party and unaffected. What it buys is the other
-   * channels — a draft written for one of them is refused by the sweep with
+   * X, LinkedIn and Instagram are first-party and unaffected. What it buys is
+   * the other channels — a draft written for one of them is refused by the sweep with
    * "No publisher for {channel}" until an operator points these two at a
    * scheduler they run. Listed so that refusal is legible from the boot report
    * rather than discovered on /lineup.
@@ -109,7 +115,7 @@ const CAPABILITIES: Capability[] = [
     name: "Publishing through an external scheduler",
     vars: ["EXTERNAL_PUBLISHER_URL", "EXTERNAL_PUBLISHER_TOKEN"],
     without:
-      "only X and LinkedIn can publish; a post scheduled to any other channel is refused with no publisher for it",
+      "X, LinkedIn and Instagram stay first-party; a post scheduled to any other channel is refused with no publisher for it",
   },
   {
     name: "Google sign-in",

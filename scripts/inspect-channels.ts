@@ -74,6 +74,38 @@ async function live(userId: string, channel: ConnectableChannel) {
     return
   }
 
+  if (channel === "instagram") {
+    const version = process.env.META_GRAPH_VERSION?.trim() || "v25.0"
+    const response = await fetch(
+      `https://graph.facebook.com/${version}/me/assigned_instagram_accounts?fields=id,username`,
+      { headers: { Authorization: `Bearer ${access.accessToken}` } }
+    )
+
+    if (!response.ok) {
+      console.log(
+        `    token        REJECTED by Instagram (${response.status}) ${(await response.text()).slice(0, 160)}`
+      )
+      process.exitCode = 1
+      return
+    }
+
+    const listed = (await response.json()) as {
+      data?: { id?: string; username?: string }[]
+    }
+    const account = listed.data?.[0]
+    console.log(
+      `    token        works — Instagram says this is @${account?.username ?? "—"}`
+    )
+    console.log(`    ig user id   ${account?.id ?? "—"}`)
+    return
+  }
+
+  if (channel !== "x") {
+    const unexpected: never = channel
+    console.log(`    token        no probe for ${unexpected}`)
+    return
+  }
+
   const response = await fetch("https://api.x.com/2/users/me", {
     headers: { Authorization: `Bearer ${access.accessToken}` },
   })

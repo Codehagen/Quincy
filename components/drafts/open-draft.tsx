@@ -21,7 +21,7 @@ import { MARK_COLUMN_PX } from "./drafts-fold"
  */
 
 /** The width each platform's column is drawn at, before the room narrows it. */
-const OBJECT_WIDTH: Record<string, string> = { x: "598px", linkedin: "555px" }
+const OBJECT_WIDTH: Record<string, string> = { x: "598px", linkedin: "555px", instagram: "420px" }
 
 
 /** Who each channel's post is from, and who it is from where no channel is connected. */
@@ -141,7 +141,7 @@ function VersionFeed({
   // One post per version today (see DraftFeed: the thread seam).
   const [draftText, setDraftText] = React.useState<string | null>(null)
   const shown = [editing ? (draftText ?? text) : text]
-  const platform = v.channel === "linkedin" ? "linkedin" : "x"
+  const platform = v.channel === "linkedin" ? "linkedin" : v.channel === "instagram" ? "instagram" : "x"
 
   // The open post in view: on opening a draft (the first version only, or
   // the last would win and hide the first), and when E puts the caret in it.

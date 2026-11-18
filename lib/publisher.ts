@@ -1,4 +1,10 @@
 import { channelLabel, PLATFORM_TIMEOUT_MS } from "./channels"
+import {
+  captionProblem,
+  postIdFromCardFile,
+  publicInstagramImageUrl,
+  publishInstagramImage,
+} from "./instagram"
 import { externalPublisherFor } from "./publisher-external"
 import { CONNECTABLE_CHANNELS, type ConnectableChannel } from "./schema-app"
 
@@ -14,8 +20,8 @@ import { CONNECTABLE_CHANNELS, type ConnectableChannel } from "./schema-app"
  * with a stubbed `fetch` alone.
  *
  * See plans/025 for the wider `ChannelProvider` this is a slice of. This is
- * deliberately only the publish slice; auth, liveness and revoke stay in
- * lib/channels.ts until a third channel actually exists.
+ * deliberately only the publish slice. Auth, liveness and revoke for
+ * Instagram live in lib/instagram.ts, called from lib/channels.ts.
  */
 
 /* ── What can go wrong ────────────────────────────────────────────────────── */
@@ -99,10 +105,10 @@ export type PublishInput = {
   /** Already trimmed and already measured against the channel's ceiling. */
   body: string
   /**
-   * Declared, not implemented. No first-party publisher can carry media yet,
-   * and each **refuses** a non-empty list rather than dropping it: a post that
-   * silently goes out without the image it was approved with is not the post
-   * that was approved.
+   * Declared, not implemented for an attachment the person supplied. No
+   * first-party publisher carries one yet. Instagram draws its own card from
+   * the caption and still refuses a non-empty list: dropping an image the
+   * person approved would publish a different post.
    */
   media?: readonly string[]
   /**
@@ -408,6 +414,57 @@ export const linkedInPublisher: Publisher = {
   },
 }
 
+/* ── Instagram ────────────────────────────────────────────────────────────── */
+
+/**
+ * A single image plus the approved caption.
+ *
+ * The image is a card of that caption, served from this deployment at a
+ * public https URL Meta can fetch. There is no text-only post, and there
+ * is no second piece of writing: the card and the caption are the same
+ * words. A carousel is still one image in this version.
+ */
+export const instagramPublisher: Publisher = {
+  channel: "instagram",
+
+  async publish(input) {
+    const media = refuseMedia(input, "Instagram")
+    if (media) return media
+
+    const problem = captionProblem(input.body)
+    if (problem) return { ok: false, reason: "rejected", message: problem }
+
+    if (
+      !input.idempotencyKey ||
+      !postIdFromCardFile(`${input.idempotencyKey}.jpg`)
+    ) {
+      return {
+        ok: false,
+        reason: "rejected",
+        message:
+          "Instagram needs the scheduled post id to host the image. Nothing was published.",
+      }
+    }
+
+    const imageUrl = publicInstagramImageUrl(input.idempotencyKey)
+    if (!imageUrl) {
+      return {
+        ok: false,
+        reason: "rejected",
+        message:
+          "Instagram needs a public https BETTER_AUTH_URL so it can fetch the image. Nothing was published.",
+      }
+    }
+
+    return publishInstagramImage({
+      igUserId: input.connection.externalId,
+      accessToken: input.accessToken,
+      caption: input.body,
+      imageUrl,
+    })
+  },
+}
+
 /* ── The registry ─────────────────────────────────────────────────────────── */
 
 /**
@@ -420,6 +477,7 @@ export const linkedInPublisher: Publisher = {
 const FIRST_PARTY: Record<ConnectableChannel, Publisher> = {
   x: xPublisher,
   linkedin: linkedInPublisher,
+  instagram: instagramPublisher,
 }
 
 function isFirstParty(channel: Channel): channel is ConnectableChannel {
@@ -452,9 +510,9 @@ function noPublisher(channel: Channel): Publisher {
  * Which implementation sends this channel.
  *
  * First-party first, always: an external scheduler must never be able to take
- * over X or LinkedIn by being configured, because the two first-party paths
- * are the ones whose cost, refusals and token lifecycle this codebase reasons
- * about.
+ * over X, LinkedIn, or Instagram by being configured, because the first-party
+ * paths are the ones whose cost, refusals and token lifecycle this codebase
+ * reasons about.
  */
 export function publisherFor(channel: Channel): Publisher {
   if (isFirstParty(channel)) return FIRST_PARTY[channel]

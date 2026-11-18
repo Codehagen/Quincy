@@ -17,7 +17,8 @@ import { whenLabel, type Clock, type Item } from "./lineup-model"
  * the story reads.
  */
 
-export const platformOf = (channel: string): FeedPlatform => (channel === "linkedin" ? "linkedin" : "x")
+export const platformOf = (channel: string): FeedPlatform =>
+  channel === "linkedin" ? "linkedin" : channel === "instagram" ? "instagram" : "x"
 
 export function accountFor(accounts: FeedAccounts, channel: string): FeedAccount {
   return accounts.byChannel[channel] ?? accounts.fallback
@@ -79,11 +80,19 @@ export function FeedPostOf({ text, channel, account, time, state }: { text: stri
     <FeedPost initials={account.initials} avatarUrl={account.avatarUrl} data-state={state} className="lineup-feed-post">
       <FeedPost.Header
         name={account.name}
-        handle={platform === "x" ? (account.handle ?? undefined) : undefined}
+        handle={platform === "linkedin" ? undefined : (account.handle ?? undefined)}
         headline={platform === "linkedin" ? (account.headline ?? undefined) : undefined}
         time={time}
       />
       <FeedPost.Body>
+        {platform === "instagram" ? (
+          <>
+            <div className="ig-frame" aria-hidden>
+              {text}
+            </div>
+            <p className="ig-note">Goes out as a picture of these words, plus this caption.</p>
+          </>
+        ) : null}
         <PostWords text={text} channel={channel} />
       </FeedPost.Body>
       <FeedPost.Actions />

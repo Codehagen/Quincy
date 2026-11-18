@@ -133,7 +133,7 @@ describe("writesPerShape", () => {
 
   it("widens to the shape list only when nothing is connected", () => {
     expect(writesPerShape([])).toEqual({
-      "Short post": 2,
+      "Short post": 3,
       Thread: 1,
       Carousel: 2,
       Essay: 1,
@@ -148,6 +148,14 @@ describe("writesPerShape", () => {
 })
 
 describe("describeConstraints", () => {
+  it("tells Instagram the picture is the same words, and the hashtag cap", () => {
+    const line = describeConstraints(targetsFor("Short post", ["instagram"]))
+    expect(line).toContain(String(CHANNEL_RULES.instagram.limit))
+    expect(line).toContain(String(CHANNEL_RULES.instagram.fold))
+    expect(line).toContain("30 hashtags")
+    expect(line).toContain("same words")
+  })
+
   it("names X's ceiling and LinkedIn's fold, read from CHANNEL_RULES", () => {
     const targets = targetsFor("Short post", ["x", "linkedin"])
     const description = describeConstraints(targets)
@@ -371,7 +379,9 @@ describe("describeBeats", () => {
   it("asks for the number in digits, on its own line", () => {
     const block = describeBeats(beats)
 
-    expect(block).toContain("in digits, opening a line with the thing it counts")
+    expect(block).toContain(
+      "in digits, opening a line with the thing it counts"
+    )
   })
 
   it("is empty for a voice note, which has no beats", () => {

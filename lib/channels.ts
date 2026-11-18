@@ -4,13 +4,22 @@ import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
 
 import { db } from "./db"
 import {
+  exchangeInstagramCode,
+  fetchInstagramProfile,
+  instagramAuthorizeUrl,
+  instagramGraphVersion,
+  InstagramTokenError,
+  probeInstagram,
+  revokeInstagram,
+} from "./instagram"
+import {
   channelConnection,
   type ConnectableChannel,
   CONNECTABLE_CHANNELS,
 } from "./schema-app"
 
 /**
- * Connecting an X or LinkedIn account, and keeping the connection alive.
+ * Connecting an X, LinkedIn, or Instagram account, and keeping it alive.
  *
  * All of the OAuth judgment lives here; the routes under /api/connect are thin
  * on purpose. See plans/005 for why this is not better-auth's genericOAuth —
@@ -58,11 +67,18 @@ type ChannelConfig = {
    */
   tokenAuth: "basic" | "body"
   /**
-   * Whether the provider issues refresh tokens to us. LinkedIn's programmatic
-   * refresh tokens are limited to approved partners, so a LinkedIn connection
-   * genuinely ends every 60 days and the human has to come back.
+   * How a stale access token is renewed.
+   *
+   * `token` — a refresh_token grant (X). `none` — it ends, and the person
+   * comes back (LinkedIn, and an Instagram token that was given an expiry).
    */
-  refreshable: boolean
+  refresh: "token" | "none"
+  /** Space for X and LinkedIn. Instagram sends no scope — the configuration is the list. */
+  scopeJoin: " " | ","
+  /** False for Instagram. Sending `scope` is what a new Meta app rejects. */
+  sendScope: boolean
+  /** Present only when the channel cannot be offered without it. */
+  configId?: string
   clientId?: string
   clientSecret?: string
 }
@@ -98,7 +114,9 @@ function config(channel: ConnectableChannel): ChannelConfig {
         ],
         pkce: true,
         tokenAuth: "basic",
-        refreshable: true,
+        refresh: "token",
+        scopeJoin: " ",
+        sendScope: true,
         clientId: process.env.X_CLIENT_ID,
         clientSecret: process.env.X_CLIENT_SECRET,
       }
@@ -110,10 +128,33 @@ function config(channel: ConnectableChannel): ChannelConfig {
         scopes: ["openid", "profile", "email", "w_member_social"],
         pkce: false,
         tokenAuth: "body",
-        refreshable: false,
+        refresh: "none",
+        scopeJoin: " ",
+        sendScope: true,
         clientId: process.env.LINKEDIN_CLIENT_ID,
         clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
       }
+    case "instagram": {
+      const version = instagramGraphVersion()
+      return {
+        label: "Instagram",
+        authorizationUrl: `https://www.facebook.com/${version}/dialog/oauth`,
+        tokenUrl: `https://graph.facebook.com/${version}/oauth/access_token`,
+        // Not sent. The Facebook Login for Business configuration is the
+        // scope list; a `scope` parameter is what a new Meta app rejects.
+        scopes: [],
+        pkce: false,
+        tokenAuth: "body",
+        // A system-user token set to never expire has nothing to refresh.
+        // A 60-day configuration ages out and the person reconnects.
+        refresh: "none",
+        scopeJoin: " ",
+        sendScope: false,
+        configId: process.env.META_LOGIN_CONFIG_ID,
+        clientId: process.env.META_APP_ID,
+        clientSecret: process.env.META_APP_SECRET,
+      }
+    }
   }
 }
 
@@ -131,8 +172,10 @@ export function isConnectableChannel(
  * broken rather than unfinished.
  */
 export function isChannelEnabled(channel: ConnectableChannel): boolean {
-  const { clientId, clientSecret } = config(channel)
-  return Boolean(clientId && clientSecret)
+  const { clientId, clientSecret, configId, sendScope } = config(channel)
+  if (!clientId || !clientSecret) return false
+  if (!sendScope && !configId) return false
+  return true
 }
 
 export function channelLabel(channel: ConnectableChannel): string {
@@ -140,7 +183,7 @@ export function channelLabel(channel: ConnectableChannel): string {
 }
 
 export function isRefreshable(channel: ConnectableChannel): boolean {
-  return config(channel).refreshable
+  return config(channel).refresh !== "none"
 }
 
 function baseUrl(): string {
@@ -217,7 +260,9 @@ const CONNECT_RETURN_TO = ["/welcome"] as const
  * over, and the caller's fallback (/channels/<channel>) is a real page that
  * shows the outcome. Silently correcting beats stranding someone.
  */
-export function resolveReturnTo(value: string | null | undefined): string | null {
+export function resolveReturnTo(
+  value: string | null | undefined
+): string | null {
   if (!value) return null
   return (CONNECT_RETURN_TO as readonly string[]).includes(value) ? value : null
 }
@@ -240,18 +285,31 @@ export async function beginConnect(
 }> {
   const c = config(channel)
 
-  if (!c.clientId || !c.clientSecret) {
+  if (!c.clientId || !c.clientSecret || (!c.sendScope && !c.configId)) {
     throw new Error(`${c.label} is not configured.`)
   }
 
   const state = randomToken()
   const codeVerifier = randomToken()
 
+  if (channel === "instagram") {
+    return {
+      url: instagramAuthorizeUrl({
+        appId: c.clientId,
+        configId: c.configId!,
+        redirectUri: redirectUri(channel),
+        state,
+        version: instagramGraphVersion(),
+      }),
+      handshake: { channel, state, codeVerifier, ...(next ? { next } : {}) },
+    }
+  }
+
   const params = new URLSearchParams({
     response_type: "code",
     client_id: c.clientId,
     redirect_uri: redirectUri(channel),
-    scope: c.scopes.join(" "),
+    scope: c.scopes.join(c.scopeJoin),
     state,
   })
 
@@ -356,7 +414,11 @@ export class TokenError extends Error {
 
   /** The grant is gone — the person removed us, or the token was invalidated. */
   get isRevoked(): boolean {
-    return this.body.includes("invalid_grant")
+    // Code 190 is Meta's invalid-token. X and LinkedIn do not speak it.
+    return (
+      this.body.includes("invalid_grant") ||
+      /"code"\s*:\s*190\b/.test(this.body)
+    )
   }
 }
 
@@ -376,6 +438,19 @@ export async function exchangeCode(
     body.set("code_verifier", codeVerifier)
   }
 
+  if (channel === "instagram") {
+    if (!c.clientId || !c.clientSecret) {
+      throw new Error("Instagram is not configured.")
+    }
+    const tokens = await exchangeInstagramCode({
+      code,
+      redirectUri: redirectUri(channel),
+      clientId: c.clientId,
+      clientSecret: c.clientSecret,
+    })
+    return tokens
+  }
+
   return postToken(channel, body)
 }
 
@@ -393,6 +468,10 @@ export async function fetchProfile(
   accessToken: string
 ): Promise<ChannelProfile> {
   const auth = { Authorization: `Bearer ${accessToken}` }
+
+  if (channel === "instagram") {
+    return fetchInstagramProfile(accessToken)
+  }
 
   if (channel === "x") {
     const response = await fetch(
@@ -425,6 +504,11 @@ export async function fetchProfile(
       displayName: data.name ?? null,
       avatarUrl: data.profile_image_url ?? null,
     }
+  }
+
+  if (channel !== "linkedin") {
+    const unexpected: never = channel
+    throw new Error(`No profile lookup for ${unexpected}.`)
   }
 
   const response = await fetch("https://api.linkedin.com/v2/userinfo", {
@@ -673,10 +757,17 @@ export async function probeLiveness(
   channel: ConnectableChannel,
   accessToken: string
 ): Promise<LivenessResult> {
+  if (channel === "instagram") return probeInstagram(accessToken)
+
   const url =
     channel === "x"
       ? "https://api.x.com/2/users/me"
       : "https://api.linkedin.com/v2/userinfo"
+
+  if (channel !== "x" && channel !== "linkedin") {
+    const unexpected: never = channel
+    return { live: "unknown", error: `No liveness probe for ${unexpected}.` }
+  }
 
   try {
     const response = await fetch(url, {
@@ -795,9 +886,12 @@ export async function getAccessToken(
     }
   }
 
-  // LinkedIn: nothing to refresh with. This is the expected end of a 60-day
-  // life, not a failure, and the daily cron will already have nudged.
-  if (!isRefreshable(channel) || !row.refreshToken) {
+  const mode = config(channel).refresh
+
+  // LinkedIn, and an Instagram system-user token: nothing to refresh with.
+  // LinkedIn's 60 days are expected. Instagram is configured not to expire;
+  // this branch is the one a 60-day configuration falls into.
+  if (mode === "none" || !row.refreshToken) {
     await markConnectionState(row.id, "needs_reauth")
     return { ok: false, reason: "needs_reauth" }
   }
@@ -844,7 +938,9 @@ export async function getAccessToken(
 
     return { ok: true, accessToken: tokens.accessToken, connection: updated }
   } catch (error) {
-    const revoked = error instanceof TokenError && error.isRevoked
+    const revoked =
+      (error instanceof TokenError && error.isRevoked) ||
+      (error instanceof InstagramTokenError && error.isRevoked)
     await markConnectionState(
       row.id,
       revoked ? "revoked" : "needs_reauth",
@@ -872,6 +968,22 @@ export async function disconnect(
 
   if (!row) {
     return
+  }
+
+  if (channel === "instagram") {
+    try {
+      await revokeInstagram(
+        await symmetricDecrypt({
+          key: encryptionKey(),
+          data: row.accessToken,
+        })
+      )
+    } catch (error) {
+      console.error(
+        "[channels] Instagram revoke failed, deleting locally anyway",
+        error
+      )
+    }
   }
 
   if (channel === "x") {

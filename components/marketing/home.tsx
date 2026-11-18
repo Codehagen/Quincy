@@ -7,7 +7,7 @@ import { IdeasPicture } from "@/components/showcase/demos/ideas-picture"
 import { MedianPicture } from "@/components/showcase/demos/median-picture"
 import { ReadsAndPosts, type Connector } from "@/components/showcase/demos/reads-and-posts"
 import { TextsPicture } from "@/components/showcase/demos/texts-picture"
-import { channelLabel } from "@/lib/channels"
+import { channelLabel, isChannelEnabled } from "@/lib/channels"
 import { CONNECTABLE_CHANNELS } from "@/lib/schema-app"
 import { SOURCES } from "@/lib/sources"
 
@@ -28,6 +28,8 @@ import { WaitlistForm } from "./waitlist-form"
  *   connected source and so is not in that list. Everything else there is
  *   "next" and says so.
  * - Where it posts comes from CONNECTABLE_CHANNELS and channelLabel.
+ *   Instagram is listed there only when this deployment can connect it.
+ *   Until then it sits with the rest, marked as next.
  * - The price and the never lines are the pricing page's (pricing/copy.ts).
  * - No customer, no logo, no signup count, no queue position (plans/023).
  *
@@ -41,8 +43,14 @@ const PASTE: Connector = { id: "paste", label: "Pasted text", gives: "Notes you 
 
 function connectors() {
   const reads: Connector[] = [...LIVE_SOURCES.flatMap((id) => SOURCES.filter((s) => s.id === id)), PASTE]
-  const next: Connector[] = SOURCES.filter((s) => !LIVE_SOURCES.includes(s.id))
-  const posts: Connector[] = CONNECTABLE_CHANNELS.map((c) => ({
+  const instagramOn = isChannelEnabled("instagram")
+  const next: Connector[] = [
+    ...SOURCES.filter((s) => !LIVE_SOURCES.includes(s.id)),
+    ...(instagramOn
+      ? []
+      : [{ id: "instagram", label: "Instagram", gives: "Captions, once a professional account is connected" }]),
+  ]
+  const posts: Connector[] = CONNECTABLE_CHANNELS.filter((c) => c !== "instagram" || instagramOn).map((c) => ({
     id: c,
     label: channelLabel(c),
     gives: "Posts at the time you approved",

@@ -526,7 +526,7 @@ export const scheduledPostRelations = relations(scheduledPost, ({ one }) => ({
    ──────────────────────────────────────────────────────────────────────── */
 
 /** Channels Quincy can publish to today. A subset of CHANNEL_RULES. */
-export const CONNECTABLE_CHANNELS = ["x", "linkedin"] as const
+export const CONNECTABLE_CHANNELS = ["x", "linkedin", "instagram"] as const
 
 export type ConnectableChannel = (typeof CONNECTABLE_CHANNELS)[number]
 
