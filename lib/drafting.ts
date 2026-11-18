@@ -243,7 +243,7 @@ export const CHANNEL_TONE: Record<string, string> = {
   x: `nothing is hidden, so length is a choice rather than a constraint — a short line reads as deliberate here, and white space is pacing, not an unfinished thought; a link costs a flat 23 of the ceiling whatever its length, so it earns its place or it goes`,
   linkedin: `the opening line has to work with nothing else visible — it is the whole post for most of the feed, so it cannot be the setup half of a payoff that lives on line two, and it is a first sentence rather than a title`,
   threads: `it reads as a reply even when nothing came before it — plain, spoken, no announcement voice and no framing of the thing before saying it`,
-  instagram: `the caption is read second, by someone who has already looked at the image and has one tap of patience — say the thing before the fold or it is not read`,
+  instagram: `the caption is read second, by someone who has already looked at the picture and has one tap of patience — say the thing before the fold or it is not read. The picture is a card of these same words, so do not write a second post for it. At most 30 hashtags, and none unless the brain shows this person uses them`,
   bluesky: `a smaller room of people who build things — write it as one of them talking, not as an account addressing an audience`,
   substack: `nobody is scrolling past this one; the reader opened it on purpose, so it can start where a feed post would have had to hook first`,
   kit: `it arrives in an inbox addressed to one person — write to that person, singular, and never to "everyone who follows along"`,

@@ -64,6 +64,8 @@ const GRANTS: Record<string, string> = {
   linkedin:
     "Quincy will be able to publish posts as you. It cannot read your feed, your existing posts, or your engagement.",
   x: "Quincy will be able to publish posts as you, and read back the ones it published so it can report how they did.",
+  instagram:
+    "Quincy will be able to publish posts as you — a picture of the words, plus the caption — and read back how each one did.",
 }
 
 /** Where to take the permission away at the source. */
@@ -75,6 +77,10 @@ const REVOKE_AT: Record<string, { label: string; href: string }> = {
   x: {
     label: "X connected apps",
     href: "https://x.com/settings/connected_apps",
+  },
+  instagram: {
+    label: "Instagram apps and websites",
+    href: "https://www.instagram.com/accounts/manage_access/",
   },
 }
 

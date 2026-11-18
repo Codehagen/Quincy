@@ -228,13 +228,24 @@ export const LIVE: readonly CatalogueEntry[] = [
     setup: "one click, renewed every 60 days",
     short: "One click · 60 days",
   },
+  {
+    id: "instagram",
+    glyph: "instagram",
+    name: "Instagram",
+    kind: "channel",
+    line: "Posts as you",
+    gives:
+      "I publish what you approve, as a picture of the words plus the caption, and read back how each one did against your own median.",
+    tags: ["Posts", "Captions"],
+    setup: "one click, on a professional account",
+    short: "One click",
+  },
 ]
 
 /** The channels Quincy can name but not connect yet, in the order plan 005 takes them on. */
 export const LATER_CHANNELS: readonly CatalogueEntry[] = [
   later("threads", "Threads", "channel", "Short posts and replies", ["Posts"]),
   later("bluesky", "Bluesky", "channel", "Short posts on an open network", ["Posts"]),
-  later("instagram", "Instagram", "channel", "Carousels and captions", ["Carousels"]),
   later("youtube", "YouTube", "channel", "Videos and their descriptions", ["Videos"]),
   later("mastodon", "Mastodon", "channel", "Posts on your own instance", ["Posts"]),
   later("substack", "Substack", "channel", "Long posts and notes", ["Posts", "Notes"]),

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Linkedin01Icon, NewTwitterIcon } from "@hugeicons/core-free-icons"
+import { InstagramIcon, Linkedin01Icon, NewTwitterIcon } from "@hugeicons/core-free-icons"
 
 import { Mono, PanelBody, Segmented } from "@/components/kit"
 import { Hand } from "@/components/kit/bracket"
@@ -92,7 +92,11 @@ export function LineupFeed({ store, accounts, notes, weekSwitch }: { store: Line
         aria-label="Whose feed"
         value={channel}
         onValueChange={(c) => store.setFilter("channel", c)}
-        options={channels.map((c) => ({ value: c, label: CHANNEL_LABELS[c] ?? c, icon: c === "linkedin" ? Linkedin01Icon : NewTwitterIcon }))}
+        options={channels.map((c) => ({
+          value: c,
+          label: CHANNEL_LABELS[c] ?? c,
+          icon: c === "linkedin" ? Linkedin01Icon : c === "instagram" ? InstagramIcon : NewTwitterIcon,
+        }))}
       />
     ) : null
 

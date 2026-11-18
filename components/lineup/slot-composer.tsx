@@ -62,6 +62,7 @@ import { useControllable } from "@/components/kit/use-controllable"
 export const CHANNEL_LABELS: Record<string, string> = {
   x: "X",
   linkedin: "LinkedIn",
+  instagram: "Instagram",
 }
 
 /** What the parent already has, so the dialog can show it and refuse a repeat. */

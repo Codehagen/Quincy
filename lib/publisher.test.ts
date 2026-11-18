@@ -57,11 +57,13 @@ afterEach(() => {
 })
 
 describe("publisherFor", () => {
-  it("resolves X and LinkedIn first-party", () => {
+  it("resolves X, LinkedIn and Instagram first-party", () => {
     expect(publisherFor("x").channel).toBe("x")
     expect(publisherFor("linkedin").channel).toBe("linkedin")
+    expect(publisherFor("instagram").channel).toBe("instagram")
     expect(canPublish("x")).toBe(true)
     expect(canPublish("linkedin")).toBe(true)
+    expect(canPublish("instagram")).toBe(true)
   })
 
   it("refuses an unknown channel with a result rather than a throw", async () => {
@@ -116,7 +118,101 @@ describe("publisherFor", () => {
   it("names an unknown channel by its id rather than as undefined", () => {
     expect(labelFor("x")).toBe("X")
     expect(labelFor("linkedin")).toBe("LinkedIn")
+    expect(labelFor("instagram")).toBe("Instagram")
     expect(labelFor("threads")).toBe("threads")
+  })
+})
+
+describe("the Instagram publisher", () => {
+  const postId = `sch_${"a".repeat(24)}`
+  const ig = () =>
+    inputFor({
+      channel: "instagram",
+      idempotencyKey: postId,
+      connection: { id: "cc_ig", externalId: "1789", handle: "@quincy" },
+    })
+
+  beforeEach(() => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://quincy.example")
+  })
+
+  it("creates a container, waits until it is finished, and publishes", async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, '{"id":"container-1"}'))
+      .mockResolvedValueOnce(reply(200, '{"status_code":"FINISHED"}'))
+      .mockResolvedValueOnce(reply(200, '{"id":"media-9"}'))
+      .mockResolvedValueOnce(
+        reply(200, '{"permalink":"https://www.instagram.com/p/abc/"}')
+      )
+
+    const result = await publisherFor("instagram").publish(ig())
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    const create = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(create[0]).toContain("/1789/media")
+    expect(JSON.parse(create[1].body as string).image_url).toBe(
+      `https://quincy.example/api/media/instagram/${postId}.jpg`
+    )
+    expect(JSON.parse(create[1].body as string).caption).toBe("A post.")
+    const publishCall = fetchMock.mock.calls[2] as [string, RequestInit]
+    expect(publishCall[0]).toContain("/media_publish")
+    expect(JSON.parse(publishCall[1].body as string)).toEqual({
+      creation_id: "container-1",
+    })
+    expect(result).toEqual({
+      ok: true,
+      externalId: "media-9",
+      url: "https://www.instagram.com/p/abc/",
+    })
+  })
+
+  it("does not publish when the image is not ready", async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, '{"id":"container-1"}'))
+      .mockResolvedValueOnce(reply(200, '{"status_code":"IN_PROGRESS"}'))
+      .mockResolvedValueOnce(reply(200, '{"status_code":"IN_PROGRESS"}'))
+
+    const result = await publisherFor("instagram").publish(ig())
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe("rejected")
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("media_publish")
+      )
+    ).toBe(false)
+  })
+
+  it("refuses a caption with too many hashtags before calling Instagram", async () => {
+    const tags = Array.from({ length: 31 }, (_, i) => `#t${i}`).join(" ")
+    const result = await publisherFor("instagram").publish({
+      ...ig(),
+      body: tags,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.message).toContain("31 hashtags")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a localhost origin before calling Instagram", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
+
+    const result = await publisherFor("instagram").publish(ig())
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.message).toContain("BETTER_AUTH_URL")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("reads a dead token as needs_reauth", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply(400, '{"error":{"code":190,"message":"bad token"}}')
+    )
+
+    const result = await publisherFor("instagram").publish(ig())
+
+    expect(result.ok === false && result.reason).toBe("needs_reauth")
   })
 })
 
@@ -129,9 +225,9 @@ describe("the X publisher", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe("https://api.x.com/2/tweets")
     expect(init.method).toBe("POST")
-    expect(
-      (init.headers as Record<string, string>).Authorization
-    ).toBe("Bearer token")
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer token"
+    )
     expect(JSON.parse(init.body as string)).toEqual({ text: "A post." })
 
     expect(result).toEqual({
@@ -227,12 +323,10 @@ describe("the LinkedIn publisher", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe("https://api.linkedin.com/rest/posts")
-    expect(
-      (init.headers as Record<string, string>)["LinkedIn-Version"]
-    ).toBe("202508")
-    expect(JSON.parse(init.body as string).author).toBe(
-      "urn:li:person:sub-7"
+    expect((init.headers as Record<string, string>)["LinkedIn-Version"]).toBe(
+      "202508"
     )
+    expect(JSON.parse(init.body as string).author).toBe("urn:li:person:sub-7")
 
     expect(result).toEqual({
       ok: true,

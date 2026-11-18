@@ -67,18 +67,26 @@ export function DraftFeed({
   field: FeedField
   onStartEdit?: () => void
 }) {
-  const shown = platform === "linkedin" ? posts.slice(0, 1) : posts
+  const shown = platform === "x" ? posts : posts.slice(0, 1)
   const threadBeats = !field && shown.length === 3 && readBeats(shown.join("\n\n")) != null
-  const label = platform === "x" ? "X" : "LinkedIn"
+  const label = platform === "x" ? "X" : platform === "instagram" ? "Instagram" : "LinkedIn"
   const items = shown.map((p, i) => {
     const post = (
       <FeedPost key={i} initials={account.initials} avatarUrl={account.avatarUrl}>
         <FeedPost.Header
           name={account.name}
-          handle={platform === "x" ? (account.handle ?? undefined) : undefined}
+          handle={platform === "linkedin" ? undefined : (account.handle ?? undefined)}
           headline={platform === "linkedin" ? (account.headline ?? undefined) : undefined}
         />
         <FeedPost.Body>
+          {platform === "instagram" && !field ? (
+            <div className="ig-frame" aria-hidden>
+              {p}
+            </div>
+          ) : null}
+          {platform === "instagram" && !field ? (
+            <p className="ig-note">Goes out as a picture of these words, plus this caption.</p>
+          ) : null}
           {field ? (
             <FeedPost.Field
               value={field.posts[i]!}

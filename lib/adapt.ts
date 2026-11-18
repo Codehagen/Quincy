@@ -187,21 +187,25 @@ export type Adapter = (input: {
 /**
  * The channels an adaptation becomes.
  *
- * Narrowed to what the user can actually publish to, with the same fallback
- * `targetsFor` in lib/drafting.ts makes and for the same reason: a new user
- * with nothing connected must still be able to press the button and get
- * somewhere. Defaults to X and LinkedIn because those are the two channels
- * `CONNECTABLE_CHANNELS` supports — an adaptation of a short social post is a
- * short social post, not an essay, so there is no shape to map here.
+ * Narrowed to what the user can actually publish to. A new user with
+ * nothing connected still gets X and LinkedIn, so the button has somewhere
+ * to land, and does not pay for an Instagram draft until Instagram is
+ * connected. An adaptation of a short social post is a short social post,
+ * not an essay, so there is no shape to map here.
  */
 export function adaptTargets(connectedChannels: string[]): AdaptTarget[] {
   const supported = [
     { id: "x", label: "X" },
     { id: "linkedin", label: "LinkedIn" },
+    { id: "instagram", label: "Instagram" },
   ]
+  const fallback = ["x", "linkedin"]
   const connected = new Set(connectedChannels)
   const narrowed = supported.filter((c) => connected.has(c.id))
-  const chosen = narrowed.length > 0 ? narrowed : supported
+  const chosen =
+    narrowed.length > 0
+      ? narrowed
+      : supported.filter((channel) => fallback.includes(channel.id))
 
   return chosen.map((c) => ({
     id: c.id,

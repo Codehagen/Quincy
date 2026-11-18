@@ -74,6 +74,8 @@ const CONNECT_ERRORS: Record<string, string> = {
   exchange_failed:
     "The provider rejected the connection. If this repeats, the app credentials may be wrong.",
   not_configured: "This deployment has no credentials for that channel.",
+  not_professional:
+    "That Instagram account is personal. Publishing needs a professional account — switch it to Business or Creator, then connect again.",
 }
 
 export const metadata = constructMetadata({
