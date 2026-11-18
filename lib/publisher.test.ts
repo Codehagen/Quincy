@@ -149,6 +149,7 @@ describe("the Instagram publisher", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
     const create = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(create[0]).toContain("https://graph.facebook.com/")
     expect(create[0]).toContain("/1789/media")
     expect(JSON.parse(create[1].body as string).image_url).toBe(
       `https://quincy.example/api/media/instagram/${postId}.jpg`

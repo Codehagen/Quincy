@@ -11,7 +11,7 @@ import {
   saveConnection,
   type ConnectHandshake,
 } from "@/lib/channels"
-import { InstagramAccountError } from "@/lib/instagram"
+import { InstagramConnectError } from "@/lib/instagram"
 import { ensureStarterSlots } from "@/lib/scheduling"
 
 /**
@@ -187,8 +187,8 @@ export async function GET(
 
     return back(channel, { connected: "1" }, next)
   } catch (error) {
-    if (error instanceof InstagramAccountError) {
-      return back(channel, { error: "not_professional" }, next)
+    if (error instanceof InstagramConnectError) {
+      return back(channel, { error: error.code }, next)
     }
     // The message can carry a fragment of the provider's response, so it is
     // logged rather than put in the URL.

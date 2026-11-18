@@ -97,7 +97,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     name: "Publishing to Instagram",
-    vars: ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"],
+    vars: ["META_APP_ID", "META_APP_SECRET", "META_LOGIN_CONFIG_ID"],
     without:
       "Instagram cannot be connected, so nothing publishes there. The landing page lists it as next until these are set",
   },

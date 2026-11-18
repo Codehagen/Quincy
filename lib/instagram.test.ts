@@ -4,38 +4,51 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   captionProblem,
+  chooseInstagramAccount,
   countHashtags,
   exchangeInstagramCode,
   grantLooksRevoked,
   insightsFromPayload,
   INSTAGRAM_DAILY_CAP,
   INSTAGRAM_HASHTAG_LIMIT,
+  instagramAuthorizeUrl,
   instagramCardPath,
   instagramManualWait,
   INSTAGRAM_MANUAL_COOLDOWN_MS,
   overInstagramDailyCap,
   postIdFromCardFile,
   publicInstagramImageUrl,
-  readShortLived,
+  readTokenResponse,
   stripAuthorizationCode,
 } from "./instagram"
 
-describe("Instagram token parsing", () => {
-  it("reads the wrapped short-lived payload and normalises permissions", () => {
-    expect(
-      readShortLived({
-        data: [
-          {
-            access_token: "short",
-            user_id: "99",
-            permissions:
-              "instagram_business_basic,instagram_business_content_publish",
-          },
-        ],
+describe("Unified login", () => {
+  it("builds a config_id dialog and does not send a scope", () => {
+    const url = new URL(
+      instagramAuthorizeUrl({
+        appId: "1312197614370991",
+        configId: "cfg_1",
+        redirectUri: "https://hirequincy.com/api/connect/instagram/callback",
+        state: "state",
+        version: "v25.0",
       })
+    )
+    expect(url.origin + url.pathname).toBe(
+      "https://www.facebook.com/v25.0/dialog/oauth"
+    )
+    expect(url.searchParams.get("config_id")).toBe("cfg_1")
+    expect(url.searchParams.get("response_type")).toBe("code")
+    expect(url.searchParams.get("override_default_response_type")).toBe("true")
+    expect(url.searchParams.has("scope")).toBe(false)
+    expect(url.searchParams.get("client_id")).toBe("1312197614370991")
+  })
+
+  it("reads a non-expiring token as having no expiry", () => {
+    expect(
+      readTokenResponse({ access_token: "sua", token_type: "bearer" })
     ).toEqual({
-      accessToken: "short",
-      scope: "instagram_business_basic instagram_business_content_publish",
+      accessToken: "sua",
+      expiresAt: null,
     })
   })
 
@@ -43,56 +56,51 @@ describe("Instagram token parsing", () => {
     expect(stripAuthorizationCode("abc#_")).toBe("abc")
   })
 
-  it("exchanges the code and then the short-lived token, and does not keep the short one", async () => {
+  it("exchanges the code on graph.facebook.com and records granted permissions", async () => {
     const fetchImpl = vi.fn()
     fetchImpl
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "sua", token_type: "bearer" }), {
+          status: 200,
+        })
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
             data: [
-              {
-                access_token: "short",
-                user_id: "1",
-                permissions: "instagram_business_basic",
-              },
+              { permission: "instagram_basic", status: "granted" },
+              { permission: "instagram_content_publish", status: "declined" },
             ],
           }),
           { status: 200 }
         )
       )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: "long",
-            token_type: "bearer",
-            expires_in: 60,
-          }),
-          {
-            status: 200,
-          }
-        )
-      )
 
     const tokens = await exchangeInstagramCode({
       code: "authcode#_",
-      redirectUri: "https://quincy.example/api/connect/instagram/callback",
-      clientId: "app",
+      redirectUri: "https://hirequincy.com/api/connect/instagram/callback",
+      clientId: "1312197614370991",
       clientSecret: "secret",
       fetchImpl,
+      env: { META_GRAPH_VERSION: "v25.0" },
     })
 
-    expect(tokens.accessToken).toBe("long")
+    expect(tokens.accessToken).toBe("sua")
     expect(tokens.refreshToken).toBeNull()
-    expect(tokens.scope).toBe("instagram_business_basic")
-    expect(tokens.expiresAt).not.toBeNull()
+    expect(tokens.expiresAt).toBeNull()
+    expect(tokens.scope).toBe("instagram_basic")
 
-    const first = fetchImpl.mock.calls[0] as [string, RequestInit]
-    expect(first[0]).toBe("https://api.instagram.com/oauth/access_token")
-    expect(first[1].body).toBeInstanceOf(FormData)
-    const second = String(fetchImpl.mock.calls[1]?.[0])
-    expect(second).toContain("grant_type=ig_exchange_token")
-    expect(second).toContain("access_token=short")
-    expect(second).not.toContain("authcode")
+    const exchangeUrl = String(fetchImpl.mock.calls[0]?.[0])
+    expect(exchangeUrl).toContain("https://graph.facebook.com/v25.0/oauth/access_token")
+    expect(exchangeUrl).toContain("code=authcode")
+    expect(exchangeUrl).not.toContain("authcode#_")
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain("/me/permissions")
+  })
+
+  it("connects the one shared account and refuses none or several", () => {
+    expect(chooseInstagramAccount([{ id: "1789", username: "quincy" }]).id).toBe("1789")
+    expect(() => chooseInstagramAccount([])).toThrow(/professional account/)
+    expect(() => chooseInstagramAccount([{ id: "1" }, { id: "2" }])).toThrow(/more than one/)
   })
 })
 

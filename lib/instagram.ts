@@ -1,17 +1,23 @@
+import { createHmac } from "node:crypto"
+
 import type { PublishResult } from "./publisher"
 
 /**
  * Instagram, as a channel beside X and LinkedIn.
  *
- * Login is Instagram API with Instagram Login (Business Login), not
- * Facebook Login. Quincy's connect round-trip is one account and one
- * redirect. Facebook Login would add a Page picker and a second id, and
- * nothing else in this codebase has a place to put either.
+ * New Meta apps do not offer "API setup with Instagram login". They offer
+ * API setup with Unified login, which is Facebook Login for Business: one
+ * configuration id, the Meta app id and secret, and a system-user token on
+ * graph.facebook.com. There is no separate Instagram app id.
  *
- * A long-lived token lasts about 60 days and is refreshed by sending the
- * access token back — there is no refresh_token. The secret on the
- * short-to-long exchange travels in the query string, which is why this
- * file owns that call instead of the shared form-body helper.
+ * The dialog is still one redirect. The person signs in, picks a business
+ * portfolio, and shares one Instagram professional account. We store that
+ * account. A Page is not required, and we do not send a scope list — the
+ * configuration is the scope list, and sending `scope` is what new apps
+ * reject.
+ *
+ * A system-user token configured to never expire has no refresh grant. A
+ * missing `expires_in` is that case, not a token we forgot to extend.
  *
  * The timeout matches `PLATFORM_TIMEOUT_MS` in lib/channels.ts. It lives
  * here so this file does not import that one: channels.ts imports this.
@@ -19,10 +25,17 @@ import type { PublishResult } from "./publisher"
 
 const TIMEOUT_MS = 10_000
 
-export const INSTAGRAM_SCOPES = [
-  "instagram_business_basic",
-  "instagram_business_content_publish",
-  "instagram_business_manage_insights",
+/**
+ * What the Facebook Login for Business configuration must grant.
+ *
+ * These are not the Instagram Login names (`instagram_business_*`). Unified
+ * login's supported list is the `instagram_*` set. The code does not send
+ * them; the dashboard configuration does.
+ */
+export const INSTAGRAM_CONFIG_PERMISSIONS = [
+  "instagram_basic",
+  "instagram_content_publish",
+  "instagram_manage_insights",
 ] as const
 
 /** Meta's published caption ceiling. Also `CHANNEL_RULES.instagram.limit`. */
@@ -46,20 +59,39 @@ export const INSTAGRAM_DAILY_CAP = 25
  */
 export const INSTAGRAM_MANUAL_COOLDOWN_MS = 10 * 60 * 1000
 
-const GRAPH_HOST = "https://graph.instagram.com"
+const GRAPH_HOST = "https://graph.facebook.com"
 const STATUS_WAIT_MS = 400
 const STATUS_TRIES = 2
 
 export function instagramGraphVersion(
-  env: NodeJS.ProcessEnv = process.env
+  env: Record<string, string | undefined> = process.env
 ): string {
-  const version = env.INSTAGRAM_GRAPH_VERSION?.trim()
-  return version && /^v\d+\.\d+$/.test(version) ? version : "v22.0"
+  const version = env.META_GRAPH_VERSION?.trim()
+  return version && /^v\d+\.\d+$/.test(version) ? version : "v25.0"
 }
 
-function graph(path: string, env?: NodeJS.ProcessEnv): string {
+function graph(
+  path: string,
+  env: Record<string, string | undefined> = process.env
+): string {
   const suffix = path.startsWith("/") ? path : `/${path}`
   return `${GRAPH_HOST}/${instagramGraphVersion(env)}${suffix}`
+}
+
+/** Proof that a server call was made with the app secret. Omitted when the secret is unset. */
+function withProof(
+  url: string,
+  accessToken: string,
+  env: Record<string, string | undefined>
+): string {
+  const secret = env.META_APP_SECRET
+  if (!secret) return url
+  const signed = new URL(url)
+  signed.searchParams.set(
+    "appsecret_proof",
+    createHmac("sha256", secret).update(accessToken).digest("hex")
+  )
+  return signed.toString()
 }
 
 /** Meta appends `#_` to the redirect. The fragment never reaches us; a proxy that folds it into the query does. */
@@ -85,16 +117,72 @@ export class InstagramTokenError extends Error {
   }
 }
 
-/** A personal Instagram account cannot publish. Said so the callback can name it. */
-export class InstagramAccountError extends Error {
-  readonly code = "not_professional" as const
+/**
+ * The consent screen shared no account, or more than one.
+ *
+ * Quincy stores one Instagram account per person. The Meta dialog is the
+ * picker; we do not add a second one.
+ */
+export class InstagramConnectError extends Error {
+  readonly code: "no_instagram_account" | "several_instagram_accounts"
 
-  constructor() {
+  constructor(code: "no_instagram_account" | "several_instagram_accounts") {
     super(
-      "Instagram connected a personal account. Publishing needs a professional account — Business or Creator."
+      code === "no_instagram_account"
+        ? "Instagram did not share a professional account."
+        : "Instagram shared more than one account."
     )
-    this.name = "InstagramAccountError"
+    this.name = "InstagramConnectError"
+    this.code = code
   }
+}
+
+export type SharedInstagramAccount = { id: string; username?: string }
+
+/**
+ * One shared account is the connection. None, or more than one, is a
+ * refusal — including a single row that says another page exists.
+ */
+export function chooseInstagramAccount(
+  accounts: SharedInstagramAccount[],
+  more = false
+): SharedInstagramAccount {
+  const account = accounts[0]
+  if (!account?.id) throw new InstagramConnectError("no_instagram_account")
+  if (more || accounts.length > 1) {
+    throw new InstagramConnectError("several_instagram_accounts")
+  }
+  return account
+}
+
+/**
+ * The authorize URL for a system-user configuration.
+ *
+ * `config_id` replaces `scope`. `override_default_response_type` is required
+ * so the dialog returns a code rather than a token in the fragment.
+ */
+export function instagramAuthorizeUrl({
+  appId,
+  configId,
+  redirectUri,
+  state,
+  version = "v25.0",
+}: {
+  appId: string
+  configId: string
+  redirectUri: string
+  state: string
+  version?: string
+}): string {
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    state,
+    response_type: "code",
+    config_id: configId,
+    override_default_response_type: "true",
+  })
+  return `https://www.facebook.com/${version}/dialog/oauth?${params.toString()}`
 }
 
 export type InstagramTokens = {
@@ -112,51 +200,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-/**
- * The short-lived response is `{ data: [{ access_token, user_id, permissions }] }`.
- * A flat body is accepted too — older samples returned one.
- */
-export function readShortLived(payload: unknown): {
+/** The code exchange on graph.facebook.com. A missing expires_in is a non-expiring system-user token. */
+export function readTokenResponse(payload: unknown): {
   accessToken: string
-  scope: string | null
+  expiresAt: Date | null
 } {
-  const root = asRecord(payload)
-  const row = Array.isArray(root?.data) ? asRecord(root.data[0]) : root
-  const accessToken = row?.access_token
-  if (typeof accessToken !== "string" || !accessToken) {
-    throw new Error("Instagram token response contained no access_token.")
-  }
-  const permissions = row?.permissions
-  const scope =
-    typeof permissions === "string"
-      ? permissions
-          .split(/[\s,]+/)
-          .filter(Boolean)
-          .join(" ")
-      : null
-  return { accessToken, scope }
-}
-
-function readLongLived(
-  payload: unknown,
-  fallbackScope: string | null
-): InstagramTokens {
   const root = asRecord(payload)
   const accessToken = root?.access_token
   if (typeof accessToken !== "string" || !accessToken) {
-    throw new Error(
-      "Instagram long-lived token response contained no access_token."
-    )
+    throw new Error("Instagram token response contained no access_token.")
   }
   const expiresIn = root?.expires_in
   return {
     accessToken,
-    refreshToken: null,
     expiresAt:
-      typeof expiresIn === "number"
+      typeof expiresIn === "number" && expiresIn > 0
         ? new Date(Date.now() + expiresIn * 1000)
         : null,
-    scope: fallbackScope,
   }
 }
 
@@ -165,11 +225,9 @@ async function readBody(response: Response): Promise<string> {
 }
 
 /**
- * Code for a short-lived token, then that token for a 60-day one.
- *
- * The short-lived token is not what we store. It dies in an hour, and a
- * connection that looks connected and cannot post tomorrow is worse than
- * a connect that fails in front of the person.
+ * Exchange the code for the system-user token, then read which permissions
+ * were actually granted. A permissions failure does not fail the connect —
+ * the token is the credential, and a later call is what proves a missing grant.
  */
 export async function exchangeInstagramCode({
   code,
@@ -177,99 +235,68 @@ export async function exchangeInstagramCode({
   clientId,
   clientSecret,
   fetchImpl = fetch,
+  env = process.env,
 }: {
   code: string
   redirectUri: string
   clientId: string
   clientSecret: string
   fetchImpl?: FetchLike
+  env?: Record<string, string | undefined>
 }): Promise<InstagramTokens> {
-  const form = new FormData()
-  form.set("client_id", clientId)
-  form.set("client_secret", clientSecret)
-  form.set("grant_type", "authorization_code")
-  form.set("redirect_uri", redirectUri)
-  form.set("code", stripAuthorizationCode(code))
-
-  const short = await fetchImpl(
-    "https://api.instagram.com/oauth/access_token",
-    {
-      method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }
-  )
-  const shortBody = await readBody(short)
-  if (!short.ok) {
-    throw new InstagramTokenError(
-      `Instagram token request failed (${short.status}): ${shortBody.slice(0, 300)}`,
-      shortBody
-    )
-  }
-
-  let shortJson: unknown
-  try {
-    shortJson = JSON.parse(shortBody)
-  } catch {
-    throw new Error("Instagram token response was not JSON.")
-  }
-  const minted = readShortLived(shortJson)
-
   const params = new URLSearchParams({
-    grant_type: "ig_exchange_token",
+    client_id: clientId,
     client_secret: clientSecret,
-    access_token: minted.accessToken,
-  })
-  const long = await fetchImpl(
-    `https://graph.instagram.com/access_token?${params.toString()}`,
-    { signal: AbortSignal.timeout(TIMEOUT_MS) }
-  )
-  const longBody = await readBody(long)
-  if (!long.ok) {
-    throw new InstagramTokenError(
-      `Instagram long-lived token exchange failed (${long.status}): ${longBody.slice(0, 300)}`,
-      longBody
-    )
-  }
-  try {
-    return readLongLived(JSON.parse(longBody), minted.scope)
-  } catch (cause) {
-    throw new Error(
-      cause instanceof Error
-        ? cause.message
-        : "Instagram long-lived token was unreadable."
-    )
-  }
-}
-
-/** Refresh the long-lived token. It must be at least a day old and not yet expired. */
-export async function refreshInstagramAccess(
-  accessToken: string,
-  fetchImpl: FetchLike = fetch
-): Promise<InstagramTokens> {
-  const params = new URLSearchParams({
-    grant_type: "ig_refresh_token",
-    access_token: accessToken,
+    redirect_uri: redirectUri,
+    code: stripAuthorizationCode(code),
   })
   const response = await fetchImpl(
-    `https://graph.instagram.com/refresh_access_token?${params.toString()}`,
+    `${graph("/oauth/access_token", env)}?${params.toString()}`,
     { signal: AbortSignal.timeout(TIMEOUT_MS) }
   )
   const body = await readBody(response)
   if (!response.ok) {
     throw new InstagramTokenError(
-      `Instagram token refresh failed (${response.status}): ${body.slice(0, 300)}`,
+      `Instagram token request failed (${response.status}): ${body.slice(0, 300)}`,
       body
     )
   }
+  let minted: ReturnType<typeof readTokenResponse>
   try {
-    return readLongLived(JSON.parse(body), null)
+    minted = readTokenResponse(JSON.parse(body))
   } catch (cause) {
     throw new Error(
-      cause instanceof Error
-        ? cause.message
-        : "Instagram refresh response was unreadable."
+      cause instanceof Error ? cause.message : "Instagram token response was not JSON."
     )
+  }
+
+  let scope: string | null = null
+  try {
+    const grants = await fetchImpl(
+      withProof(`${graph("/me/permissions", env)}`, minted.accessToken, env),
+      {
+        headers: { Authorization: `Bearer ${minted.accessToken}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      }
+    )
+    if (grants.ok) {
+      const parsed = (await grants.json()) as {
+        data?: { permission?: string; status?: string }[]
+      }
+      const granted = (parsed.data ?? [])
+        .filter((entry) => entry.status === "granted" && entry.permission)
+        .map((entry) => entry.permission as string)
+      if (granted.length > 0) scope = granted.join(" ")
+    }
+  } catch {
+    scope = null
+  }
+
+  return {
+    accessToken: minted.accessToken,
+    refreshToken: null,
+    expiresAt: minted.expiresAt,
+    scope,
   }
 }
 
@@ -280,46 +307,70 @@ export type InstagramProfile = {
   avatarUrl: string | null
 }
 
-export function isProfessionalAccount(accountType: unknown): boolean {
-  return accountType === "BUSINESS" || accountType === "MEDIA_CREATOR"
+async function graphGet(
+  path: string,
+  accessToken: string,
+  fetchImpl: FetchLike,
+  env: Record<string, string | undefined>
+): Promise<{ ok: boolean; status: number; body: string; json: Record<string, unknown> | null }> {
+  const response = await fetchImpl(withProof(graph(path, env), accessToken, env), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  const body = await readBody(response)
+  let json: Record<string, unknown> | null = null
+  try {
+    json = asRecord(JSON.parse(body))
+  } catch {
+    json = null
+  }
+  return { ok: response.ok, status: response.status, body, json }
 }
 
 export async function fetchInstagramProfile(
   accessToken: string,
   fetchImpl: FetchLike = fetch,
-  env: NodeJS.ProcessEnv = process.env
+  env: Record<string, string | undefined> = process.env
 ): Promise<InstagramProfile> {
-  const response = await fetchImpl(
-    `${graph("/me", env)}?fields=user_id,username,name,profile_picture_url,account_type`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }
+  const listed = await graphGet(
+    "/me/assigned_instagram_accounts?fields=id,username&limit=2",
+    accessToken,
+    fetchImpl,
+    env
   )
-  const body = await readBody(response)
-  if (!response.ok) {
+  if (!listed.ok) {
     throw new Error(
-      `Instagram profile lookup failed (${response.status}): ${body.slice(0, 200)}`
+      `Instagram account lookup failed (${listed.status}): ${listed.body.slice(0, 200)}`
     )
   }
-  const profile = JSON.parse(body) as {
-    user_id?: string
-    id?: string
-    username?: string
-    name?: string
-    profile_picture_url?: string
-    account_type?: string
+  const data = Array.isArray(listed.json?.data) ? listed.json.data : []
+  const accounts = data.flatMap((entry) => {
+    const row = asRecord(entry)
+    return typeof row?.id === "string" ? [{ id: row.id, username: typeof row.username === "string" ? row.username : undefined }] : []
+  })
+  // `limit=2` is the whole question: zero, one, or more than one. A cursor
+  // left on a final page of one is not a second account.
+  const chosen = chooseInstagramAccount(accounts, accounts.length > 1)
+
+  const profile = await graphGet(
+    `/${chosen.id}?fields=id,username,name,profile_picture_url`,
+    accessToken,
+    fetchImpl,
+    env
+  )
+  if (!profile.ok) {
+    throw new Error(
+      `Instagram profile lookup failed (${profile.status}): ${profile.body.slice(0, 200)}`
+    )
   }
-  if (profile.account_type && !isProfessionalAccount(profile.account_type)) {
-    throw new InstagramAccountError()
-  }
-  const externalId = profile.user_id ?? profile.id
-  if (!externalId) throw new Error("Instagram returned no account id.")
+  const username = typeof profile.json?.username === "string" ? profile.json.username : chosen.username
+  const name = typeof profile.json?.name === "string" ? profile.json.name : null
+  const picture = typeof profile.json?.profile_picture_url === "string" ? profile.json.profile_picture_url : null
   return {
-    externalId,
-    handle: profile.username ? `@${profile.username.replace(/^@/, "")}` : null,
-    displayName: profile.name ?? profile.username ?? null,
-    avatarUrl: profile.profile_picture_url ?? null,
+    externalId: chosen.id,
+    handle: username ? `@${username.replace(/^@/, "")}` : null,
+    displayName: name ?? username ?? null,
+    avatarUrl: picture,
   }
 }
 
@@ -334,7 +385,7 @@ export async function probeInstagram(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<Liveness> {
   try {
-    const response = await fetchImpl(`${graph("/me", env)}?fields=user_id`, {
+    const response = await fetchImpl(withProof(`${graph("/me", env)}?fields=id`, accessToken, env), {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
@@ -367,7 +418,7 @@ export async function revokeInstagram(
   fetchImpl: FetchLike = fetch,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> {
-  await fetchImpl(graph("/me/permissions", env), {
+  await fetchImpl(withProof(graph("/me/permissions", env), accessToken, env), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -525,7 +576,7 @@ export async function publishInstagramImage({
     "Content-Type": "application/json",
   }
   const created = await jsonOrText(
-    await fetchImpl(graph(`/${igUserId}/media`, env), {
+    await fetchImpl(withProof(graph(`/${igUserId}/media`, env), accessToken, env), {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -551,7 +602,7 @@ export async function publishInstagramImage({
   for (let attempt = 0; attempt < STATUS_TRIES; attempt++) {
     if (attempt > 0) await sleep(STATUS_WAIT_MS)
     const check = await jsonOrText(
-      await fetchImpl(`${graph(`/${containerId}`, env)}?fields=status_code`, {
+      await fetchImpl(withProof(`${graph(`/${containerId}`, env)}?fields=status_code`, accessToken, env), {
         headers: { Authorization: `Bearer ${accessToken}` },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
@@ -578,7 +629,7 @@ export async function publishInstagramImage({
   }
 
   const published = await jsonOrText(
-    await fetchImpl(graph(`/${igUserId}/media_publish`, env), {
+    await fetchImpl(withProof(graph(`/${igUserId}/media_publish`, env), accessToken, env), {
       method: "POST",
       headers,
       body: JSON.stringify({ creation_id: containerId }),
@@ -597,7 +648,7 @@ export async function publishInstagramImage({
   }
 
   const link = await jsonOrText(
-    await fetchImpl(`${graph(`/${mediaId}`, env)}?fields=permalink`, {
+    await fetchImpl(withProof(`${graph(`/${mediaId}`, env)}?fields=permalink`, accessToken, env), {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
@@ -682,7 +733,7 @@ export async function fetchInstagramInsights(
 > {
   const metric = "views,likes,comments,shares,saved,reach"
   const response = await fetchImpl(
-    `${graph(`/${mediaId}/insights`, env)}?metric=${metric}`,
+    withProof(`${graph(`/${mediaId}/insights`, env)}?metric=${metric}`, accessToken, env),
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),

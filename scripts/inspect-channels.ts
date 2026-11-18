@@ -75,8 +75,9 @@ async function live(userId: string, channel: ConnectableChannel) {
   }
 
   if (channel === "instagram") {
+    const version = process.env.META_GRAPH_VERSION?.trim() || "v25.0"
     const response = await fetch(
-      "https://graph.instagram.com/v22.0/me?fields=user_id,username",
+      `https://graph.facebook.com/${version}/me/assigned_instagram_accounts?fields=id,username`,
       { headers: { Authorization: `Bearer ${access.accessToken}` } }
     )
 
@@ -88,14 +89,14 @@ async function live(userId: string, channel: ConnectableChannel) {
       return
     }
 
-    const me = (await response.json()) as {
-      username?: string
-      user_id?: string
+    const listed = (await response.json()) as {
+      data?: { id?: string; username?: string }[]
     }
+    const account = listed.data?.[0]
     console.log(
-      `    token        works — Instagram says this is @${me.username}`
+      `    token        works — Instagram says this is @${account?.username ?? "—"}`
     )
-    console.log(`    ig user id   ${me.user_id ?? "—"}`)
+    console.log(`    ig user id   ${account?.id ?? "—"}`)
     return
   }
 

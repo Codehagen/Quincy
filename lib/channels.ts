@@ -6,9 +6,10 @@ import { db } from "./db"
 import {
   exchangeInstagramCode,
   fetchInstagramProfile,
+  instagramAuthorizeUrl,
+  instagramGraphVersion,
   InstagramTokenError,
   probeInstagram,
-  refreshInstagramAccess,
   revokeInstagram,
 } from "./instagram"
 import {
@@ -68,15 +69,16 @@ type ChannelConfig = {
   /**
    * How a stale access token is renewed.
    *
-   * `token` — a refresh_token grant (X). `access` — the access token is
-   * itself the credential you send back (Instagram's long-lived token).
-   * `none` — it ends, and the person comes back (LinkedIn).
+   * `token` — a refresh_token grant (X). `none` — it ends, and the person
+   * comes back (LinkedIn, and an Instagram token that was given an expiry).
    */
-  refresh: "token" | "access" | "none"
-  /** Space for X and LinkedIn. Instagram's dialog wants commas. */
+  refresh: "token" | "none"
+  /** Space for X and LinkedIn. Instagram sends no scope — the configuration is the list. */
   scopeJoin: " " | ","
-  /** Extra authorize query params. Read at call time, like the credentials. */
-  authorizeParams?: Record<string, string>
+  /** False for Instagram. Sending `scope` is what a new Meta app rejects. */
+  sendScope: boolean
+  /** Present only when the channel cannot be offered without it. */
+  configId?: string
   clientId?: string
   clientSecret?: string
 }
@@ -114,6 +116,7 @@ function config(channel: ConnectableChannel): ChannelConfig {
         tokenAuth: "basic",
         refresh: "token",
         scopeJoin: " ",
+        sendScope: true,
         clientId: process.env.X_CLIENT_ID,
         clientSecret: process.env.X_CLIENT_SECRET,
       }
@@ -127,33 +130,31 @@ function config(channel: ConnectableChannel): ChannelConfig {
         tokenAuth: "body",
         refresh: "none",
         scopeJoin: " ",
+        sendScope: true,
         clientId: process.env.LINKEDIN_CLIENT_ID,
         clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
       }
-    case "instagram":
+    case "instagram": {
+      const version = instagramGraphVersion()
       return {
         label: "Instagram",
-        authorizationUrl: "https://www.instagram.com/oauth/authorize",
-        // The code exchange is multipart and then a second call. This URL is
-        // the short-lived host, named so a probe can show where the code goes.
-        tokenUrl: "https://api.instagram.com/oauth/access_token",
-        // Frozen the same way as the others. Insights is the one extra scope,
-        // and it is what lets a post be read against this account's own median.
-        // Adding another sends everyone back through consent.
-        scopes: [
-          "instagram_business_basic",
-          "instagram_business_content_publish",
-          "instagram_business_manage_insights",
-        ],
+        authorizationUrl: `https://www.facebook.com/${version}/dialog/oauth`,
+        tokenUrl: `https://graph.facebook.com/${version}/oauth/access_token`,
+        // Not sent. The Facebook Login for Business configuration is the
+        // scope list; a `scope` parameter is what a new Meta app rejects.
+        scopes: [],
         pkce: false,
         tokenAuth: "body",
-        refresh: "access",
-        scopeJoin: ",",
-        // Hide Facebook Login. This flow is the Instagram account itself.
-        authorizeParams: { enable_fb_login: "0" },
-        clientId: process.env.INSTAGRAM_APP_ID,
-        clientSecret: process.env.INSTAGRAM_APP_SECRET,
+        // A system-user token set to never expire has nothing to refresh.
+        // A 60-day configuration ages out and the person reconnects.
+        refresh: "none",
+        scopeJoin: " ",
+        sendScope: false,
+        configId: process.env.META_LOGIN_CONFIG_ID,
+        clientId: process.env.META_APP_ID,
+        clientSecret: process.env.META_APP_SECRET,
       }
+    }
   }
 }
 
@@ -171,8 +172,10 @@ export function isConnectableChannel(
  * broken rather than unfinished.
  */
 export function isChannelEnabled(channel: ConnectableChannel): boolean {
-  const { clientId, clientSecret } = config(channel)
-  return Boolean(clientId && clientSecret)
+  const { clientId, clientSecret, configId, sendScope } = config(channel)
+  if (!clientId || !clientSecret) return false
+  if (!sendScope && !configId) return false
+  return true
 }
 
 export function channelLabel(channel: ConnectableChannel): string {
@@ -282,12 +285,25 @@ export async function beginConnect(
 }> {
   const c = config(channel)
 
-  if (!c.clientId || !c.clientSecret) {
+  if (!c.clientId || !c.clientSecret || (!c.sendScope && !c.configId)) {
     throw new Error(`${c.label} is not configured.`)
   }
 
   const state = randomToken()
   const codeVerifier = randomToken()
+
+  if (channel === "instagram") {
+    return {
+      url: instagramAuthorizeUrl({
+        appId: c.clientId,
+        configId: c.configId!,
+        redirectUri: redirectUri(channel),
+        state,
+        version: instagramGraphVersion(),
+      }),
+      handshake: { channel, state, codeVerifier, ...(next ? { next } : {}) },
+    }
+  }
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -295,7 +311,6 @@ export async function beginConnect(
     redirect_uri: redirectUri(channel),
     scope: c.scopes.join(c.scopeJoin),
     state,
-    ...c.authorizeParams,
   })
 
   if (c.pkce) {
@@ -873,33 +888,25 @@ export async function getAccessToken(
 
   const mode = config(channel).refresh
 
-  // LinkedIn: nothing to refresh with. This is the expected end of a 60-day
-  // life, not a failure, and the daily cron will already have nudged.
-  // Instagram refreshes the access token itself, so a missing refresh_token
-  // column is not the end of the grant.
-  if (mode === "none" || (mode === "token" && !row.refreshToken)) {
+  // LinkedIn, and an Instagram system-user token: nothing to refresh with.
+  // LinkedIn's 60 days are expected. Instagram is configured not to expire;
+  // this branch is the one a 60-day configuration falls into.
+  if (mode === "none" || !row.refreshToken) {
     await markConnectionState(row.id, "needs_reauth")
     return { ok: false, reason: "needs_reauth" }
   }
 
   try {
-    const currentAccess = await symmetricDecrypt({
-      key: encryptionKey(),
-      data: row.accessToken,
-    })
-    const tokens =
-      mode === "access"
-        ? await refreshInstagramAccess(currentAccess)
-        : await postToken(
-            channel,
-            new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: await symmetricDecrypt({
-                key: encryptionKey(),
-                data: row.refreshToken!,
-              }),
-            })
-          )
+    const tokens = await postToken(
+      channel,
+      new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: await symmetricDecrypt({
+          key: encryptionKey(),
+          data: row.refreshToken,
+        }),
+      })
+    )
 
     const [updated] = await db
       .update(channelConnection)

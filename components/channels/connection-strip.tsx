@@ -79,8 +79,8 @@ const REVOKE_AT: Record<string, { label: string; href: string }> = {
     href: "https://x.com/settings/connected_apps",
   },
   instagram: {
-    label: "Instagram apps and websites",
-    href: "https://www.instagram.com/accounts/manage_access/",
+    label: "Meta connected apps",
+    href: "https://business.facebook.com/latest/settings/apps",
   },
 }
 
