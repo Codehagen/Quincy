@@ -8,6 +8,8 @@ import {
   INGEST_COOLDOWN_MS,
   INGEST_USAGE_LABEL,
   transcriptionCostMicros,
+  VOICE_COOLDOWN_MS,
+  VOICE_USAGE_LABEL,
 } from "./ingest-limits"
 
 /**
@@ -69,6 +71,22 @@ export async function recordIngestStart(userId: string): Promise<void> {
     userId,
     conversationId: INGEST_USAGE_LABEL,
     model: INGEST_USAGE_LABEL,
+    costMicros: 0,
+  })
+}
+
+/** Whether this person may clean another take's voice yet. Read-only. */
+export function voiceCooldown(userId: string) {
+  return spendCooldown(userId, VOICE_USAGE_LABEL, VOICE_COOLDOWN_MS)
+}
+
+/** One voice clean started: the cooldown's row, zero cost, like an ingest. */
+export async function recordVoiceStart(userId: string): Promise<void> {
+  await db.insert(usageEvent).values({
+    id: newUsageId(),
+    userId,
+    conversationId: VOICE_USAGE_LABEL,
+    model: VOICE_USAGE_LABEL,
     costMicros: 0,
   })
 }

@@ -145,9 +145,7 @@ describe("runIngest", () => {
   })
 
   it("skips transcription, not the asset, when the ceiling refuses it", async () => {
-    const admitTranscription = vi
-      .fn()
-      .mockResolvedValue("Enough for today.")
+    const admitTranscription = vi.fn().mockResolvedValue("Enough for today.")
     const p = ports({ admitTranscription })
 
     const result = await runIngest(input, p)

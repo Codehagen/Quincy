@@ -60,9 +60,11 @@ describe("dailyVerdict", () => {
   })
 
   it("admits the pre-upload check while anything is left", () => {
-    expect(dailyVerdict({ usedSeconds: DAILY_TRANSCRIBE_SECONDS - 1 })).toEqual({
-      ok: true,
-    })
+    expect(dailyVerdict({ usedSeconds: DAILY_TRANSCRIBE_SECONDS - 1 })).toEqual(
+      {
+        ok: true,
+      }
+    )
   })
 })
 
@@ -75,7 +77,9 @@ describe("cooldownMessage", () => {
 
 describe("transcriptionCostMicros", () => {
   it("prices per second and never goes negative", () => {
-    expect(transcriptionCostMicros(60)).toBe(60 * DEEPGRAM_COST_MICROS_PER_SECOND)
+    expect(transcriptionCostMicros(60)).toBe(
+      60 * DEEPGRAM_COST_MICROS_PER_SECOND
+    )
     expect(transcriptionCostMicros(-5)).toBe(0)
   })
 })

@@ -252,6 +252,40 @@ export function audioExtractArgs(input: string, output: string): string[] {
   ]
 }
 
+/**
+ * The voice, cleaned: rumble under 80 Hz cut, steady noise (fans, hum, room)
+ * taken down, and the level brought to -16 LUFS, which is where speech sits
+ * on a phone and a laptop without anyone reaching for the volume.
+ *
+ * Every filter is ffmpeg's own, so it costs function time and nothing
+ * bought. AAC, mono, 128k: the track plays beside the proxy in
+ * the preview and the export, never instead of the picture.
+ */
+export const VOICE_FILTER =
+  "highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11"
+
+export function voiceCleanArgs(input: string, output: string): string[] {
+  return [
+    "-i",
+    input,
+    "-vn",
+    "-af",
+    VOICE_FILTER,
+    "-ac",
+    "1",
+    "-ar",
+    "48000",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-movflags",
+    "+faststart",
+    "-y",
+    output,
+  ]
+}
+
 export function thumbnailArgs(
   input: string,
   output: string,
@@ -466,6 +500,12 @@ export const storageKeys = {
   thumbnail: (contentHash: string) => `derived/thumb/v1/${contentHash}.jpg`,
   /** The sprite sheet the spine tiles across its clips. */
   filmstrip: (contentHash: string) => `derived/strip/v1/${contentHash}.jpg`,
+  /**
+   * The cleaned voice (voiceCleanArgs). Content-addressed and versioned like
+   * the proxy, so a change to the filter is a new key and never a surprise
+   * in a cut someone already finished.
+   */
+  voice: (contentHash: string) => `derived/voice/v1/${contentHash}.m4a`,
 }
 
 /**

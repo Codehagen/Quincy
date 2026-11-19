@@ -19,6 +19,7 @@ import {
   removeEffectsOfType,
   punchIn,
   reframe,
+  setVoice,
   splitAt,
 } from "./edits"
 import { aimed, applyOps, applyToScene, type EditOp } from "./ops"
@@ -1042,26 +1043,6 @@ export function timedLines(
   }
   if (current.length > 0) lines.push(`${clock(startUs)} ${current.join(" ")}`)
   return lines
-}
-
-/** Every spine clip set to play one sound or the other. */
-export function setVoice(scene: Scene, voice: "original" | "clean"): EditOp[] {
-  const spine = findMainTrack(scene)
-  if (!spine) return []
-  const ops: EditOp[] = spine.elements.flatMap((element) =>
-    element.kind === "video" && (element.voice ?? "original") !== voice
-      ? [
-          {
-            op: "update_element" as const,
-            sceneId: scene.id,
-            trackId: spine.id,
-            elementId: element.id,
-            patch: { voice },
-          },
-        ]
-      : []
-  )
-  return aimed(ops, { action: "press", kind: "track", trackId: spine.id })
 }
 
 /** A builder's result as steps: one batch is one step. */

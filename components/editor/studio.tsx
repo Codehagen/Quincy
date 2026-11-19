@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  AudioWave01Icon,
   Delete02Icon,
   Redo02Icon,
   ScissorIcon,
@@ -32,6 +33,7 @@ import {
   resizeEffect,
   setEffectAmount,
   splitAt,
+  setVoice,
   trimEdge,
 } from "@/lib/editor/edits"
 import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
@@ -119,6 +121,8 @@ export type MediaEntry = {
   hasAudio: boolean
   proxyUrl: string | null
   seekIndexUrl: string | null
+  /** The cleaned voice (media.ts `voiceCleanArgs`), when one is stored. */
+  voiceUrl?: string | null
   filmstrip: Filmstrip | null
   /** What Quincy noticed in the take; null without a transcript. */
   reading: TakeReading | null
@@ -279,6 +283,9 @@ export function Studio({
    * What the composition needs per asset: where to fetch it, and whether it has
    * been through ffmpeg yet.
    */
+  /** Cleaned voices fetched this session, by media id (POST …/voice). */
+  const [voiceUrls, setVoiceUrls] = React.useState<Record<string, string>>({})
+
   const compositionMedia = React.useMemo(() => {
     const entries: Record<string, CompositionMedia> = {}
 
@@ -287,11 +294,12 @@ export function Studio({
         proxyUrl: entry.proxyUrl,
         localUrl: id === asset?.id ? localUrl : null,
         rotation: entry.rotation,
+        voiceUrl: voiceUrls[id] ?? entry.voiceUrl ?? null,
       }
     }
 
     return entries
-  }, [media, asset?.id, localUrl])
+  }, [media, asset?.id, localUrl, voiceUrls])
 
   /**
    * The frame sheets, by media id.
@@ -1014,6 +1022,55 @@ export function Studio({
     [scene, document.metadata.chapters]
   )
 
+  /**
+   * Clean sound, as a switch on the cut. The voice track is made at ingest;
+   * a take from before that is cleaned once, here, on the first press.
+   */
+  const cleanSound = React.useMemo(
+    () =>
+      Boolean(
+        scene &&
+        findMainTrack(scene)?.elements.some(
+          (element) => element.kind === "video" && element.voice === "clean"
+        )
+      ),
+    [scene]
+  )
+  const [voicePending, setVoicePending] = React.useState(false)
+  const toggleVoice = React.useCallback(async () => {
+    if (!scene || !mainMediaId || voicePending) return
+    if (cleanSound) {
+      commit(setVoice(scene, "original"))
+      return
+    }
+    if (!voiceUrls[mainMediaId] && !media[mainMediaId]?.voiceUrl) {
+      setVoicePending(true)
+      try {
+        const response = await (harness?.fetch ?? fetch)(
+          `/api/editor/assets/${mainMediaId}/voice`,
+          { method: "POST" }
+        )
+        if (!response.ok) return
+        const { url } = (await response.json()) as { url: string }
+        setVoiceUrls((prev) => ({ ...prev, [mainMediaId]: url }))
+      } catch {
+        return
+      } finally {
+        setVoicePending(false)
+      }
+    }
+    commit(setVoice(scene, "clean"))
+  }, [
+    scene,
+    mainMediaId,
+    voicePending,
+    cleanSound,
+    commit,
+    voiceUrls,
+    media,
+    harness,
+  ])
+
   /** Preview speed: the preview's only, never the document's. */
   const [rate, setRate] = React.useState(1)
 
@@ -1228,6 +1285,21 @@ export function Studio({
             onClick={split}
             disabled={running}
           />
+          {mainMediaId && media[mainMediaId]?.hasAudio ? (
+            <DeskIconButton
+              icon={AudioWave01Icon}
+              label={
+                voicePending
+                  ? "Cleaning the sound…"
+                  : cleanSound
+                    ? "Play the sound as recorded"
+                    : "Clean the sound"
+              }
+              onClick={() => void toggleVoice()}
+              disabled={running || voicePending}
+              pressed={cleanSound}
+            />
+          ) : null}
           <DeskIconButton
             icon={Delete02Icon}
             label="Delete the selected clip"
