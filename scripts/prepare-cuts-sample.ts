@@ -17,8 +17,8 @@ import {
   createDeepgramTranscriber,
   isDeepgramConfigured,
   readDeepgramOptions,
-} from "../lib/editor/transcriber-deepgram"
-import { wordsFromDeepgram } from "../lib/editor/transcript"
+} from "../lib/transcription/deepgram"
+import { wordsFromTranscript } from "../lib/editor/transcript"
 
 /**
  * Prepare the Cuts sample recording, once.
@@ -189,7 +189,7 @@ async function main() {
       `${JSON.stringify(manifest, null, 2)}\n`
     )
 
-    const words = wordsFromDeepgram(result.transcript)
+    const words = wordsFromTranscript(result.transcript)
     console.log(
       `\nWrote ${outDir}\n` +
         `  ${(result.probe.durationUs / 1_000_000).toFixed(1)}s, ` +

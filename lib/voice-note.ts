@@ -1,8 +1,7 @@
-import { experimental_transcribe as transcribe } from "ai"
-import { gateway } from "@ai-sdk/gateway"
-
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
+import { DEFAULT_GATEWAY_TRANSCRIBE_MODEL } from "./transcription/gateway"
+import { speechToTextFor } from "./transcription"
 
 /**
  * Audio in, words out. See plans/018.
@@ -22,42 +21,25 @@ import { usageEvent } from "./schema-app"
  * somebody is at a desk watching the words land, and that is a different
  * surface from this one.
  *
- * **Through the Gateway, not a provider SDK.** Every other model call in the
- * product goes out through `AI_GATEWAY_API_KEY`, and transcription needs no
- * exception: the Gateway lists transcription models natively, so the provider
- * is a string this file can change rather than a key somebody has to add to
- * Vercel. `DEEPGRAM_API_KEY` is in the environment and could have done this —
- * `lib/editor/transcriber-deepgram.ts` is a working batch transcriber — but it
- * exists for the video editor's word timestamps, and pointing a second feature
- * at it would make one provider load-bearing for two unrelated things.
+ * **Which provider is a setting.** The call goes through the shared
+ * speech-to-text port (lib/transcription), set by `VOICE_NOTE_TRANSCRIBER`.
+ * The default is the AI Gateway, because every other model call in the
+ * product goes out through `AI_GATEWAY_API_KEY` and a voice note needs only
+ * text, not the word timings the editor's provider is chosen for. The editor
+ * has its own setting, so one provider is never load-bearing for two
+ * unrelated things by accident.
  */
 
 /**
- * Deliberately configurable, matching `CHAT_MODEL`.
- *
- * `gpt-4o-transcribe` rather than `whisper-1` (older, worse on accented
- * Norwegian) or `gpt-realtime-whisper` (built for streaming sessions; its
- * advantage is latency, which is worth nothing to a job nobody is watching).
- * `xai/grok-stt` is the other batch option through the same Gateway and is one
- * env var away if this one disappoints on Norwegian.
+ * The Gateway's model, matching `CHAT_MODEL`: configurable, with the
+ * reasoning for the default beside it in lib/transcription/gateway.ts.
+ * `xai/grok-stt` is the other batch option through the same Gateway and is
+ * one env var away if this one disappoints on Norwegian.
  */
-const MODEL = process.env.VOICE_NOTE_MODEL ?? "openai/gpt-4o-transcribe"
+const MODEL = process.env.VOICE_NOTE_MODEL || DEFAULT_GATEWAY_TRANSCRIBE_MODEL
 
 /** Exported so the call site can label `usage_event` with the same string. */
 export const VOICE_NOTE_MODEL = MODEL
-
-/**
- * The language spoken, or undefined to let the model detect it.
- *
- * Worth stating rather than detecting when it is known. `lib/editor/
- * transcriber-deepgram.ts` records what the alternative costs: a model asked
- * for English transcribes Norwegian *as* English and returns something short
- * and confident — "Okay. Okay." at 0.975 confidence for fifteen seconds of
- * speech. That is the worst kind of wrong, because it reads as a quiet
- * recording rather than a failed one. Reuses `DEEPGRAM_LANGUAGE` rather than
- * adding a second language variable that could disagree with it.
- */
-const LANGUAGE = process.env.DEEPGRAM_LANGUAGE || undefined
 
 /* ── Ceilings ─────────────────────────────────────────────────────────────
    AGENTS.md: every path that spends needs a ceiling AND, if a human can
@@ -147,25 +129,26 @@ export type VoiceTranscriber = (input: {
  */
 export type TranscribeCall = (input: {
   audio: Uint8Array
+  /** The recording's type, as the browser sent it. */
+  mediaType?: string
 }) => Promise<{ text: string; durationInSeconds?: number }>
 
-const callModel: TranscribeCall = async ({ audio }) =>
-  transcribe({
-    model: gateway.transcription(MODEL),
-    audio,
-    providerOptions: LANGUAGE ? { openai: { language: LANGUAGE } } : undefined,
-    /**
-     * One retry, not the default two.
-     *
-     * Every retry re-uploads the whole blob and pays for the whole
-     * transcription again. The default is tuned for a text call costing a
-     * fraction of a cent; here a stuck retry loop on a ten-minute note is real
-     * money for a job nobody is watching. Workflow retries the step around
-     * this anyway, so a genuine transient failure still gets more than one
-     * chance — it just gets it with a fresh step rather than inside one.
-     */
-    maxRetries: 1,
+/**
+ * The language comes from the port's own settings: `DEEPGRAM_LANGUAGE`, the
+ * one language variable, rather than a second one that could disagree with
+ * it. Worth stating rather than detecting when it is known —
+ * lib/transcription/deepgram.ts records what the alternative costs: a model
+ * asked for English transcribes Norwegian *as* English and returns something
+ * short and confident.
+ */
+const callModel: TranscribeCall = async ({ audio, mediaType }) => {
+  const result = await speechToTextFor("voice-note").transcribe({
+    kind: "file",
+    bytes: audio,
+    mediaType: mediaType ?? "audio/webm",
   })
+  return { text: result.text, durationInSeconds: result.durationSeconds }
+}
 
 /**
  * One audio blob becomes one transcript.
@@ -177,6 +160,7 @@ const callModel: TranscribeCall = async ({ audio }) =>
 export const transcribeVoiceNote = async ({
   audio,
   recordedSeconds = 0,
+  mediaType,
   deps = { transcribe: callModel },
 }: {
   audio: Uint8Array
@@ -214,7 +198,7 @@ export const transcribeVoiceNote = async ({
 
   let result: Awaited<ReturnType<TranscribeCall>>
   try {
-    result = await deps.transcribe({ audio })
+    result = await deps.transcribe({ audio, mediaType })
   } catch (cause) {
     console.error("[voice-note] transcription failed:", cause)
     return {

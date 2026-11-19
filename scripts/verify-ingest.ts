@@ -14,8 +14,8 @@ import {
   createDeepgramTranscriber,
   isDeepgramConfigured,
   readDeepgramOptions,
-} from "../lib/editor/transcriber-deepgram"
-import { wordsFromDeepgram } from "../lib/editor/transcript"
+} from "../lib/transcription/deepgram"
+import { wordsFromTranscript } from "../lib/editor/transcript"
 
 /**
  * The ingest pipeline, against real binaries and real providers.
@@ -121,7 +121,7 @@ async function main() {
 
     console.log("\n── transcript ──")
     if (result.transcript) {
-      const words = wordsFromDeepgram(result.transcript)
+      const words = wordsFromTranscript(result.transcript)
       console.log(`  ${result.transcriptProvider}: ${words.length} words`)
       console.log(`  "${words.map((word) => word.text).join(" ")}"`)
 

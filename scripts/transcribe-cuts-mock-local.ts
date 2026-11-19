@@ -20,8 +20,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { spokenSentences } from "../lib/editor/gate"
-import { createDeepgramTranscriber, modelFor, readDeepgramOptions } from "../lib/editor/transcriber-deepgram"
-import { wordsFromDeepgram } from "../lib/editor/transcript"
+import { createDeepgramTranscriber, modelFor, readDeepgramOptions } from "../lib/transcription/deepgram"
+import { wordsFromTranscript } from "../lib/editor/transcript"
 
 const DIR = join(process.cwd(), "public/prototypes/cuts-mock/local")
 const RATE = 16_000
@@ -51,7 +51,7 @@ async function main() {
   const transcript = await transcriber.transcribe(pcm, RATE)
   writeFileSync(join(DIR, "transcript.json"), JSON.stringify(transcript))
 
-  const words = wordsFromDeepgram(transcript)
+  const words = wordsFromTranscript(transcript)
   if (words.length === 0) throw new Error("Deepgram returned no words.")
   writeFileSync(
     join(DIR, "words.json"),

@@ -28,10 +28,11 @@ import {
   withWorkspace,
 } from "@/lib/editor/transcoder-ffmpeg"
 import {
-  createDeepgramTranscriber,
-  isDeepgramConfigured,
-  readDeepgramOptions,
-} from "@/lib/editor/transcriber-deepgram"
+  isSpeechConfigured,
+  pcmTranscriber,
+  speechProviderFor,
+  speechToTextFor,
+} from "@/lib/transcription"
 import {
   isEntitled,
   paywallResponse,
@@ -283,26 +284,38 @@ export async function POST(
 }
 
 /**
- * A transcriber, configured or not.
+ * A transcriber, configured or not: the editor's speech-to-text
+ * (`EDITOR_TRANSCRIBER`, Deepgram unless set; lib/transcription/index.ts).
  *
- * When the key is absent this returns one that throws on use, which `runIngest`
- * catches into a warning — so the asset still reaches `ready` and the footage
- * is still editable, minus captions. The alternative, skipping the port
- * entirely, would make a missing key indistinguishable from a file with no
- * speech in it, and only one of those is worth telling someone about.
+ * When it is not set up this returns one that throws on use, which
+ * `runIngest` catches into a warning — so the asset still reaches `ready` and
+ * the footage is still editable, minus captions. The alternative, skipping
+ * the port entirely, would make a missing key indistinguishable from a file
+ * with no speech in it, and only one of those is worth telling someone about.
+ * A setting that names a provider the editor cannot use is the same: a
+ * warning on the asset, never a failed upload.
  */
 function transcriber(
   onRequest: (audioSeconds: number) => Promise<void>
 ): Transcriber {
-  if (isDeepgramConfigured()) {
-    return createDeepgramTranscriber({ ...readDeepgramOptions(), onRequest })
+  let problem: string
+  try {
+    if (isSpeechConfigured("editor")) {
+      return pcmTranscriber(speechToTextFor("editor", { onRequest }))
+    }
+    problem =
+      speechProviderFor("editor") === "deepgram"
+        ? "DEEPGRAM_API_KEY is not set"
+        : "the editor's transcriber is not set up"
+  } catch (error) {
+    problem = error instanceof Error ? error.message : String(error)
   }
 
   return {
     name: "none",
     transcribe: () => {
       throw new Error(
-        "DEEPGRAM_API_KEY is not set, so this asset has no captions yet. " +
+        `${problem}, so this asset has no captions yet. ` +
           "Set it and re-run ingest to add them."
       )
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { wordsFromDeepgram } from "./transcript"
+import { wordsFromTranscript } from "@/lib/editor/transcript"
 
 import {
   createDeepgramTranscriber,
@@ -9,7 +9,7 @@ import {
   modelFor,
   MissingDeepgramKeyError,
   readDeepgramOptions,
-} from "./transcriber-deepgram"
+} from "./deepgram"
 
 describe("listenUrl", () => {
   it("describes the audio, because raw PCM carries no header", () => {
@@ -118,7 +118,7 @@ describe("createDeepgramTranscriber", () => {
   })
 
   it("returns the response verbatim", async () => {
-    // Stored as-is on video_asset.transcript; wordsFromDeepgram is the only
+    // Stored as-is on video_asset.transcript; wordsFromTranscript is the only
     // thing that reads the shape.
     const body = { results: { channels: [{ alternatives: [{ words: [] }] }] } }
 
@@ -335,7 +335,7 @@ describe("transcribe fallback", () => {
       })
 
       expect(stub.asked).toContain("no")
-      expect(wordsFromDeepgram(result)).toHaveLength(26)
+      expect(wordsFromTranscript(result)).toHaveLength(26)
     } finally {
       stub.restore()
     }
@@ -382,7 +382,7 @@ describe("transcribe fallback", () => {
       })
 
       // A failed candidate is not a reason to lose the transcript we have.
-      expect(wordsFromDeepgram(result)).toHaveLength(2)
+      expect(wordsFromTranscript(result)).toHaveLength(2)
     } finally {
       globalThis.fetch = original
     }

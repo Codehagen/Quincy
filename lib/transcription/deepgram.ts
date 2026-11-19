@@ -1,9 +1,18 @@
-import type { Transcriber } from "./ingest"
-import { looksMistranscribed, wordDensity } from "./transcript-quality"
-import { wordsFromDeepgram } from "./transcript"
+import { looksMistranscribed, wordDensity } from "@/lib/editor/transcript-quality"
+import { wordsFromTranscript, type TranscriptWord } from "@/lib/editor/transcript"
+
+import {
+  audioSeconds,
+  pcmBytes,
+  pcmTranscriber,
+  type SpeechAudio,
+  type SpeechToText,
+} from "./speech-to-text"
 
 /**
- * Deepgram, over raw PCM.
+ * Deepgram, over raw PCM — or over an encoded file, which it also takes.
+ *
+ * The editor's default speech-to-text (lib/transcription/index.ts).
  *
  * The whole first cut is built out of this one call. Silence removal is the
  * gaps between words, captions are the words themselves, and ducking is knowing
@@ -18,7 +27,7 @@ import { wordsFromDeepgram } from "./transcript"
  *
  * **No SDK.** One POST with a content type and four query parameters, against
  * an endpoint whose response we store verbatim. A client would add a dependency
- * that mostly re-types a shape `wordsFromDeepgram` already reads.
+ * that mostly re-types a shape `wordsFromTranscript` already reads.
  */
 
 const ENDPOINT = "https://api.deepgram.com/v1/listen"
@@ -186,14 +195,15 @@ export function modelFor(options: DeepgramOptions): string {
  *   English will transcribe any language as English rather than failing.
  */
 export function listenUrl(
-  sampleRate: number,
+  /** Null for an encoded file, whose container describes the audio itself. */
+  sampleRate: number | null,
   options: DeepgramOptions
 ): string {
   const query = new URLSearchParams({
     model: modelFor(options),
-    encoding: "linear16",
-    sample_rate: String(sampleRate),
-    channels: "1",
+    ...(sampleRate === null
+      ? {}
+      : { encoding: "linear16", sample_rate: String(sampleRate), channels: "1" }),
     punctuate: "true",
     smart_format: "true",
     utterances: "true",
@@ -205,36 +215,37 @@ export function listenUrl(
   return `${ENDPOINT}?${query}`
 }
 
-export function createDeepgramTranscriber(
+export function createDeepgramSpeechToText(
   options: DeepgramOptions
-): Transcriber {
+): SpeechToText {
   const once = async (
-    pcm: Int16Array,
-    sampleRate: number,
+    audio: SpeechAudio,
     language: string | undefined
   ): Promise<unknown> => {
-    if (sampleRate > 0) await options.onRequest?.(pcm.length / sampleRate)
+    const seconds = audioSeconds(audio)
+    if (seconds !== null) await options.onRequest?.(seconds)
 
     const response = await fetch(
-      listenUrl(sampleRate, { ...options, language }),
+      listenUrl(audio.kind === "pcm" ? audio.sampleRate : null, {
+        ...options,
+        language,
+      }),
       {
         method: "POST",
         headers: {
           Authorization: `Token ${options.apiKey}`,
-          "Content-Type": "audio/raw",
+          "Content-Type": audio.kind === "pcm" ? "audio/raw" : audio.mediaType,
         },
-        // The samples as they sit in memory. `pcm.buffer` alone would send the
-        // whole backing ArrayBuffer, which for a subarray is the entire file.
+        // The samples as they sit in memory (`pcmBytes`), never the whole
+        // backing buffer of a subarray.
         //
         // The cast is a lib mismatch, not a real one: a view over a
         // SharedArrayBuffer is not a valid body and TypeScript cannot rule that
         // out from `ArrayBufferLike`. Copying to satisfy it would double the
         // peak memory of the largest allocation in the pipeline.
-        body: new Uint8Array(
-          pcm.buffer,
-          pcm.byteOffset,
-          pcm.byteLength
-        ) as unknown as BodyInit,
+        body: (audio.kind === "pcm"
+          ? pcmBytes(audio.samples)
+          : audio.bytes) as unknown as BodyInit,
         signal: AbortSignal.timeout(TIMEOUT),
       }
     )
@@ -243,18 +254,19 @@ export function createDeepgramTranscriber(
       throw new Error(await describeFailure(response))
     }
 
-    // Stored verbatim on video_asset.transcript. The shape is the provider's
-    // and `wordsFromDeepgram` is the only thing that reads it.
+    // Stored verbatim on video_asset.transcript. `wordsFromTranscript` reads
+    // the shape.
     return (await response.json()) as unknown
   }
 
+  const candidates = (options.languages ?? []).filter(
+    (language) => language !== options.language
+  )
+
   return {
     name: "deepgram",
-    maxPasses:
-      1 +
-      (options.languages ?? []).filter(
-        (language) => language !== options.language
-      ).length,
+    givesWords: true,
+    maxPasses: 1 + candidates.length,
 
     /**
      * One request, and a second round only when the first one does not
@@ -265,38 +277,66 @@ export function createDeepgramTranscriber(
      * it there is no check at all: a wrong-language transcript comes back short
      * and confident, and every tool downstream treats it as the truth.
      */
-    async transcribe(pcm, sampleRate, hints) {
-      const first = await once(pcm, sampleRate, options.language)
-
-      const voiced = hints?.voicedSeconds ?? 0
-      const candidates = (options.languages ?? []).filter(
-        (language) => language !== options.language
-      )
-
-      if (
-        candidates.length === 0 ||
-        !looksMistranscribed({ words: wordsFromDeepgram(first), voiced })
-      ) {
-        return first
-      }
+    async transcribe(audio, request) {
+      const language = request?.language ?? options.language
+      const first = await once(audio, language)
+      const voiced = request?.voicedSeconds ?? 0
 
       let best = first
-      let bestDensity = wordDensity(wordsFromDeepgram(first), voiced)
+      if (
+        candidates.length > 0 &&
+        looksMistranscribed({ words: wordsFromTranscript(first), voiced })
+      ) {
+        let bestDensity = wordDensity(wordsFromTranscript(first), voiced)
 
-      for (const language of candidates) {
-        // A candidate that errors is not a reason to lose the result we have.
-        const attempt = await once(pcm, sampleRate, language).catch(() => null)
-        if (!attempt) continue
+        for (const candidate of candidates) {
+          // A candidate that errors is not a reason to lose the result we have.
+          const attempt = await once(audio, candidate).catch(() => null)
+          if (!attempt) continue
 
-        const density = wordDensity(wordsFromDeepgram(attempt), voiced)
-        if (density > bestDensity) {
-          best = attempt
-          bestDensity = density
+          const density = wordDensity(wordsFromTranscript(attempt), voiced)
+          if (density > bestDensity) {
+            best = attempt
+            bestDensity = density
+          }
         }
       }
 
-      return best
+      return describe(best, modelFor({ ...options, language }))
     },
+  }
+}
+
+/**
+ * The editor's transcriber over Deepgram: PCM in, the response to store out.
+ * What ingest calls (lib/editor/ingest.ts `Transcriber`).
+ */
+export function createDeepgramTranscriber(options: DeepgramOptions) {
+  return pcmTranscriber(createDeepgramSpeechToText(options))
+}
+
+/** Deepgram's response as a `Transcription`, the response itself kept to store. */
+function describe(response: unknown, model: string) {
+  const body = response as {
+    metadata?: { duration?: number }
+    results?: {
+      channels?: {
+        detected_language?: string
+        alternatives?: { transcript?: string; words?: TranscriptWord[] }[]
+      }[]
+    }
+  }
+  const channel = body?.results?.channels?.[0]
+  const alternative = channel?.alternatives?.[0]
+
+  return {
+    provider: "deepgram",
+    model,
+    text: alternative?.transcript ?? "",
+    words: alternative?.words ?? [],
+    durationSeconds: body?.metadata?.duration,
+    language: channel?.detected_language,
+    stored: response,
   }
 }
 
