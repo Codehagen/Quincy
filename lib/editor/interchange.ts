@@ -52,6 +52,38 @@ function overlayClips(scene: Scene): VideoElement[] {
     .sort((a, b) => a.startUs - b.startUs)
 }
 
+/**
+ * What neither file carries, said in the file instead of lost in silence:
+ * stills (no format here holds one worth trusting) and clips that start where
+ * the spine has nothing to hang them on.
+ */
+function leftOut(scene: Scene): string | null {
+  const spine = spineClips(scene)
+  const overlayTracks = scene.tracks.filter(
+    (track) =>
+      (track.kind === "video" || track.kind === "broll") &&
+      track.id !== findMainTrack(scene)?.id &&
+      !track.hidden
+  )
+  const stills = overlayTracks
+    .flatMap((track) => track.elements)
+    .filter((element) => element.kind === "image").length
+  const unanchored = overlayClips(scene).filter(
+    (overlay) =>
+      !spine.some(
+        (clip) =>
+          overlay.startUs >= clip.startUs && overlay.startUs < clip.startUs + clip.durationUs
+      )
+  ).length
+  const parts = [
+    stills > 0 ? `${stills} ${stills === 1 ? "still" : "stills"}` : null,
+    unanchored > 0
+      ? `${unanchored} ${unanchored === 1 ? "clip" : "clips"} outside the main track`
+      : null,
+  ].filter(Boolean)
+  return parts.length > 0 ? `NOT INCLUDED: ${parts.join(", ")}` : null
+}
+
 function spineClips(scene: Scene): VideoElement[] {
   return (findMainTrack(scene)?.elements ?? []).filter(
     (element): element is VideoElement => element.kind === "video"
@@ -63,7 +95,13 @@ export function toEdl(
   options: { title: string; fps: number; media: MediaNames }
 ): string {
   const { fps } = options
-  const lines = [`TITLE: ${options.title.replace(/[\r\n]/g, " ").slice(0, 70)}`, "FCM: NON-DROP FRAME", ""]
+  const missing = leftOut(scene)
+  const lines = [
+    `TITLE: ${options.title.replace(/[\r\n]/g, " ").slice(0, 70)}`,
+    "FCM: NON-DROP FRAME",
+    ...(missing ? [`* ${missing}`] : []),
+    "",
+  ]
   let event = 1
   const emit = (clip: VideoElement, track: "V" | "AA/V") => {
     const name = options.media[clip.mediaId]?.filename ?? clip.mediaId
@@ -138,8 +176,17 @@ export function toFcpxml(
     return `<asset-clip ref="${assetId(clip.mediaId)}"${laneAttr} name="${name}" offset="${t(offsetUs)}" start="${t(clip.trimStartUs)}" duration="${t(clip.durationUs)}">${retime}`
   }
 
+  // A spine plays its items one after another, whatever their offsets say,
+  // so a hole in the cut has to be written as a gap or every clip after it
+  // lands early.
+  let previousEnd = 0
   const body = spine
     .map((clip) => {
+      const gap =
+        clip.startUs > previousEnd
+          ? `        <gap name="Gap" offset="${t(previousEnd)}" duration="${t(clip.startUs - previousEnd)}"/>\n`
+          : ""
+      previousEnd = clip.startUs + clip.durationUs
       const connected = overlays
         .filter(
           (overlay) =>
@@ -152,13 +199,17 @@ export function toFcpxml(
             `\n          ${clipXml(overlay, 1, clip.trimStartUs + (overlay.startUs - clip.startUs) * clipRate(clip))}</asset-clip>`
         )
         .join("")
-      return `        ${clipXml(clip)}${connected}\n        </asset-clip>`
+      return `${gap}        ${clipXml(clip)}${connected}\n        </asset-clip>`
     })
     .join("\n")
 
+  const missing = leftOut(scene)
+  // "--" may not appear inside an XML comment.
+  const missingComment = missing ? `\n  <!-- ${missing.replace(/-{2,}/g, "-")} -->` : ""
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fcpxml>
-<fcpxml version="1.10">
+<fcpxml version="1.10">${missingComment}
   <resources>
     <format id="r1" frameDuration="1/${fps}s" width="${options.width}" height="${options.height}"/>
 ${assets}

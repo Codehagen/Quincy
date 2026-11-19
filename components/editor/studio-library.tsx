@@ -103,12 +103,14 @@ export function StudioLibrary({
     <div
       className="flex h-full min-h-0 flex-col"
       onDragOver={(event) => {
-        if (onAdded && Array.from(event.dataTransfer.types).includes("Files"))
+        // Nothing lands while a run holds the document: the browser shows
+        // "no drop" rather than taking a file the library could not keep.
+        if (onAdded && !disabled && Array.from(event.dataTransfer.types).includes("Files"))
           event.preventDefault()
       }}
       onDrop={(event) => {
         const file = event.dataTransfer.files[0]
-        if (!file || !onAdded || busy) return
+        if (!file || !onAdded || busy || disabled) return
         event.preventDefault()
         void add(file)
       }}

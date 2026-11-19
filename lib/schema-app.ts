@@ -1532,7 +1532,7 @@ export const videoAsset = pgTable(
     /** As uploaded, for display. Never used to identify the file. */
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
-    /** `xxh3-128:<bytes>:<hash>`. The identity of the file. */
+    /** `u/<userId>/xxh3-128:<bytes>:<hash>` (older rows: without the user). The identity of the file, and the name every stored file of it is kept under. */
     contentHash: text("content_hash").notNull(),
     /** Bytes. bigint because a 4K screen recording clears the int4 ceiling. */
     sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),

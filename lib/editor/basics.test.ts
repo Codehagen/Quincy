@@ -8,8 +8,8 @@ import { setSpeed } from "./edits"
 import { toEdl, toFcpxml } from "./interchange"
 import { layoutBox, setBox } from "./layout"
 import { applyToScene, newElement, type EditOp } from "./ops"
-import { moveElement, placeMedia } from "./placement"
-import { applyCaptionPreset, applyLookPreset } from "./presets"
+import { mergeLibrary, moveElement, placeMedia } from "./placement"
+import { applyCaptionPreset, applyLookPreset, restyleCaptions } from "./presets"
 import { snap, snapPoints } from "./snapping"
 import { nameSpeaker, speakerNumbers } from "./speakers"
 import { cuesToWords, parseSubtitles, subtitleCues, toSrt, toVtt } from "./subtitles"
@@ -370,6 +370,43 @@ describe("interchange", () => {
     expect(xml).toContain("Talk &amp; more")
     expect(xml.match(/<asset id=/g)).toHaveLength(1)
     expect(xml.match(/<asset-clip /g)).toHaveLength(3)
+    expect(xml).not.toContain("<gap ")
+  })
+
+  it("says in both files when a still is left out, and stays quiet otherwise", () => {
+    const base = scene({ captions: false })
+    const media = { "va-1": { filename: "talk.mp4" } }
+    const options = { title: "T", fps: 30, width: 1920, height: 1080, media }
+    expect(toEdl(base, options)).not.toContain("NOT INCLUDED")
+    expect(toFcpxml(base, options)).not.toContain("NOT INCLUDED")
+
+    const withStill = apply(
+      base,
+      placeMedia(base, { id: "i", filename: "i.png", kind: "image", durationUs: null }, {
+        as: "overlay",
+        atUs: secondsToUs(1),
+        author: "user",
+      })
+    )
+    expect(toEdl(withStill, options)).toContain("* NOT INCLUDED: 1 still")
+    expect(toFcpxml(withStill, options)).toContain("<!-- NOT INCLUDED: 1 still -->")
+  })
+
+  it("keeps a hole in the spine as a gap", () => {
+    const base = scene({ captions: false })
+    const main = findMainTrack(base)!
+    main.elements = main.elements.map((element, index) =>
+      index === 0 ? element : { ...element, startUs: us(element.startUs + secondsToUs(2)) }
+    )
+    const xml = toFcpxml(base, {
+      title: "T",
+      fps: 30,
+      width: 1920,
+      height: 1080,
+      media: { "va-1": { filename: "talk.mp4" } },
+    })
+    expect(xml.match(/<gap /g)).toHaveLength(1)
+    expect(xml).toContain('<gap name="Gap" offset="300/30s" duration="60/30s"/>')
   })
 })
 
@@ -379,6 +416,30 @@ describe("presets", () => {
     const after = apply(base, applyCaptionPreset(base, "bold"))
     const caption = after.tracks.find((t) => t.id === "captions")!.elements[0] as CaptionElement
     expect(caption.style.textTransform).toBe("uppercase")
+  })
+
+  it("bold regroups to one word a caption and keeps a correction", () => {
+    const base = scene()
+    const track = base.tracks.find((t) => t.id === "captions")!
+    const all = track.elements[0] as CaptionElement
+    track.elements = [{ ...all, style: { ...all.style, wordsPerSegment: 4 } }]
+    const fixed = apply(base, correctWords(base, [{ tokenId: "t4", text: "Quincy," }]))
+    const bold = apply(fixed, restyleCaptions(fixed, "bold", "user"))
+    // The fixture adds its own caption track beside the scene's; the rebuild
+    // lands on the scene's.
+    const captions = bold.tracks.find((t) => t.kind === "caption" && t.id !== "captions")!
+      .elements as CaptionElement[]
+    expect(captions).toHaveLength(30)
+    expect(captions.every((caption) => caption.tokens.length === 1)).toBe(true)
+    expect(captions.some((caption) => caption.tokens[0].text === "Quincy,")).toBe(true)
+  })
+
+  it("a look that keeps the grouping only restyles", () => {
+    const base = scene()
+    // The fixture's captions already say one word a segment, as bold does.
+    const ops = restyleCaptions(base, "bold", "user")
+    expect(ops.length).toBeGreaterThan(0)
+    expect(ops.every((op) => op.op === "update_element")).toBe(true)
   })
 
   it("grades the spine and a second look replaces the first", () => {
@@ -503,5 +564,13 @@ describe("review fixes", () => {
     expect(imageProblem({ sizeBytes: 30 * 1024 * 1024, head: png }, "image/png")?.status).toBe(413)
     expect(imageProblem({ sizeBytes: 1000, head: png }, "image/jpeg")?.status).toBe(415)
     expect(imageProblem({ sizeBytes: 1000, head: new TextEncoder().encode("GIF89a") }, "image/gif")).toBeNull()
+  })
+})
+
+describe("library", () => {
+  it("adds only what is new, in order", () => {
+    expect(mergeLibrary(["a"], [])).toBeNull()
+    expect(mergeLibrary(["a"], ["a"])).toBeNull()
+    expect(mergeLibrary(["a"], ["b", "c", "b"])).toEqual(["a", "b", "c"])
   })
 })

@@ -37,7 +37,7 @@ import {
 import { cleanUpReceipt, type DisfluencyKind } from "./disfluency"
 import { captionRules } from "./document"
 import { findWords, replaceWords } from "./correct-words"
-import { applyCaptionPreset } from "./presets"
+import { restyleCaptions } from "./presets"
 import { MAX_SPEAKER_NAME, nameSpeaker } from "./speakers"
 import { addText, MAX_TEXT_LENGTH } from "./titles"
 import { setTransition } from "./transitions"
@@ -1049,7 +1049,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       execute: async ({ look }, options?: CallOptions) =>
         run(
           { toolCallId: options?.toolCallId, toolName: "style_captions" },
-          (scene) => applyCaptionPreset(scene, look),
+          (scene) => restyleCaptions(scene, look, "agent"),
           () => `The captions are ${look} now.`,
           "There are no captions to style. Add them first."
         ),

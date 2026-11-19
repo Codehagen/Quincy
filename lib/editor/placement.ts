@@ -452,3 +452,14 @@ export function referencedMediaIds(scenes: Scene[]): string[] {
   return [...ids]
 }
 
+
+/**
+ * The library with the files waiting to join it, or null when none of them
+ * is new. Order is kept: what was there first, then the newcomers in the
+ * order they finished uploading.
+ */
+export function mergeLibrary(library: string[], pending: string[]): string[] | null {
+  const next = [...library]
+  for (const id of pending) if (!next.includes(id)) next.push(id)
+  return next.length === library.length ? null : next
+}

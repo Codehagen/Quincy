@@ -1,13 +1,9 @@
 import { Suspense } from "react"
 import { notFound, redirect } from "next/navigation"
 
-import { Studio, type MediaEntry } from "@/components/editor/studio"
-import { getAsset } from "@/lib/editor/assets"
-import { mediaEntryFor } from "@/lib/editor/media-entry"
-import { referencedMediaIds } from "@/lib/editor/placement"
+import { Studio } from "@/components/editor/studio"
+import { resolveProjectMedia } from "@/lib/editor/media-entry"
 import { getProject } from "@/lib/editor/projects"
-import { createR2Storage } from "@/lib/editor/storage-r2"
-import type { VideoDocument } from "@/lib/editor/types"
 import { constructMetadata } from "@/lib/metadata"
 import { getSession } from "@/lib/session"
 
@@ -57,7 +53,7 @@ async function Cut({ params }: { params: Promise<{ id: string }> }) {
   const project = await getProject(id, session.user.id)
   if (!project) notFound()
 
-  const media = await resolveMedia(project.document, session.user.id)
+  const media = await resolveProjectMedia(project.document, session.user.id)
 
   /**
    * The Console owns the whole area — its own rail, header and chat pane. No
@@ -74,35 +70,4 @@ async function Cut({ params }: { params: Promise<{ id: string }> }) {
       />
     </div>
   )
-}
-
-/**
- * Signed URLs for whatever the document currently references, and for what
- * the person brought into the project and has not placed yet (its library).
- *
- * Read off the elements rather than a stored list: the document is the only
- * thing that knows what it uses right now, and a stored list goes stale the
- * moment a clip is deleted. The library is the one list kept, because an
- * unplaced picture is referenced by nothing else.
- */
-async function resolveMedia(
-  document: VideoDocument,
-  userId: string
-): Promise<Record<string, MediaEntry>> {
-  const mediaIds = new Set<string>([
-    ...referencedMediaIds(document.scenes),
-    ...(document.metadata.library ?? []),
-  ])
-
-  const storage = createR2Storage()
-
-  const entries = await Promise.all(
-    [...mediaIds].map(async (mediaId) => {
-      const asset = await getAsset(mediaId, userId)
-      if (!asset) return null
-      return [mediaId, await mediaEntryFor(asset, storage)] as const
-    })
-  )
-
-  return Object.fromEntries(entries.filter((entry) => entry !== null))
 }

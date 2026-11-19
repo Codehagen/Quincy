@@ -490,6 +490,22 @@ export function contentKey(sizeBytes: number, hash: string): string {
   return `xxh3-128:${sizeBytes}:${hash}`
 }
 
+/**
+ * The content key an upload is stored under: the user's own, never shared.
+ *
+ * The digest comes from the browser and is never checked against the bytes,
+ * so a key built from it alone is a key anyone who learns a digest can be
+ * handed an upload URL for, and every derived file (proxy, thumbnail, voice)
+ * is named after it. With the user in it, a claimed digest can only ever
+ * reach that user's own files. Re-uploading stays free for the same person,
+ * which is all the dedupe was for.
+ */
+export function userContentKey(userId: string, sizeBytes: number, hash: string): string {
+  const scope = userId.replace(/[^A-Za-z0-9_-]/g, "")
+  if (!scope) throw new Error("A content key needs a user.")
+  return `u/${scope}/${contentKey(sizeBytes, hash)}`
+}
+
 export const storageKeys = {
   original: (contentHash: string) => `assets/${contentHash}`,
   /**

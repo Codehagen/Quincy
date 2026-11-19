@@ -2,8 +2,10 @@ import { DEFAULT_CAPTION_STYLE } from "./document"
 import { applyEffect, removeEffectsOfType } from "./edits"
 import { EFFECTS } from "./effect-catalogue"
 import type { EditOp } from "./ops"
+import { captionWords, keepCorrections } from "./correct-words"
 import { findMainTrack } from "./timeline"
-import type { CaptionStyle, EffectType, Scene } from "./types"
+import { addCaptions } from "./tools"
+import type { Author, CaptionStyle, EffectType, Scene, VideoElement } from "./types"
 
 /**
  * Named starting points for the two looks people most want to change in one
@@ -127,6 +129,41 @@ export function needsRegroup(scene: Scene, key: CaptionPreset["key"]): boolean {
   return (
     preset.style.wordsPerSegment !== undefined &&
     preset.style.wordsPerSegment !== first.style.wordsPerSegment
+  )
+}
+
+/**
+ * A caption look, from the panel or the agent: the same press gives the same
+ * document. A look that groups words differently rebuilds the captions from
+ * the words they hold now, not the transcript, so a correction or an imported
+ * subtitle file survives; one that does not only restyles.
+ */
+export function restyleCaptions(
+  scene: Scene,
+  key: CaptionPreset["key"],
+  author: Author
+): EditOp[] {
+  const preset = CAPTION_PRESETS.find((candidate) => candidate.key === key)
+  if (!preset) return []
+  if (!needsRegroup(scene, key)) return applyCaptionPreset(scene, key)
+  const clip = findMainTrack(scene)?.elements.find(
+    (element): element is VideoElement => element.kind === "video"
+  )
+  const first = scene.tracks
+    .filter((track) => track.kind === "caption")
+    .flatMap((track) => track.elements)
+    .find((element) => element.kind === "caption")
+  if (!clip || first?.kind !== "caption") return applyCaptionPreset(scene, key)
+  const words = captionWords(scene, clip.mediaId)
+  if (words.length === 0) return applyCaptionPreset(scene, key)
+  return keepCorrections(
+    scene,
+    addCaptions(scene, words, {
+      mediaId: clip.mediaId,
+      author,
+      rules: 1,
+      style: { ...first.style, ...preset.style },
+    })
   )
 }
 

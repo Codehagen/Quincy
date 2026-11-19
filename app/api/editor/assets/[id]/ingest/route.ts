@@ -116,6 +116,11 @@ export async function POST(
     // ffmpeg, so this is the only place anything checks what was stored.
     const problem = imageProblem(await readObjectHead(asset.storageKey), asset.mimeType)
     if (problem) {
+      // Too big or not a picture is a final answer, so the row says so, as a
+      // failed video ingest does. Not uploaded yet (409) is not: the PUT may
+      // still land. The bytes stay, because originals are shared by content
+      // and another row may hold the same ones.
+      if (problem.status !== 409) await failIngest(id, userId, problem.error)
       return Response.json({ error: problem.error }, { status: problem.status })
     }
     const done = await completeImage(id, userId, options.image)

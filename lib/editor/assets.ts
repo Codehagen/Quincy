@@ -4,7 +4,7 @@ import { and, eq, inArray, lt, or } from "drizzle-orm"
 import { db } from "../db"
 import { videoAsset, type VideoAssetState } from "../schema-app"
 import type { IngestResult } from "./ingest"
-import { contentKey, storageKeys } from "./media"
+import { contentKey, storageKeys, userContentKey } from "./media"
 
 /**
  * The asset row, and the states an ingest moves it through.
@@ -52,7 +52,11 @@ export type CreateAssetInput = {
 export async function findOrCreateAsset(
   input: CreateAssetInput
 ): Promise<{ asset: VideoAssetRow; created: boolean }> {
-  const contentHash = contentKey(input.sizeBytes, input.hash)
+  const contentHash = userContentKey(input.userId, input.sizeBytes, input.hash)
+  // Rows from before keys were per user. A finished one is the person's own
+  // and is reused, so nothing is uploaded twice; an unfinished one is not,
+  // because its key is shared and finishing it would mean writing there.
+  const legacyHash = contentKey(input.sizeBytes, input.hash)
 
   const existing = await db
     .select()
@@ -60,7 +64,10 @@ export async function findOrCreateAsset(
     .where(
       and(
         eq(videoAsset.userId, input.userId),
-        eq(videoAsset.contentHash, contentHash)
+        or(
+          eq(videoAsset.contentHash, contentHash),
+          and(eq(videoAsset.contentHash, legacyHash), eq(videoAsset.state, "ready"))
+        )
       )
     )
     .limit(1)

@@ -2,18 +2,16 @@
 
 import * as React from "react"
 
-import { captionWords, keepCorrections } from "@/lib/editor/correct-words"
 import { setSpeed } from "@/lib/editor/edits"
 import { toEdl, toFcpxml } from "@/lib/editor/interchange"
 import { layoutBox, setBox, type LayoutKey } from "@/lib/editor/layout"
 import type { EditOp } from "@/lib/editor/ops"
-import { moveElement, placeMedia, type PlaceAs } from "@/lib/editor/placement"
+import { mergeLibrary, moveElement, placeMedia, type PlaceAs } from "@/lib/editor/placement"
 import {
-  applyCaptionPreset,
   applyLookPreset,
-  CAPTION_PRESETS,
   type CaptionPreset,
   type LookPreset,
+  restyleCaptions,
 } from "@/lib/editor/presets"
 import { nameSpeaker, speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
 import { cuesToWords, parseSubtitles, subtitleCues, toSrt, toVtt } from "@/lib/editor/subtitles"
@@ -89,17 +87,39 @@ export function useStudioTools({
 
   /* ── Library ── */
 
+  // An upload can finish after a run has taken the document, and a hand edit
+  // during a run is dropped. The library is the only place an unplaced file
+  // is remembered, so its additions wait for the run to end instead, and are
+  // written against the library as it is then, not as it was when the
+  // upload started.
+  const pendingLibrary = React.useRef<string[]>([])
+  const latest = React.useRef({ running, library: document.metadata.library, commit })
+  React.useLayoutEffect(() => {
+    latest.current = { running, library: document.metadata.library, commit }
+  })
+
+  const flushLibrary = React.useCallback(() => {
+    const { running: busy, library, commit: write } = latest.current
+    if (busy) return
+    const next = mergeLibrary(library ?? [], pendingLibrary.current)
+    pendingLibrary.current = []
+    if (next) write([{ op: "update_metadata", patch: { library: next } }])
+  }, [])
+
+  React.useEffect(() => {
+    if (!running) flushLibrary()
+  }, [running, flushLibrary])
+
   const addToLibrary = React.useCallback(
     async (assetId: string) => {
       const response = await fetcher(`/api/editor/assets/${assetId}/entry`)
       if (!response.ok) throw new Error("The file was added but could not be opened.")
       const entry = (await response.json()) as MediaEntry
       setMedia((current) => ({ ...current, [entry.id]: entry }))
-      const library = document.metadata.library ?? []
-      if (!library.includes(entry.id))
-        commit([{ op: "update_metadata", patch: { library: [...library, entry.id] } }])
+      pendingLibrary.current = [...pendingLibrary.current, entry.id]
+      flushLibrary()
     },
-    [fetcher, setMedia, document.metadata.library, commit]
+    [fetcher, setMedia, flushLibrary]
   )
 
   const place = React.useCallback(
@@ -260,38 +280,9 @@ export function useStudioTools({
   const onCaptionPreset = React.useCallback(
     (key: CaptionPreset["key"]) => {
       setCaptionPreset(key)
-      const preset = CAPTION_PRESETS.find((candidate) => candidate.key === key)
-      const clip = spine?.elements.find((element): element is VideoElement => element.kind === "video")
-      const first = scene.tracks
-        .filter((track) => track.kind === "caption")
-        .flatMap((track) => track.elements)
-        .find((element) => element.kind === "caption")
-      const regroup =
-        preset?.style.wordsPerSegment !== undefined &&
-        first?.kind === "caption" &&
-        first.style.wordsPerSegment !== preset.style.wordsPerSegment
-      if (regroup && clip && first?.kind === "caption") {
-        // Regrouped from the words the captions hold now, not the
-        // transcript, so a correction or an imported subtitle file survives.
-        const words = captionWords(scene, clip.mediaId)
-        if (words.length > 0) {
-          commit(
-            keepCorrections(
-              scene,
-              addCaptions(scene, words, {
-                mediaId: clip.mediaId,
-                author: "user",
-                rules: 1,
-                style: { ...first.style, ...preset.style },
-              })
-            )
-          )
-          return
-        }
-      }
-      commit(applyCaptionPreset(scene, key))
+      commit(restyleCaptions(scene, key, "user"))
     },
-    [commit, scene, spine]
+    [commit, scene]
   )
 
   const onImportSubtitles = React.useCallback(

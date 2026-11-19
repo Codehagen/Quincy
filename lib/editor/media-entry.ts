@@ -1,10 +1,13 @@
 import type { MediaEntry } from "@/components/editor/studio"
 
-import type { VideoAssetRow } from "./assets"
+import { getAsset, type VideoAssetRow } from "./assets"
 import { storageKeys } from "./media"
+import { referencedMediaIds } from "./placement"
 import { readTake, strongLineSlot } from "./reading"
 import type { Storage } from "./ingest"
+import { createR2Storage } from "./storage-r2"
 import { wordsFromDeepgram } from "./transcript"
+import type { VideoDocument } from "./types"
 
 /**
  * What the studio needs to show one asset, with URLs that work.
@@ -89,4 +92,30 @@ export function mediaKindOf(mimeType: string): "video" | "audio" | "image" {
 function strongLineOf(transcript: unknown): string | null {
   const slot = strongLineSlot(transcript)
   return slot?.state === "done" ? slot.line : null
+}
+
+/**
+ * Every asset a project shows, with URLs: what its elements reference and
+ * what the person brought in and has not placed yet (its library). Read off
+ * the document rather than a stored list, because the document is the only
+ * thing that knows what it uses right now. One lookup for the cut page and
+ * the project API, so neither can fall behind the other.
+ */
+export async function resolveProjectMedia(
+  document: VideoDocument,
+  userId: string,
+  storage: Pick<Storage, "url" | "exists"> = createR2Storage()
+): Promise<Record<string, MediaEntry>> {
+  const mediaIds = new Set<string>([
+    ...referencedMediaIds(document.scenes),
+    ...(document.metadata.library ?? []),
+  ])
+  const entries = await Promise.all(
+    [...mediaIds].map(async (mediaId) => {
+      const asset = await getAsset(mediaId, userId)
+      if (!asset) return null
+      return [mediaId, await mediaEntryFor(asset, storage)] as const
+    })
+  )
+  return Object.fromEntries(entries.filter((entry) => entry !== null))
 }

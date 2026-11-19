@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   contentKey,
+  userContentKey,
   filmstripArgs,
   keyframeAtOrBefore,
   parseFrameRate,
@@ -213,6 +214,21 @@ describe("contentKey", () => {
     expect(contentKey(818670144, "49bfd3014c9d")).toBe(
       "xxh3-128:818670144:49bfd3014c9d"
     )
+  })
+})
+
+describe("userContentKey", () => {
+  it("keeps one person's files apart from another's with the same digest", () => {
+    const mine = userContentKey("user_A1", 10, "abc")
+    const theirs = userContentKey("user_B2", 10, "abc")
+    expect(mine).toBe("u/user_A1/xxh3-128:10:abc")
+    expect(storageKeys.original(mine)).not.toBe(storageKeys.original(theirs))
+    expect(storageKeys.proxy(mine)).not.toBe(storageKeys.proxy(theirs))
+  })
+
+  it("cannot be steered out of its folder by the user id", () => {
+    expect(userContentKey("../x/y", 1, "h")).toBe("u/xy/xxh3-128:1:h")
+    expect(() => userContentKey("//", 1, "h")).toThrow()
   })
 })
 
