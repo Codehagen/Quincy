@@ -8,6 +8,15 @@ import { Slider, Switch, Text } from "@/components/kit"
 import { SPEED_PRESETS } from "@/lib/editor/edits"
 import { LAYOUTS, type LayoutKey } from "@/lib/editor/layout"
 import { CAPTION_PRESETS, LOOK_PRESETS, type CaptionPreset, type LookPreset } from "@/lib/editor/presets"
+import {
+  DEFAULT_TEXT_MOTION,
+  TEXT_MOVE_HINT,
+  TEXT_MOVE_LABEL,
+  TEXT_MOVES,
+  type TextFeel,
+  type TextMotion,
+  type TextMove,
+} from "@/lib/editor/motion"
 import { TEXT_PRESETS, MAX_TEXT_LENGTH, type TextRole } from "@/lib/editor/titles"
 import {
   DEFAULT_TRANSITION_US,
@@ -18,6 +27,7 @@ import {
 import type { TimelineElement, TransitionKind } from "@/lib/editor/types"
 import { cn } from "@/lib/utils"
 
+import { FeelSwitch, MotionGrid } from "./motion-grid"
 import { formatClockTenths } from "./studio-parts"
 
 /**
@@ -35,8 +45,11 @@ const CHIP =
 const ROW_BUTTON =
   "flex min-h-11 w-full flex-col items-start justify-center rounded-kit-control px-2 text-left outline-hidden transition-[background-color] duration-150 ease-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50 disabled:hover:bg-transparent"
 
+const SELECT =
+  "h-7 min-w-0 flex-1 rounded-kit-control border border-kit-hairline bg-kit-object px-1.5 text-kit-meta text-kit-ink outline-hidden focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
+
 const FIELD =
-  "h-9 w-full min-w-0 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-body text-kit-ink outline-hidden placeholder:text-kit-ink-muted focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
+  "h-9 w-full min-w-0 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-dense text-kit-ink outline-hidden placeholder:text-kit-ink-muted focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
 
 function Section({
   title,
@@ -50,7 +63,7 @@ function Section({
   return (
     <section className="flex flex-col gap-2 px-3 py-3">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 className="text-kit-body font-kit-strong text-kit-ink">{title}</h2>
+        <h2 className="text-kit-small font-kit-strong text-kit-ink">{title}</h2>
         {aside}
       </div>
       {children}
@@ -66,8 +79,17 @@ export type TextRow = {
   role?: TextRole
   content: string
   subtitle?: string
+  motion: TextMotion
   startUs: number
 }
+
+type TextPatch = { content?: string; subtitle?: string; motion?: TextMotion }
+
+const MOVE_OPTIONS = TEXT_MOVES.map((key) => ({
+  key,
+  label: TEXT_MOVE_LABEL[key],
+  hint: TEXT_MOVE_HINT[key],
+}))
 
 export function StudioTextPanel({
   texts,
@@ -78,20 +100,27 @@ export function StudioTextPanel({
   disabled,
 }: {
   texts: TextRow[]
-  onAdd: (role: TextRole, content: string, subtitle?: string) => void
-  onEdit: (id: string, patch: { content?: string; subtitle?: string }) => void
+  onAdd: (
+    role: TextRole,
+    content: string,
+    subtitle: string | undefined,
+    motion: TextMotion
+  ) => void
+  onEdit: (id: string, patch: TextPatch) => void
   onRemove: (trackId: string, id: string) => void
   onSeek: (atUs: number) => void
   disabled?: boolean
 }) {
   const [role, setRole] = React.useState<TextRole>("title")
+  // Kept between adds: the second title in a cut usually moves like the first.
+  const [motion, setMotion] = React.useState<TextMotion>(DEFAULT_TEXT_MOTION)
   const [content, setContent] = React.useState("")
   const [subtitle, setSubtitle] = React.useState("")
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!content.trim()) return
-    onAdd(role, content, role === "lower_third" ? subtitle : undefined)
+    onAdd(role, content, role === "lower_third" ? subtitle : undefined, motion)
     setContent("")
     setSubtitle("")
   }
@@ -133,6 +162,23 @@ export function StudioTextPanel({
               disabled={disabled}
             />
           ) : null}
+          <span className="mt-1 px-1 text-kit-meta text-kit-ink-muted">
+            How it enters and leaves
+          </span>
+          <MotionGrid
+            label="How it enters"
+            kind="text"
+            options={MOVE_OPTIONS}
+            value={motion.move}
+            feel={motion.feel}
+            onPick={(move) => setMotion((current) => ({ ...current, move }))}
+            disabled={disabled}
+          />
+          <FeelSwitch
+            value={motion.feel}
+            onChange={(feel) => setMotion((current) => ({ ...current, feel }))}
+            disabled={disabled || motion.move === "none"}
+          />
           <button
             type="submit"
             disabled={disabled || !content.trim()}
@@ -177,7 +223,7 @@ function TextItem({
   disabled,
 }: {
   text: TextRow
-  onEdit: (id: string, patch: { content?: string; subtitle?: string }) => void
+  onEdit: (id: string, patch: TextPatch) => void
   onRemove: (trackId: string, id: string) => void
   onSeek: (atUs: number) => void
   disabled?: boolean
@@ -246,6 +292,39 @@ function TextItem({
           }}
         />
       ) : null}
+      <div className="flex items-center gap-1.5">
+        <select
+          aria-label="How it enters"
+          value={text.motion.move}
+          disabled={disabled}
+          onChange={(event) =>
+            onEdit(text.id, {
+              motion: { ...text.motion, move: event.target.value as TextMove },
+            })
+          }
+          className={SELECT}
+        >
+          {TEXT_MOVES.map((move) => (
+            <option key={move} value={move}>
+              {TEXT_MOVE_LABEL[move]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Feel"
+          value={text.motion.feel}
+          disabled={disabled || text.motion.move === "none"}
+          onChange={(event) =>
+            onEdit(text.id, {
+              motion: { ...text.motion, feel: event.target.value as TextFeel },
+            })
+          }
+          className={SELECT}
+        >
+          <option value="smooth">Smooth</option>
+          <option value="snappy">Snappy</option>
+        </select>
+      </div>
     </li>
   )
 }
@@ -457,7 +536,7 @@ export function StudioSettingsPanel({
                   onClick={() => onCaptionPreset(preset.key)}
                   className={cn(ROW_BUTTON, "aria-pressed:bg-kit-row-hover")}
                 >
-                  <span className="text-kit-body text-kit-ink">{preset.label}</span>
+                  <span className="text-kit-small text-kit-ink">{preset.label}</span>
                   <span className="text-kit-small text-kit-ink-muted">{preset.hint}</span>
                 </button>
               </li>
@@ -530,7 +609,7 @@ export function StudioSettingsPanel({
       ) : null}
 
       <Section title="Background">
-        <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-kit-body text-kit-ink">
+        <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-kit-small text-kit-ink">
           Behind the picture
           <input
             type="color"

@@ -13,8 +13,22 @@ import {
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
 import { effectGroups, type EffectSpec } from "@/lib/editor/effect-catalogue"
+import {
+  ZOOM_KIND_HINT,
+  ZOOM_KIND_LABEL,
+  ZOOM_KINDS,
+  type ZoomKind,
+} from "@/lib/editor/zoom-kinds"
 import type { EffectType } from "@/lib/editor/types"
 import { cn } from "@/lib/utils"
+
+import { MotionGrid } from "./motion-grid"
+
+const ZOOM_OPTIONS = ZOOM_KINDS.map((key) => ({
+  key,
+  label: ZOOM_KIND_LABEL[key],
+  hint: ZOOM_KIND_HINT[key],
+}))
 
 /**
  * What you can put on the clip you are looking at.
@@ -49,12 +63,15 @@ export function StudioEffects({
   applied,
   hasClip,
   onApply,
+  onZoom,
   onRemove,
   locked,
 }: {
   applied: Set<EffectType>
   hasClip: boolean
   onApply: (type: EffectType) => void
+  /** Add a zoom of this kind at the playhead. */
+  onZoom: (kind: ZoomKind) => void
   onRemove: (type: EffectType) => void
   locked?: boolean
 }) {
@@ -72,18 +89,44 @@ export function StudioEffects({
                 {group.title}
               </h3>
 
-              <div className="flex flex-col gap-0.5">
-                {group.effects.map((spec) => (
-                  <EffectRow
-                    key={spec.type}
-                    spec={spec}
-                    on={applied.has(spec.type)}
+              {group.kind === "movement" ? (
+                // A zoom is a moment rather than a look on the whole shot, so
+                // each tile adds one at the playhead (several per clip are
+                // fine) instead of toggling one effect on and off.
+                <div className="flex flex-col gap-1.5 px-2 pt-0.5">
+                  <MotionGrid
+                    label="Add a zoom at the playhead"
+                    kind="zoom"
+                    options={ZOOM_OPTIONS}
+                    value={null}
+                    onPick={onZoom}
                     disabled={locked}
-                    onApply={() => onApply(spec.type)}
-                    onRemove={() => onRemove(spec.type)}
                   />
-                ))}
-              </div>
+                  {applied.has("zoom") ? (
+                    <button
+                      type="button"
+                      disabled={locked}
+                      onClick={() => onRemove("zoom")}
+                      className="self-start rounded-kit-chip px-1 text-kit-meta text-kit-ink-muted outline-hidden hover:text-kit-ink focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid"
+                    >
+                      Take the zooms off this clip
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {group.effects.map((spec) => (
+                    <EffectRow
+                      key={spec.type}
+                      spec={spec}
+                      on={applied.has(spec.type)}
+                      disabled={locked}
+                      onApply={() => onApply(spec.type)}
+                      onRemove={() => onRemove(spec.type)}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           ))}
         </div>
@@ -134,7 +177,7 @@ function EffectRow({
         // transitioning everything would animate the layout each time the
         // panel re-renders under a moving playhead.
         "transition-[color,background-color,transform] duration-150 ease-out",
-        "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+        "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
         "disabled:pointer-events-none disabled:opacity-50",
         // 0.99 rather than the 0.96 the small buttons use. The same ratio on a
         // 240px row is a lurch; press feedback should be felt, not watched.
@@ -159,9 +202,9 @@ function EffectRow({
         </span>
         <span
           className={cn(
-            "mt-0.5 block text-kit-small leading-snug",
+            "mt-0.5 block text-kit-meta",
             // Full strength on the filled row, not /75. Dimmed it measured
-            // 3.76:1 against the effect surface — under the 4.5 floor at 11px,
+            // 3.76:1 against the effect surface — under the 4.5 floor at 12px,
             // and the same mistake the caption chip made for the same reason:
             // a quiet surface does not need quiet text on top of it as well.
             on ? "text-kit-ink" : "text-kit-ink-muted"

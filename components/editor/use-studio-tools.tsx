@@ -18,6 +18,7 @@ import { cutSpeaker, nameSpeaker, speakerLabel, speakerNumbers } from "@/lib/edi
 import { cuesToWords, parseSubtitles, subtitleCues, toSrt, toVtt } from "@/lib/editor/subtitles"
 import { findMainTrack } from "@/lib/editor/timeline"
 import { us } from "@/lib/editor/time"
+import { textMotion } from "@/lib/editor/motion"
 import { addText, editText, positionText } from "@/lib/editor/titles"
 import { addCaptions } from "@/lib/editor/tools"
 import { setTransition, previousClip } from "@/lib/editor/transitions"
@@ -233,6 +234,7 @@ export function useStudioTools({
               role: element.role,
               content: element.content,
               subtitle: element.subtitle,
+              motion: textMotion(element.motion),
               startUs: element.startUs,
             }))
         )
@@ -349,12 +351,13 @@ export function useStudioTools({
           <StudioTextPanel
             texts={texts}
             disabled={running}
-            onAdd={(role, content, subtitle) =>
+            onAdd={(role, content, subtitle, motion) =>
               commit(
                 addText(scene, {
                   role,
                   content,
                   subtitle,
+                  motion,
                   atUs: role === "lower_third" ? player.readPlayhead() : undefined,
                   author: "user",
                 })

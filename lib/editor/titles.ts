@@ -3,6 +3,7 @@ import { newElement, type EditOp } from "./ops"
 import { placeElement } from "./placement"
 import { sceneDurationUs } from "./timeline"
 import { us } from "./time"
+import { textMotion, type TextMotion } from "./motion"
 import type { Author, CaptionStyle, Scene, TextElement } from "./types"
 
 /**
@@ -11,8 +12,8 @@ import type { Author, CaptionStyle, Scene, TextElement } from "./types"
  * Three, each with one look, because what a title is for decides where it
  * sits and how big it is far more than taste does. A title fills the middle,
  * a lower third names the person low on the left and stays out of the face,
- * an end card closes the cut. Each enters and leaves with a short fade
- * (`textOpacity`), never a fly-in.
+ * an end card closes the cut. Each enters and leaves the way its `motion`
+ * says (motion.ts): a short fade unless someone picked otherwise.
  */
 
 export type TextRole = NonNullable<TextElement["role"]>
@@ -113,6 +114,8 @@ export function addText(
     /** Absent: a title opens the cut, an end card closes it, a name sits at the playhead. */
     atUs?: number
     durationUs?: number
+    /** Absent: the plain fade. */
+    motion?: TextMotion
     author: Author
   }
 ): EditOp[] {
@@ -136,6 +139,7 @@ export function addText(
       ...(options.subtitle?.trim()
         ? { subtitle: options.subtitle.trim().slice(0, MAX_TEXT_LENGTH) }
         : {}),
+      ...(options.motion ? { motion: textMotion(options.motion) } : {}),
       startUs: us(Math.max(0, Math.round(at))),
       durationUs: us(length),
       style: preset.style,
@@ -151,10 +155,12 @@ export function addText(
 export function editText(
   scene: Scene,
   elementId: string,
-  patch: { content?: string; subtitle?: string }
+  patch: { content?: string; subtitle?: string; motion?: TextMotion }
 ): EditOp[] {
   for (const track of scene.tracks) {
-    const element = track.elements.find((candidate) => candidate.id === elementId)
+    const element = track.elements.find(
+      (candidate) => candidate.id === elementId
+    )
     if (!element || element.kind !== "text") continue
     const next: Record<string, unknown> = {}
     if (patch.content !== undefined) {
@@ -168,7 +174,14 @@ export function editText(
     }
     if (patch.subtitle !== undefined) {
       const subtitle = patch.subtitle.trim().slice(0, MAX_TEXT_LENGTH)
-      if (subtitle !== (element.subtitle ?? "")) next.subtitle = subtitle || null
+      if (subtitle !== (element.subtitle ?? ""))
+        next.subtitle = subtitle || null
+    }
+    if (patch.motion !== undefined) {
+      const motion = textMotion(patch.motion)
+      const current = textMotion(element.motion)
+      if (motion.move !== current.move || motion.feel !== current.feel)
+        next.motion = motion
     }
     if (Object.keys(next).length === 0) return []
     return [
@@ -178,7 +191,12 @@ export function editText(
         trackId: track.id,
         elementId,
         patch: next,
-        target: { action: "press", kind: "element", trackId: track.id, elementId },
+        target: {
+          action: "press",
+          kind: "element",
+          trackId: track.id,
+          elementId,
+        },
       },
     ]
   }
@@ -192,7 +210,9 @@ export function positionText(
   position: { x: number; y: number }
 ): EditOp[] {
   for (const track of scene.tracks) {
-    const element = track.elements.find((candidate) => candidate.id === elementId)
+    const element = track.elements.find(
+      (candidate) => candidate.id === elementId
+    )
     if (!element || element.kind !== "text") continue
     return [
       {
@@ -206,7 +226,12 @@ export function positionText(
             position: { x: Math.round(position.x), y: Math.round(position.y) },
           },
         },
-        target: { action: "press", kind: "element", trackId: track.id, elementId },
+        target: {
+          action: "press",
+          kind: "element",
+          trackId: track.id,
+          elementId,
+        },
       },
     ]
   }
