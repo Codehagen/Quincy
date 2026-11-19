@@ -2,15 +2,18 @@ import { NavLink } from "./nav-link"
 
 /**
  * The privacy link lives here because this is the surface a stranger reaches,
- * LinkedIn's app reviewer included, who must find a valid policy before
- * granting Standard tier. Links in both auth states: the footer is where a
- * signed-in reader looks for terms. No company line: the name is the line.
+ * a platform reviewer included, who must find a valid policy before granting
+ * access. Terms and data deletion sit with it: Meta's App Review checks all
+ * three from the public site. Links in both auth states. No company line:
+ * the name is the line.
  */
 const LINKS = [
   { href: "/pricing", label: "Pricing" },
   { href: "/changelog", label: "Changelog" },
   { href: "/why", label: "Why it works this way" },
+  { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
+  { href: "/data-deletion", label: "Data deletion" },
 ] as const
 
 /** The marketing footer. No props. Stacked under 40rem, a row above it. */

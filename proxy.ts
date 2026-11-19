@@ -34,7 +34,8 @@ import { NextResponse, type NextRequest } from "next/server"
  * by people deciding whether to sign up — before they have an account — and by
  * platform reviewers who will never have one. LinkedIn's Standard tier review
  * requires a reachable policy, and a 307 to /login reads to an automated
- * checker as "no policy at all".
+ * checker as "no policy at all". "/terms" and "/data-deletion" are the same
+ * kind of page: Meta's App Review fetches them with no session.
  *
  * "/pricing" is the same argument at its sharpest. Every reader it is written
  * for is signed out by definition — the page exists to turn a stranger into an
@@ -59,14 +60,22 @@ import { NextResponse, type NextRequest } from "next/server"
  * entire audience of the waitlist — so without this entry the POST comes back
  * 307 to /login, the fetch follows it into an HTML document, and the form
  * reports "could not reach the server" while the endpoint sits there working.
+ *
+ * "/api/meta/data-deletion" is the same failure with a worse audience. Meta's
+ * servers POST `signed_request` with no cookie when someone removes the app.
+ * A 307 to /login drops the body and fails App Review. The route checks the
+ * signature itself.
  */
 const PUBLIC = new Set([
   "/",
   "/why",
   "/pricing",
   "/privacy",
+  "/terms",
+  "/data-deletion",
   "/changelog",
   "/api/waitlist",
+  "/api/meta/data-deletion",
   "/robots.txt",
   "/sitemap.xml",
   // The feed belongs with the three files below rather than with the pages
@@ -163,7 +172,10 @@ export function proxy(request: NextRequest) {
   const params = new URLSearchParams(search)
   params.delete("_rsc")
   const query = params.toString()
-  requestHeaders.set(REQUEST_PATH_HEADER, query ? `${pathname}?${query}` : pathname)
+  requestHeaders.set(
+    REQUEST_PATH_HEADER,
+    query ? `${pathname}?${query}` : pathname
+  )
   return NextResponse.next({ request: { headers: requestHeaders } })
 }
 

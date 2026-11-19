@@ -50,5 +50,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "yearly",
       priority: 0.3,
     },
+    {
+      url: `${BASE_URL}/terms`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${BASE_URL}/data-deletion`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ]
 }

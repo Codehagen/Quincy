@@ -2,6 +2,7 @@ import { isGoogleEnabled } from "@/lib/auth"
 import { constructMetadata } from "@/lib/metadata"
 import { findRedeemableInvite } from "@/lib/waitlist"
 import { ButtonLink, TextLink } from "@/components/kit"
+import { LegalNote } from "@/components/auth/legal-note"
 import { AuthActions, AuthCard, AuthNote } from "@/components/auth/parts"
 import { SignupForm } from "@/components/auth/signup-form"
 
@@ -55,6 +56,7 @@ export default async function SignupPage({
         <AuthNote>
           Already have an account? <TextLink href="/login">Log in</TextLink>
         </AuthNote>
+        <LegalNote />
       </div>
     )
   }

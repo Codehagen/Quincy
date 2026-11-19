@@ -7,6 +7,7 @@ import {
   chooseInstagramAccount,
   countHashtags,
   exchangeInstagramCode,
+  fetchInstagramProfile,
   grantLooksRevoked,
   insightsFromPayload,
   INSTAGRAM_DAILY_CAP,
@@ -60,9 +61,12 @@ describe("Unified login", () => {
     const fetchImpl = vi.fn()
     fetchImpl
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ access_token: "sua", token_type: "bearer" }), {
-          status: 200,
-        })
+        new Response(
+          JSON.stringify({ access_token: "sua", token_type: "bearer" }),
+          {
+            status: 200,
+          }
+        )
       )
       .mockResolvedValueOnce(
         new Response(
@@ -91,16 +95,78 @@ describe("Unified login", () => {
     expect(tokens.scope).toBe("instagram_basic")
 
     const exchangeUrl = String(fetchImpl.mock.calls[0]?.[0])
-    expect(exchangeUrl).toContain("https://graph.facebook.com/v25.0/oauth/access_token")
+    expect(exchangeUrl).toContain(
+      "https://graph.facebook.com/v25.0/oauth/access_token"
+    )
     expect(exchangeUrl).toContain("code=authcode")
     expect(exchangeUrl).not.toContain("authcode#_")
     expect(String(fetchImpl.mock.calls[1]?.[0])).toContain("/me/permissions")
   })
 
   it("connects the one shared account and refuses none or several", () => {
-    expect(chooseInstagramAccount([{ id: "1789", username: "quincy" }]).id).toBe("1789")
+    expect(
+      chooseInstagramAccount([{ id: "1789", username: "quincy" }]).id
+    ).toBe("1789")
     expect(() => chooseInstagramAccount([])).toThrow(/professional account/)
-    expect(() => chooseInstagramAccount([{ id: "1" }, { id: "2" }])).toThrow(/more than one/)
+    expect(() => chooseInstagramAccount([{ id: "1" }, { id: "2" }])).toThrow(
+      /more than one/
+    )
+  })
+
+  it("stores the Facebook user id separately from the Instagram account id", async () => {
+    const fetchImpl = vi.fn()
+    fetchImpl
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: [{ id: "1789", username: "quincy" }] }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "1789",
+            username: "quincy",
+            name: "Quincy",
+            profile_picture_url: "https://example.com/a.jpg",
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "218471" }), { status: 200 })
+      )
+
+    const profile = await fetchInstagramProfile("token", fetchImpl, {
+      META_GRAPH_VERSION: "v25.0",
+    })
+
+    expect(profile.externalId).toBe("1789")
+    expect(profile.metaUserId).toBe("218471")
+    expect(String(fetchImpl.mock.calls[2]?.[0])).toContain("/me?fields=id")
+  })
+
+  it("still connects when the Facebook user id cannot be read", async () => {
+    const fetchImpl = vi.fn()
+    fetchImpl
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: [{ id: "1789", username: "quincy" }] }),
+          {
+            status: 200,
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "1789", username: "quincy" }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(new Response("no", { status: 400 }))
+
+    const profile = await fetchInstagramProfile("token", fetchImpl, {})
+    expect(profile.externalId).toBe("1789")
+    expect(profile.metaUserId).toBeNull()
   })
 })
 

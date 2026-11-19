@@ -4,7 +4,8 @@ The landing page (`/`) is the visual reference for the whole product since
 2026-11-16: the app's ground, its ink action, its air and its title size
 were taken from it (plans/029, revision).
 
-The public pages are `/`, `/pricing`, `/why`, `/changelog` and `/privacy`. Parts in
+The public pages are `/`, `/pricing`, `/why`, `/changelog`, `/privacy`, `/terms`
+and `/data-deletion`. Parts in
 `components/marketing/` (import from `@/components/marketing`); pictures in
 `components/showcase/demos/` (showcase.md). Never in an app page: the app is
 `KitPage` and Stages (page.md).
@@ -23,7 +24,8 @@ MarketingShell yourself only for a marketing page outside that route group
   Suspense with the signed-out state as the fallback, so every page
   prerenders. Anchors carry the path (`/#join`), because the header renders
   on pages that have no `#join`.
-- **Footer**: "Quincy" and four links. No company line, no tagline.
+- **Footer**: "Quincy" and six links (pricing, changelog, why, terms, privacy,
+  data deletion). No company line, no tagline.
 - **NavLink** (`narrow` `show` | `hide`): a header or footer link. Inside a
   sentence use the kit's `TextLink`.
 - **Hit areas.** NavLink, the lockup and MarketingButton carry `HIT_40_44`
@@ -157,7 +159,8 @@ with five examples read as five products. The one story is decisions.md,
 
 - `className` or `style` on any part. A missing size or gap is a token.
 - Brass, sand, `--primary`, the role scale or `components/ui` in a new
-  marketing body. `/pricing`, `/why`, `/changelog` and `/privacy` still use
+  marketing body. `/pricing`, `/why`, `/changelog`, `/privacy`, `/terms` and
+  `/data-deletion` still use
   them inside the new chrome until each one is redrawn as a whole.
 - Copy: no em dashes, never "riff", no customer, logo, signup count or queue
   position, never another product's name.

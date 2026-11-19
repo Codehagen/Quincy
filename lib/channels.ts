@@ -461,6 +461,13 @@ export type ChannelProfile = {
   handle: string | null
   displayName: string | null
   avatarUrl: string | null
+  /**
+   * Instagram only: the Facebook app-scoped user id. A string overwrites the
+   * stored value. Absent or null leaves whatever is already stored, so a
+   * failed `GET /me` on reconnect does not wipe an id the deletion callback
+   * can still use.
+   */
+  metaUserId?: string | null
 }
 
 export async function fetchProfile(
@@ -565,7 +572,7 @@ export type Connection = typeof channelConnection.$inferSelect
  */
 export type SafeConnection = Omit<
   Connection,
-  "accessToken" | "refreshToken" | "scope"
+  "accessToken" | "refreshToken" | "scope" | "metaUserId"
 > & { scopes: string[] }
 
 export function toSafeConnection(row: Connection): SafeConnection {
@@ -639,15 +646,21 @@ export async function saveConnection({
     updatedAt: now,
   }
 
+  // Only a real id is written on update. Null means the lookup failed, and
+  // clearing the previous id would make a later deletion callback miss a
+  // person we already knew.
+  const metaUserId =
+    typeof profile.metaUserId === "string" ? profile.metaUserId : null
+
   const [row] = await db
     .insert(channelConnection)
-    .values({ id: newConnectionId(), ...values })
+    .values({ id: newConnectionId(), ...values, metaUserId })
     .onConflictDoUpdate({
       // (userId, channel) rather than including externalId: this is what
       // makes connecting a different account on a channel replace the
       // existing connection instead of inserting a second one alongside it.
       target: [channelConnection.userId, channelConnection.channel],
-      set: values,
+      set: metaUserId ? { ...values, metaUserId } : values,
     })
     .returning()
 

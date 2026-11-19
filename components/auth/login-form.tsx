@@ -12,6 +12,7 @@ import { AuthField } from "@/components/auth/auth-field"
 import { GoogleButton } from "@/components/auth/google-button"
 import { LastUsed } from "@/components/auth/last-used"
 import { ResendVerification } from "@/components/auth/resend-verification"
+import { LegalNote } from "@/components/auth/legal-note"
 import {
   Address,
   AuthActions,
@@ -216,6 +217,7 @@ export function LoginForm({
         <AuthNote>
           No account yet? <TextLink href="/#join">Join the waitlist</TextLink>
         </AuthNote>
+        <LegalNote />
       </div>
     </div>
   )
