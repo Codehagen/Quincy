@@ -882,7 +882,12 @@ async function readMeasuredPosts(
     // was. Zero rows on the live account, and the analysis says so rather than
     // guessing a kind from the text.
     db
-      .select({ externalId: scheduledPost.externalId, kind: draft.kind })
+      .select({
+        externalId: scheduledPost.externalId,
+        kind: draft.kind,
+        body: draftVersion.body,
+        url: scheduledPost.postUrl,
+      })
       .from(scheduledPost)
       .innerJoin(
         draftVersion,
@@ -899,23 +904,27 @@ async function readMeasuredPosts(
   ])
 
   const bodyOf = new Map(texts.map((row) => [row.externalId, row]))
-  const kindOf = new Map(
+  const publishedOf = new Map(
     lineage
       .filter((row): row is typeof row & { externalId: string } =>
         Boolean(row.externalId)
       )
-      .map((row) => [row.externalId, row.kind])
+      .map((row) => [row.externalId, row])
   )
 
   return readings.map((reading) => {
     const text = bodyOf.get(reading.externalId)
+    const published = publishedOf.get(reading.externalId)
     return {
       channel: reading.channel,
       externalId: reading.externalId,
       impressions: reading.impressions,
-      body: text?.body ?? "",
-      url: text?.url ?? "",
-      kind: kindOf.get(reading.externalId) ?? "",
+      // The corpus wins when it has the post. A publish that has not been
+      // imported — every Instagram post, today — still has the approved text
+      // on the scheduled row, and the median can read it.
+      body: text?.body || published?.body || "",
+      url: text?.url || published?.url || "",
+      kind: published?.kind ?? "",
     }
   })
 }

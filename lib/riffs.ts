@@ -139,6 +139,7 @@ export const CHANNELS_FOR_SHAPE: Record<
   "Short post": [
     { id: "x", label: "X" },
     { id: "linkedin", label: "LinkedIn" },
+    { id: "instagram", label: "Instagram" },
   ],
   Thread: [{ id: "x", label: "X" }],
   Carousel: [

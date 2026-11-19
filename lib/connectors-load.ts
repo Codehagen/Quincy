@@ -165,7 +165,8 @@ export async function loadConnectors(
         out.push({ ...entry, status: { s: "builtin" }, detail: { id: "none" } })
         break
       case "x":
-      case "linkedin": {
+      case "linkedin":
+      case "instagram": {
         const row = channels.find((c) => c.channel === entry.id) ?? null
         out.push({
           ...entry,

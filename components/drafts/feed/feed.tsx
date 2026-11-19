@@ -37,7 +37,7 @@ import "./feed.css"
  * (`aria-hidden`, inert), and the verbs live under the column in the kit.
  */
 
-export type FeedPlatform = "x" | "linkedin"
+export type FeedPlatform = "x" | "linkedin" | "instagram"
 
 const PlatformContext = React.createContext<FeedPlatform | null>(null)
 
@@ -61,7 +61,11 @@ export type FeedColumnProps = React.ComponentPropsWithRef<"div"> & {
 function FeedColumnRoot({ platform, className, children, ...rest }: FeedColumnProps) {
   return (
     <PlatformContext value={platform}>
-      <div data-platform={platform} className={cx(platform === "x" ? "xf" : "lf", className)} {...rest}>
+      <div
+        data-platform={platform}
+        className={cx(platform === "x" ? "xf" : platform === "instagram" ? "ig" : "lf", className)}
+        {...rest}
+      >
         {children}
       </div>
     </PlatformContext>
@@ -150,6 +154,15 @@ function FeedPostRoot({ initials, avatarUrl = null, className, children, ...rest
       </PostContext>
     )
   }
+  if (platform === "instagram") {
+    return (
+      <PostContext value={value}>
+        <div className={cx("ig-post", className)} {...rest}>
+          {children}
+        </div>
+      </PostContext>
+    )
+  }
   return (
     <PostContext value={value}>
       <div
@@ -185,6 +198,20 @@ export type FeedPostHeaderProps = React.ComponentPropsWithRef<"div"> & {
 function FeedPostHeader({ name, handle, headline, time = "now", className, ...rest }: FeedPostHeaderProps) {
   const platform = usePlatform("FeedPost.Header")
   const post = React.useContext(PostContext)
+  if (platform === "instagram") {
+    return (
+      <div className={cx("ig-head", className)} {...rest}>
+        <span aria-hidden className="ig-avatar">
+          {post ? <AvatarFace initials={post.initials} avatarUrl={post.avatarUrl} /> : null}
+        </span>
+        <div className="min-w-0">
+          <div className="ig-name">{name}</div>
+          {handle ? <div className="ig-dim">{`@${handle.replace(/^@/, "")}`}</div> : null}
+        </div>
+        <span className="ig-dim">{time}</span>
+      </div>
+    )
+  }
   if (platform === "linkedin") {
     return (
       <div className={cx("lf-head", className)} {...rest}>
@@ -224,7 +251,7 @@ function FeedPostHeader({ name, handle, headline, time = "now", className, ...re
 function FeedPostBody({ className, children, ...rest }: React.ComponentPropsWithRef<"div">) {
   const platform = usePlatform("FeedPost.Body")
   return (
-    <div className={cx(platform === "linkedin" ? "lf-body" : undefined, className)} {...rest}>
+    <div className={cx(platform === "linkedin" ? "lf-body" : platform === "instagram" ? "ig-body" : undefined, className)} {...rest}>
       {children}
     </div>
   )
@@ -233,6 +260,7 @@ function FeedPostBody({ className, children, ...rest }: React.ComponentPropsWith
 /** The platform's action row, without a count on it. A picture: inert and hidden from assistive tech. */
 function FeedPostActions({ className, ...rest }: React.ComponentPropsWithRef<"div">) {
   const platform = usePlatform("FeedPost.Actions")
+  if (platform === "instagram") return null
   if (platform === "linkedin") {
     return (
       <div aria-hidden className={cx("lf-actions", className)} {...rest}>
@@ -338,6 +366,14 @@ export const FeedPost = Object.assign(FeedPostRoot, {
 /** A neighbour post with no words: avatar, grey bars, the action row. Never fake text. */
 export function FeedSkeleton({ className, ...rest }: React.ComponentPropsWithRef<"div">) {
   const platform = usePlatform("FeedSkeleton")
+  if (platform === "instagram") {
+    return (
+      <div aria-hidden className={cx("ig-post ig-skel", className)} {...rest}>
+        <span className="xf-bar" style={{ width: "40%" }} />
+        <span className="ig-frame ig-frame-skel" />
+      </div>
+    )
+  }
   if (platform === "linkedin") {
     return (
       <div aria-hidden className={cx("lf-card lf-skel", className)} {...rest}>

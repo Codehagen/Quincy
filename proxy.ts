@@ -205,6 +205,13 @@ export const config = {
      * Both are public by definition — issuer, endpoints and supported scopes,
      * per RFC 8414 and RFC 9728.
      *
+     * `/api/media/instagram/<id>.jpg` is fetched by Meta's crawler while a
+     * post is published. The crawler has no cookie. The path is not given
+     * its own prefix here: it ends in `.jpg`, and the extension alternative
+     * at the end of the matcher already lets image files through. Dropping
+     * the extension would 307 the fetch to /login and every Instagram
+     * publish would fail with the image unreachable.
+     *
      * `.well-known/workflow` is the fifth of exactly the same shape, and the
      * Workflow docs call it out because Next 16's rename of `middleware.ts` to
      * `proxy.ts` makes it easy to miss. The runtime talks to itself over

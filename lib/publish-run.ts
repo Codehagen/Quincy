@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lte, ne, sql } from "drizzle-orm"
 
 import { isChannelEnabled, PLATFORM_TIMEOUT_MS } from "./channels"
 import { db } from "./db"
+import { INSTAGRAM_MANUAL_COOLDOWN_MS, instagramManualWait } from "./instagram"
 import { publish, type PublishResult } from "./publish"
 import { canPublish } from "./publisher"
 import {
@@ -723,6 +724,35 @@ export async function sendNow({
     return {
       ok: false,
       message: `${row.channel} publishing is not configured in this environment.`,
+    }
+  }
+
+  if (row.channel === "instagram") {
+    const since = new Date(now.getTime() - INSTAGRAM_MANUAL_COOLDOWN_MS)
+    const filters = [
+      eq(scheduledPost.userId, userId),
+      eq(draftVersion.channel, "instagram"),
+      eq(scheduledPost.state, "published"),
+      gte(scheduledPost.publishedAt, since),
+    ]
+    if (row.postId) filters.push(ne(scheduledPost.id, row.postId))
+    const [recent] = await db
+      .select({ at: scheduledPost.publishedAt })
+      .from(scheduledPost)
+      .innerJoin(
+        draftVersion,
+        eq(draftVersion.id, scheduledPost.draftVersionId)
+      )
+      .where(and(...filters))
+      .orderBy(desc(scheduledPost.publishedAt))
+      .limit(1)
+    const wait = instagramManualWait(recent?.at ?? null, now)
+    if (wait > 0) {
+      const minutes = Math.max(1, Math.ceil(wait / 60_000))
+      return {
+        ok: false,
+        message: `The last Instagram post went out recently. Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+      }
     }
   }
 

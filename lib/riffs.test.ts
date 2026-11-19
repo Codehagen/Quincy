@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { CONNECTABLE_CHANNELS } from "./schema-app"
 import type { Riff } from "./riffs"
 
 /**
@@ -28,8 +29,13 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 
-const { channelGaps, claimVoiceRiff, shapesForChannel, shapesForChannels } =
-  await import("./riffs")
+const {
+  CHANNELS_FOR_SHAPE,
+  channelGaps,
+  claimVoiceRiff,
+  shapesForChannel,
+  shapesForChannels,
+} = await import("./riffs")
 
 function riff(
   angles: { shape: Riff["angles"][number]["shape"]; drafted?: boolean }[]
@@ -59,6 +65,17 @@ describe("shapesForChannel", () => {
       "Short post",
     ])
     expect(shapesForChannel("substack")).toEqual(["Essay"])
+  })
+
+  it("gives every connectable channel at least one shape", () => {
+    const reached = new Set(
+      Object.values(CHANNELS_FOR_SHAPE).flatMap((channels) =>
+        channels.map((c) => c.id)
+      )
+    )
+    for (const channel of CONNECTABLE_CHANNELS) {
+      expect(reached.has(channel)).toBe(true)
+    }
   })
 
   it("returns nothing for a channel no shape reaches", () => {

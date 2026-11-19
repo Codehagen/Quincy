@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, gte, ne, sql } from "drizzle-orm"
 
 import {
   getAccessToken,
@@ -6,6 +6,7 @@ import {
   markConnectionState,
 } from "./channels"
 import { db } from "./db"
+import { INSTAGRAM_DAILY_CAP, overInstagramDailyCap } from "./instagram"
 import { containsUrl, measurePost } from "./post-length"
 import {
   canPublish,
@@ -17,6 +18,8 @@ import {
 } from "./publisher"
 import {
   channelConnection,
+  draftVersion,
+  scheduledPost,
   usageEvent,
   type ConnectableChannel,
 } from "./schema-app"
@@ -255,6 +258,35 @@ export async function publish({
       ok: false,
       reason: "too-long",
       message: `${length.over} over the ${labelFor(channel)} limit of ${length.limit}.`,
+    }
+  }
+
+  if (channel === "instagram") {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const filters = [
+      eq(scheduledPost.userId, userId),
+      eq(draftVersion.channel, "instagram"),
+      eq(scheduledPost.state, "published"),
+      gte(scheduledPost.publishedAt, since),
+    ]
+    if (postId) filters.push(ne(scheduledPost.id, postId))
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(scheduledPost)
+      .innerJoin(
+        draftVersion,
+        eq(draftVersion.id, scheduledPost.draftVersionId)
+      )
+      .where(and(...filters))
+    const already = Number(row?.n ?? 0)
+    if (overInstagramDailyCap(already)) {
+      return {
+        ok: false,
+        reason: "rate-limited",
+        message:
+          `${INSTAGRAM_DAILY_CAP} Instagram posts have already gone out in ` +
+          "the last day. This one was not sent.",
+      }
     }
   }
 

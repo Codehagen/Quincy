@@ -1,12 +1,15 @@
 import { createIdGenerator } from "ai"
-import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm"
 
-import { getAccessToken } from "./channels"
+import { getAccessToken, markConnectionState } from "./channels"
 import { X_READ_COST_MICROS } from "./corpus-x"
 import { db } from "./db"
+import { fetchInstagramInsights, grantLooksRevoked, INSTAGRAM_METRICS_CAP } from "./instagram"
 import {
   channelConnection,
+  draftVersion,
   postMetric,
+  scheduledPost,
   sourceItem,
   usageEvent,
   type ConnectableChannel,
@@ -562,7 +565,7 @@ async function listDueConnections(limit: number): Promise<MetricsConnection[]> {
     .from(channelConnection)
     .where(
       and(
-        eq(channelConnection.channel, "x"),
+        inArray(channelConnection.channel, ["x", "instagram"]),
         sql`${channelConnection.state} <> 'revoked'`,
         or(
           isNull(channelConnection.lastMetricsAt),
@@ -693,6 +696,95 @@ async function recordMetricsCost(userId: string, postsRead: number): Promise<voi
   }
 }
 
+/**
+ * Insights for posts Quincy published, not a timeline crawl.
+ *
+ * Instagram has no equivalent of X's one-page user timeline that this job
+ * already pays for, and the median we can stand behind is the posts that
+ * went out from here. One insights call per post, at most
+ * `INSTAGRAM_METRICS_CAP`, and a refusal stores nothing — a zero written
+ * for a metric Meta has not computed yet would read as a flop.
+ */
+async function refreshInstagramMetrics({
+  fetchImpl,
+  userId,
+  connectionId,
+  accessToken,
+  since,
+  capturedAt,
+  resolveItems,
+  upsert,
+}: {
+  fetchImpl: typeof fetch
+  userId: string
+  connectionId: string
+  accessToken: string
+  since: Date
+  capturedAt: Date
+  resolveItems: PostMetricsDeps["resolveItems"]
+  upsert: PostMetricsDeps["upsert"]
+}): Promise<{ rows: number; capped: boolean; authFailed: boolean }> {
+  const found = await db
+    .select({ externalId: scheduledPost.externalId })
+    .from(scheduledPost)
+    .innerJoin(draftVersion, eq(draftVersion.id, scheduledPost.draftVersionId))
+    .where(
+      and(
+        eq(scheduledPost.userId, userId),
+        eq(draftVersion.channel, "instagram"),
+        eq(scheduledPost.state, "published"),
+        gte(scheduledPost.publishedAt, since)
+      )
+    )
+    .orderBy(desc(scheduledPost.publishedAt))
+    .limit(INSTAGRAM_METRICS_CAP + 1)
+
+  const capped = found.length > INSTAGRAM_METRICS_CAP
+  const posts = found.slice(0, INSTAGRAM_METRICS_CAP).flatMap((row) => (row.externalId ? [row.externalId] : []))
+  if (posts.length === 0) return { rows: 0, capped, authFailed: false }
+
+  const values: PostMetricValues[] = []
+  for (const externalId of posts) {
+    let reading: Awaited<ReturnType<typeof fetchInstagramInsights>>
+    try {
+      reading = await fetchInstagramInsights(externalId, accessToken, fetchImpl)
+    } catch (cause) {
+      console.error(`[post-metrics] instagram ${externalId} fetch failed:`, cause)
+      continue
+    }
+    if (!reading.ok) {
+      if (reading.status === 401 || grantLooksRevoked(reading.body)) {
+        await markConnectionState(connectionId, "needs_reauth", reading.body)
+        return { rows: 0, capped, authFailed: true }
+      }
+      console.error(`[post-metrics] instagram ${externalId} refused (${reading.status}): ${reading.body}`)
+      continue
+    }
+    values.push({
+      userId,
+      sourceItemId: "",
+      channel: "instagram",
+      externalId,
+      capturedAt,
+      ...reading.counts,
+    })
+  }
+
+  if (values.length === 0) return { rows: 0, capped, authFailed: false }
+
+  const items = await resolveItems(
+    userId,
+    values.map((row) => row.externalId)
+  )
+  const rows = dedupeSameDay(
+    values.map((row) => ({
+      ...row,
+      sourceItemId: items.get(row.externalId) ?? "",
+    }))
+  )
+  return { rows: await upsert(rows), capped, authFailed: false }
+}
+
 const LIVE_DEPS: PostMetricsDeps = {
   fetch,
   listDue: listDueConnections,
@@ -789,6 +881,27 @@ export async function refreshPostMetrics({
 
       if (!access.ok) {
         run.unavailable += 1
+        continue
+      }
+
+      if (connection.channel === "instagram") {
+        const stored = await refreshInstagramMetrics({
+          fetchImpl: deps.fetch,
+          userId: connection.userId,
+          connectionId: connection.id,
+          accessToken: access.accessToken,
+          since,
+          capturedAt,
+          resolveItems: deps.resolveItems,
+          upsert: deps.upsert,
+        })
+        if (stored.authFailed) {
+          run.failed += 1
+          continue
+        }
+        run.refreshed += 1
+        run.stored += stored.rows
+        if (stored.capped) run.capped = true
         continue
       }
 
