@@ -69,8 +69,8 @@ export type SilenceOptions = {
    * The difference between a tightened edit and a robotic one. Cutting on the
    * exact word boundary clips the breath before the next word and the release
    * of the last, which is the artefact people describe as "jump cut voice".
-   * Descript's patents describe the same problem and solve it by pulling cut
-   * points toward quiet rather than sitting on the timestamp.
+   * The usual answer is to pull cut points toward quiet rather than sit on
+   * the timestamp.
    */
   paddingUs: Us
   /** Leading silence before the first word is dead air, not rhythm. */
