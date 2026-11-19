@@ -1,0 +1,37 @@
+/* The mock's switches onto the real editor (tune.tsx). Harness only:
+   nothing in components/editor reads these attributes. */
+
+/* Tone: the lab's highlighter wash in place of the ink one. */
+.cuts-mock[data-tone="highlight"] .agent-mark-hot {
+  background-color: var(--kit-highlight);
+}
+
+/* Ring off. */
+.cuts-mock[data-ring="off"] .agent-ring {
+  display: none;
+}
+
+/* Reduce motion, forced: agent-cursor.css's media block, mirrored. Keep the
+   two in step when that block changes. */
+.cuts-mock[data-reduced] :is(.agent-cursor, .agent-toolbar, .agent-mark-sel) {
+  display: none;
+}
+.cuts-mock[data-reduced] :is(.agent-mark-hover, .agent-held, .cut-spine-clip),
+.cuts-mock[data-reduced] .agent-desk [data-agent-pressed] {
+  transition: none;
+}
+.cuts-mock[data-reduced] .agent-desk [data-agent-pressed] {
+  scale: none;
+}
+.cuts-mock[data-reduced] :is(.agent-fade, .agent-appear, .agent-frames, .cuts-msg-in, .cuts-empty-leave) {
+  animation: none;
+}
+.cuts-mock[data-reduced] .agent-mark[data-hot] .agent-mark-hot {
+  animation: agent-hot 300ms linear both;
+}
+.cuts-mock[data-reduced] .cuts-empty-leave {
+  visibility: hidden;
+}
+.cuts-mock[data-reduced] .cuts-shadcn [data-slot="trace-collapsible-content"] {
+  transition: none;
+}

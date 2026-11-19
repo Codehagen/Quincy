@@ -200,6 +200,38 @@ export function sourceToTimelineUs(
 }
 
 /**
+ * The inverse of sourceToTimelineUs: which clip plays at a timeline instant,
+ * and the instant of its source that shows there.
+ *
+ * Mapped through the window's own ratio (source span over timeline span), so
+ * a clip that ever plays at another speed still lands on its own frame; at
+ * normal speed it is `trimStartUs + (atUs - startUs)`. The answer is kept
+ * one frame inside the window and the media: a seek to a window's end or
+ * past the last frame shows no picture, which is how a frame grabbed at the
+ * end of a cut came back black.
+ */
+export function timelineToSourceUs(
+  track: Track,
+  atUs: number,
+  frameUs = 41_667
+): { clip: VideoElement; sourceUs: Us } | null {
+  for (const element of track.elements) {
+    if (element.kind !== "video") continue
+    if (atUs < element.startUs || atUs >= element.startUs + element.durationUs)
+      continue
+
+    const span = element.trimEndUs - element.trimStartUs
+    const ratio = element.durationUs > 0 ? span / element.durationUs : 1
+    const raw = element.trimStartUs + (atUs - element.startUs) * ratio
+    const last = Math.min(element.trimEndUs, element.sourceDurationUs) - frameUs
+    const sourceUs = Math.max(element.trimStartUs, Math.min(raw, last))
+    return { clip: element, sourceUs: us(Math.round(Math.max(0, sourceUs))) }
+  }
+
+  return null
+}
+
+/**
  * Rebuild caption elements against the current spine.
  *
  * Run after any cut. Words whose source instant no longer exists are dropped;

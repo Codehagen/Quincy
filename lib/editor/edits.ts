@@ -3,6 +3,7 @@ import { createIdGenerator } from "ai"
 import { effectSpec } from "./effect-catalogue"
 import { effectLanding, MIN_EFFECT_US, PRIMARY_PARAM } from "./effect-lane"
 import {
+  aimed,
   newEffect,
   newElement,
   newKeyframe,
@@ -15,6 +16,7 @@ import {
   findMainTrack,
   layOut,
   remapCaptions,
+  sourceToTimelineUs,
   splitBySourceRanges,
 } from "./timeline"
 import { us, type Us, type UsRange } from "./time"
@@ -136,11 +138,14 @@ export function splitAt(
     author
   )
 
-  return [
-    { op: "remove_element", sceneId: scene.id, trackId, elementId: clip.id },
-    { op: "insert_element", sceneId: scene.id, trackId, element: left },
-    { op: "insert_element", sceneId: scene.id, trackId, element: right },
-  ]
+  return aimed(
+    [
+      { op: "remove_element", sceneId: scene.id, trackId, elementId: clip.id },
+      { op: "insert_element", sceneId: scene.id, trackId, element: left },
+      { op: "insert_element", sceneId: scene.id, trackId, element: right },
+    ],
+    { action: "press", kind: "element", trackId, elementId: clip.id, atUs }
+  )
 }
 
 /**
@@ -180,11 +185,14 @@ export function deleteAndRipple(
     (candidate) => candidate.id === trackId
   )!.elements
 
-  return [
-    { op: "remove_element", sceneId: scene.id, trackId, elementId },
-    ...rippleOps(without, trackId),
-    ...captionsFollowing(scene, trackId, layOut(remaining)),
-  ]
+  return aimed(
+    [
+      { op: "remove_element", sceneId: scene.id, trackId, elementId },
+      ...rippleOps(without, trackId),
+      ...captionsFollowing(scene, trackId, layOut(remaining)),
+    ],
+    { action: "cut", kind: "element", trackId, elementId }
+  )
 }
 
 /**
@@ -247,15 +255,18 @@ export function deleteSpeech(
 
   const remaining = layOut(cut)
 
-  return [
-    {
-      op: "replace_elements",
-      sceneId: scene.id,
-      trackId: spine.id,
-      elements: remaining,
-    },
-    ...captionsFollowing(scene, spine.id, remaining),
-  ]
+  return aimed(
+    [
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining),
+    ],
+    { action: "cut", kind: "range", trackId: spine.id, spans: timelineSpans(spine, cuts) }
+  )
 }
 
 /**
@@ -289,7 +300,7 @@ export function trimEdge(
   if (delta === 0) return []
 
   if (edge === "end") {
-    return withRipple(scene, trackId, {
+    return withRipple(scene, trackId, elementId, {
       op: "update_element",
       sceneId: scene.id,
       trackId,
@@ -303,7 +314,7 @@ export function trimEdge(
 
   // Dragging the start right shortens the clip and moves into the source; the
   // clip's position on the timeline moves with it, and the ripple closes up.
-  return withRipple(scene, trackId, {
+  return withRipple(scene, trackId, elementId, {
     op: "update_element",
     sceneId: scene.id,
     trackId,
@@ -373,6 +384,7 @@ export function trimPreviewDeltaUs(
 function withRipple(
   scene: Scene,
   trackId: string,
+  elementId: string,
   op: Extract<EditOp, { op: "update_element" }>
 ): EditOp[] {
   const applied: Scene = {
@@ -393,11 +405,14 @@ function withRipple(
 
   const moved = applied.tracks.find((track) => track.id === trackId)!.elements
 
-  return [
-    op,
-    ...rippleOps(applied, trackId),
-    ...captionsFollowing(scene, trackId, layOut(moved)),
-  ]
+  return aimed(
+    [
+      op,
+      ...rippleOps(applied, trackId),
+      ...captionsFollowing(scene, trackId, layOut(moved)),
+    ],
+    { action: "press", kind: "element", trackId, elementId }
+  )
 }
 
 /**
@@ -431,7 +446,7 @@ export function reframe(
     return []
   }
 
-  return [{ op: "update_scene", sceneId: scene.id, patch: { canvas } }]
+  return aimed([{ op: "update_scene", sceneId: scene.id, patch: { canvas } }], { action: "press", kind: "control", control: "frame" })
 }
 
 /**
@@ -490,15 +505,18 @@ export function cropClip(
 
   if (Object.keys(patch).length === 0) return []
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch,
-    },
-  ]
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch,
+      },
+    ],
+    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+  )
 }
 
 /**
@@ -518,8 +536,11 @@ export function cropSpine(
   const spine = findMainTrack(scene)
   if (!spine) return []
 
-  return spine.elements.flatMap((element) =>
-    cropClip(scene, element.id, options)
+  // One gesture on one lane, though it is built clip by clip.
+  return aimed(
+    spine.elements.flatMap((element) => cropClip(scene, element.id, options)),
+    { action: "press", kind: "track", trackId: spine.id },
+    { force: true }
   )
 }
 
@@ -660,26 +681,29 @@ export function punchIn(
     (candidate) => candidate.type === "zoom"
   )
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: [...without.effects, effect],
-        animations: {
-          channels: {
-            ...without.channels,
-            [`effects.${effect.id}.params.scale`]: {
-              path: `effects.${effect.id}.params.scale`,
-              keys,
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: [...without.effects, effect],
+          animations: {
+            channels: {
+              ...without.channels,
+              [`effects.${effect.id}.params.scale`]: {
+                path: `effects.${effect.id}.params.scale`,
+                keys,
+              },
             },
           },
         },
       },
-    },
-  ]
+    ],
+    { action: "zoom", kind: "range", trackId: track.id, spans: [{ startUs: us(fromUs), endUs: us(toUs) }] }
+  )
 }
 
 /**
@@ -724,18 +748,21 @@ export function applyEffect(
   )
   const effect = newEffect(type, { [spec.param]: value })
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: [...without.effects, effect],
-        animations: { channels: without.channels },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: [...without.effects, effect],
+          animations: { channels: without.channels },
+        },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+  )
 }
 
 /** Take every effect of one type off a clip, curves included. */
@@ -753,18 +780,21 @@ export function removeEffectsOfType(
 
   const without = withoutEffects(element, (effect) => effect.type === type)
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: without.effects,
-        animations: { channels: without.channels },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: without.effects,
+          animations: { channels: without.channels },
+        },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+  )
 }
 
 /**
@@ -821,15 +851,18 @@ export function setEffectAmount(
       }
     : element.animations.channels
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: { effects, animations: { channels } },
-    },
-  ]
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: { effects, animations: { channels } },
+      },
+    ],
+    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+  )
 }
 
 /**
@@ -914,22 +947,25 @@ export function resizeEffect(
     return { ...key, timeUs: us(timeUs) }
   })
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        animations: {
-          channels: {
-            ...element.animations.channels,
-            [path]: { ...channel, keys },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          animations: {
+            channels: {
+              ...element.animations.channels,
+              [path]: { ...channel, keys },
+            },
           },
         },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+  )
 }
 
 /**
@@ -1024,22 +1060,25 @@ export function moveEffect(
   if (host.id === element.id) {
     if (shift === 0) return []
 
-    return [
-      {
-        op: "update_element",
-        sceneId: scene.id,
-        trackId: track.id,
-        elementId: element.id,
-        patch: {
-          animations: {
-            channels: {
-              ...element.animations.channels,
-              [path]: { ...channel, keys },
+    return aimed(
+      [
+        {
+          op: "update_element",
+          sceneId: scene.id,
+          trackId: track.id,
+          elementId: element.id,
+          patch: {
+            animations: {
+              channels: {
+                ...element.animations.channels,
+                [path]: { ...channel, keys },
+              },
             },
           },
         },
-      },
-    ]
+      ],
+      { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+    )
   }
 
   // Off the old clip and onto the new one, in one batch. Two ops applied
@@ -1049,33 +1088,36 @@ export function moveEffect(
     (candidate) => candidate.id === effectId
   )
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: without.effects,
-        animations: { channels: without.channels },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: without.effects,
+          animations: { channels: without.channels },
+        },
       },
-    },
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: host.id,
-      patch: {
-        effects: [...host.effects, effect],
-        animations: {
-          channels: {
-            ...host.animations.channels,
-            [path]: { ...channel, keys },
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: host.id,
+        patch: {
+          effects: [...host.effects, effect],
+          animations: {
+            channels: {
+              ...host.animations.channels,
+              [path]: { ...channel, keys },
+            },
           },
         },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+  )
 }
 
 /** Take one effect off a clip, its curve with it. */
@@ -1093,18 +1135,21 @@ export function removeEffect(
 
   const without = withoutEffects(element, (effect) => effect.id === effectId)
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: without.effects,
-        animations: { channels: without.channels },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: without.effects,
+          animations: { channels: without.channels },
+        },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+  )
 }
 
 /** Drop every zoom from a clip, curves included. */
@@ -1118,18 +1163,21 @@ export function clearZoom(scene: Scene, elementId: string): EditOp[] {
   const without = withoutEffects(element, (effect) => effect.type === "zoom")
   if (without.effects.length === element.effects.length) return []
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        effects: without.effects,
-        animations: { channels: without.channels },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          effects: without.effects,
+          animations: { channels: without.channels },
+        },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+  )
 }
 
 /**
@@ -1201,22 +1249,25 @@ export function fade(
     )
   }
 
-  return [
-    {
-      op: "update_element",
-      sceneId: scene.id,
-      trackId: track.id,
-      elementId: element.id,
-      patch: {
-        animations: {
-          channels: {
-            ...element.animations.channels,
-            opacity: { path: "opacity", keys },
+  return aimed(
+    [
+      {
+        op: "update_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+        patch: {
+          animations: {
+            channels: {
+              ...element.animations.channels,
+              opacity: { path: "opacity", keys },
+            },
           },
         },
       },
-    },
-  ]
+    ],
+    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+  )
 }
 
 /**
@@ -1305,6 +1356,40 @@ function captionsFollowing(
         after
       ),
     }))
+}
+
+/**
+ * Where source ranges sit on the spine now, in scene time.
+ *
+ * What a cut's target says: the stretches of the timeline the cut removes, as
+ * the lanes draw them before it lands. A range that straddles a cut already
+ * made is clamped to the part that still plays; one that no longer plays at
+ * all is left out.
+ */
+export function timelineSpans(
+  spine: Track,
+  cuts: { mediaId: string; ranges: UsRange[] }[]
+): UsRange[] {
+  const spans: UsRange[] = []
+
+  for (const { mediaId, ranges } of cuts) {
+    for (const range of ranges) {
+      for (const element of spine.elements) {
+        if (element.kind !== "video" || element.mediaId !== mediaId) continue
+
+        const from = Math.max(range.startUs, element.trimStartUs)
+        const to = Math.min(range.endUs, element.trimEndUs)
+        if (to <= from) continue
+
+        const startUs = sourceToTimelineUs(spine, mediaId, us(from))
+        if (startUs === null) continue
+
+        spans.push({ startUs, endUs: us(startUs + (to - from)) })
+      }
+    }
+  }
+
+  return spans.sort((a, b) => a.startUs - b.startUs)
 }
 
 /** The spine, which is what every hand edit here operates on. */

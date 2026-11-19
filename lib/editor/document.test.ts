@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   canvasForSource,
+  createScene,
+  currentScene,
   documentForAsset,
   LANDSCAPE_CANVAS,
   SQUARE_CANVAS,
@@ -142,5 +144,22 @@ describe("documentForAsset", () => {
 
   it("records the duration so a project list need not load scenes", () => {
     expect(documentForAsset(asset).metadata.durationUs).toBe(asset.durationUs)
+  })
+})
+
+describe("currentScene", () => {
+  const a = createScene({ name: "A" })
+  const b = createScene({ name: "B" })
+
+  it("is the scene on screen", () => {
+    expect(currentScene({ scenes: [a, b], currentSceneId: b.id })).toBe(b)
+  })
+
+  it("falls back to the first when the one on screen has gone", () => {
+    expect(currentScene({ scenes: [a, b], currentSceneId: "vs-gone" })).toBe(a)
+  })
+
+  it("is undefined for a document with no scenes", () => {
+    expect(currentScene({ scenes: [], currentSceneId: a.id })).toBeUndefined()
   })
 })

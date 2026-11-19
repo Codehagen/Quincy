@@ -1,11 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { MinusSignIcon, PlusSignIcon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-
-import { HIT_44 } from "@/components/kit/control-styles"
-import { cn } from "@/lib/utils"
 
 /**
  * Timeline zoom. Ported from app/prototypes/editor/zoom.tsx, unchanged: it
@@ -35,6 +30,8 @@ export function useZoom() {
     fit: () => setZoom(1),
     zoomIn: () => setZoom((value) => clamp(value * 2)),
     zoomOut: () => setZoom((value) => clamp(value / 2)),
+    /** Absolute, for the timeline's zoom slider. */
+    set: (value: number) => setZoom(clamp(value)),
     /** Continuous, for pinch and Cmd+wheel. */
     scaleBy: (factor: number) => setZoom((value) => clamp(value * factor)),
     /**
@@ -50,70 +47,4 @@ export function useZoom() {
     canZoomIn: zoom < MAX_ZOOM,
     canZoomOut: zoom > MIN_ZOOM,
   }
-}
-
-export function ZoomControls({
-  zoom,
-  onFit,
-  onZoomIn,
-  onZoomOut,
-  canZoomIn,
-  canZoomOut,
-}: {
-  zoom: number
-  onFit: () => void
-  onZoomIn: () => void
-  onZoomOut: () => void
-  canZoomIn: boolean
-  canZoomOut: boolean
-}) {
-  const button = cn(
-    "relative grid size-7 place-items-center rounded-md",
-    HIT_44,
-    "text-kit-ink-muted transition-colors duration-150 ease-out",
-    "hover:bg-kit-row-hover hover:text-kit-ink",
-    "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
-    "disabled:pointer-events-none disabled:text-kit-ink-disabled"
-  )
-
-  return (
-    <div className="flex items-center gap-0.5">
-      <button
-        type="button"
-        onClick={onZoomOut}
-        disabled={!canZoomOut}
-        aria-label="Zoom out"
-        className={button}
-      >
-        <HugeiconsIcon aria-hidden="true" icon={MinusSignIcon} size={14} />
-      </button>
-
-      {/* Doubles as the fit control, because "back to normal" and "what is
-          normal" are the same question and two buttons for it is one too many.
-          Tabular so the row does not jog between 100% and 1600%. */}
-      <button
-        type="button"
-        onClick={onFit}
-        className={cn(
-          "text-kit-ink-muted hover:bg-kit-row-hover hover:text-kit-ink",
-          "relative h-7 rounded-md px-2 text-kit-small tabular-nums",
-          HIT_44,
-          "transition-colors duration-150 ease-out",
-          "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus"
-        )}
-      >
-        {zoom === 1 ? "Fit" : `${Math.round(zoom * 100)}%`}
-      </button>
-
-      <button
-        type="button"
-        onClick={onZoomIn}
-        disabled={!canZoomIn}
-        aria-label="Zoom in"
-        className={button}
-      >
-        <HugeiconsIcon aria-hidden="true" icon={PlusSignIcon} size={14} />
-      </button>
-    </div>
-  )
 }

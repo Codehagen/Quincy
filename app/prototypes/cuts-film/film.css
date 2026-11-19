@@ -1,0 +1,29 @@
+/*
+ * The film's tokens. Point them at your design system once, here; every scene uses only these and your
+ * theme's own (background, foreground, card, muted, muted-foreground, border).
+ * Defaults work with a shadcn/ui theme.
+ */
+:root {
+  /* The one accent: the hero object, ticks, a status. Nothing else. */
+  --film-accent: var(--kit-primary);
+  --film-accent-foreground: var(--kit-primary-on);
+  /* Accent for graphics (pixels, lines, bars) and for text on light backgrounds. */
+  /* Fixed lightness steps, whatever the accent's own lightness: a light lime and a mid blue both work. */
+  --film-accent-strong: oklch(from var(--film-accent) min(l, 0.68) c h);
+  --film-accent-text: oklch(from var(--film-accent) min(l, 0.5) calc(c * 0.8) h);
+  --film-accent-soft: oklch(from var(--film-accent) 0.96 calc(c * 0.25) h);
+  /* The frame's two vertical guide lines. */
+  --film-line: oklch(0 0 0 / 0.07);
+  /* Raised surfaces: a hairline ring plus soft depth, never a border. */
+  --film-shadow-card: var(--kit-elevation-control);
+  --film-shadow-float: var(--kit-elevation-lifted);
+}
+
+/* The film's clock moves everything. Product components bring CSS transitions (buttons ease their transform
+   over 150ms) that would lag behind it in the preview and run on wall time in the render. */
+[data-film-stage] *,
+[data-film-stage] *::before,
+[data-film-stage] *::after {
+  transition: none !important;
+  animation: none !important;
+}

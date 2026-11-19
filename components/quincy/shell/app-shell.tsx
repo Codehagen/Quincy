@@ -98,8 +98,23 @@ export function AppShell({ defaultOpen, timeZone, ...props }: AppShellProps) {
   )
 }
 
+/**
+ * Cuts is full screen (owner, 2026-11-17; docs/design/decisions.md, "Cuts,
+ * decided"): the editor needs every pixel for the preview and the lanes, so
+ * on /cuts the app sidebar, its phone bar and its sheet are not rendered at
+ * all. Read from the pathname, which the server render knows too, so the
+ * first paint already has no sidebar and nothing shifts on hydration. The
+ * way out is the back arrow ("Back to Studio") at the left of the editor's
+ * header (components/editor/studio-frame.tsx).
+ */
+export function isFullScreen(pathname: string): boolean {
+  return pathname === "/cuts" || pathname.startsWith("/cuts/")
+}
+
 function Frame({ conversations, user, waiting, banner, children }: Omit<AppShellProps, "defaultOpen" | "timeZone">) {
-  const { open, isMobile } = useShell()
+  const { open: sidebarOpen, isMobile } = useShell()
+  const fullScreen = isFullScreen(usePathname())
+  const open = sidebarOpen && !fullScreen
   const sidebar = <AppSidebar user={user} waiting={waiting} />
   useKeepFocus(open, isMobile)
 
@@ -122,6 +137,7 @@ function Frame({ conversations, user, waiting, banner, children }: Omit<AppShell
           contents would overflow by it, and toggling it would pop the line
           on at frame 0 of the slide. The pseudo rides the edge as it moves
           and is clipped away at width 0. */}
+      {fullScreen ? null : (
       <div
         id={isMobile ? undefined : SIDEBAR_ID}
         inert={!open}
@@ -130,8 +146,9 @@ function Frame({ conversations, user, waiting, banner, children }: Omit<AppShell
       >
         <div className="h-full w-kit-sidebar">{isMobile ? null : sidebar}</div>
       </div>
+      )}
 
-      {isMobile ? <MobileSheet>{sidebar}</MobileSheet> : null}
+      {isMobile && !fullScreen ? <MobileSheet>{sidebar}</MobileSheet> : null}
 
       {/* No row above the page on a desktop: the banner, when there is
           one, is the first thing in the column. While the sidebar is
@@ -139,11 +156,11 @@ function Frame({ conversations, user, waiting, banner, children }: Omit<AppShell
           and --kit-shell-inset (the bar's 52) tells a full-width row at the
           top, the banner, to start its words past it. */}
       <div
-        data-collapsed={open ? undefined : true}
+        data-collapsed={open || fullScreen ? undefined : true}
         className="relative flex min-w-0 flex-1 flex-col md:data-collapsed:[--kit-shell-inset:var(--spacing-kit-shell-bar)]"
       >
-        <PhoneBar conversations={conversations} />
-        {open ? null : <ShowSidebar />}
+        {fullScreen ? null : <PhoneBar conversations={conversations} />}
+        {open || fullScreen ? null : <ShowSidebar />}
         {banner}
         <main
           id={CONTENT_ID}

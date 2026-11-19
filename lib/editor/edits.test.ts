@@ -22,7 +22,7 @@ import {
   trimEdge,
   trimPreviewDeltaUs,
 } from "./edits"
-import { applyOps, newElement } from "./ops"
+import { applyOps, applyToScene, newElement, targetInScene, type EditOp } from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import {
@@ -1716,5 +1716,99 @@ describe("resizeEffect", () => {
     expect(
       resizeEffect(faded, firstClip(faded).id, "vfx-missing", "end", 1000)
     ).toEqual([])
+  })
+})
+
+/**
+ * plans/036: every op a builder emits carries a target, and the target names
+ * something in the scene the op was built from. That is the contract Quincy's
+ * cursor stands on: it glides to the target, and the op lands with the press.
+ */
+describe("every builder aims its ops", () => {
+  const expectAimed = (base: Scene, ops: EditOp[]) => {
+    expect(ops.length).toBeGreaterThan(0)
+    for (const op of ops) {
+      expect(op.target).toBeDefined()
+      expect(targetInScene(base, op.target!)).toBe(true)
+    }
+  }
+
+  const withZoom = () => {
+    const base = scene()
+    const clip = findMainTrack(base)!.elements[0]
+    const zoomed = applyToScene(
+      base,
+      punchIn(base, clip.id, { fromUs: secondsToUs(1), toUs: secondsToUs(5) }),
+      "user"
+    )
+    const element = findMainTrack(zoomed)!.elements[0] as VideoElement
+    return { scene: zoomed, clipId: element.id, effectId: element.effects[0].id }
+  }
+
+  it("splitAt names the clip and the point it cuts at", () => {
+    const base = scene()
+    const ops = splitAt(base, findMainTrack(base)!.id, secondsToUs(5))
+    expectAimed(base, ops)
+    expect(ops[0].target).toMatchObject({ kind: "element", action: "press", atUs: secondsToUs(5) })
+  })
+
+  it("deleteAndRipple names the clip it cuts", () => {
+    const base = scene()
+    const spine = findMainTrack(base)!
+    const ops = deleteAndRipple(base, spine.id, spine.elements[1].id)
+    expectAimed(base, ops)
+    expect(ops.every((op) => op.target?.action === "cut")).toBe(true)
+  })
+
+  it("deleteSpeech names the stretch of the timeline it removes", () => {
+    const base = scene()
+    const ops = deleteSpeech(base, [
+      { mediaId: "va-1", ranges: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }] },
+    ])
+    expectAimed(base, ops)
+    expect(ops[0].target).toMatchObject({
+      kind: "range",
+      action: "cut",
+      spans: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }],
+    })
+  })
+
+  it("trimEdge, reframe, crop and looks press what they change", () => {
+    const base = scene()
+    const spine = findMainTrack(base)!
+    const clip = spine.elements[0]
+    expectAimed(base, trimEdge(base, spine.id, clip.id, "end", -1_000_000))
+    expectAimed(base, reframe(base, { width: 1080, height: 1920 }))
+    expectAimed(base, cropClip(base, clip.id, { at: "left" }))
+    const spineWide = cropSpine(base, { at: "left" })
+    expectAimed(base, spineWide)
+    expect(spineWide.every((op) => op.target?.kind === "track")).toBe(true)
+    expectAimed(base, applyEffect(base, clip.id, "brightness", 1.2))
+    expectAimed(base, fade(base, clip.id, { inUs: 500_000 }))
+  })
+
+  it("punchIn drag-selects its window and presses Zoom", () => {
+    const base = scene()
+    const clip = findMainTrack(base)!.elements[1]
+    const ops = punchIn(base, clip.id, { fromUs: secondsToUs(12), toUs: secondsToUs(15) })
+    expectAimed(base, ops)
+    expect(ops[0].target).toMatchObject({
+      kind: "range",
+      action: "zoom",
+      spans: [{ startUs: secondsToUs(12), endUs: secondsToUs(15) }],
+    })
+  })
+
+  it("the effect edits name the effect", () => {
+    const { scene: base, clipId, effectId } = withZoom()
+    expectAimed(base, setEffectAmount(base, clipId, effectId, 1.5))
+    expectAimed(base, resizeEffect(base, clipId, effectId, "end", -500_000))
+    expectAimed(base, moveEffect(base, clipId, effectId, 1_000_000))
+    expectAimed(base, removeEffect(base, clipId, effectId))
+    expectAimed(base, clearZoom(base, clipId))
+    expectAimed(
+      base,
+      removeEffectsOfType(base, clipId, "zoom")
+    )
   })
 })

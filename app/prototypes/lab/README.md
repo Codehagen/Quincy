@@ -23,7 +23,7 @@ A new direction for a surface always starts here, never as a build, and a
 reference gives one idea carried by something Quincy owns, never its layout
 (`docs/design/decisions.md`, top).
 
-## The three tracks
+## The tracks
 
 Each track is a route, a `rounds.ts` and its own picks, so a tick in one never
 shows in another.
@@ -33,6 +33,7 @@ shows in another.
 | visual style | `/prototypes/lab` | `rounds.ts`, `round-N/<group>/` | `quincy-lab-picks` | one surface in a 4:3 frame |
 | icons | `/prototypes/lab/icons` | `icons/rounds.ts`, `icons/round-N/<group>/` | `quincy-lab-icons-picks` | a mark on `icons/sheet.tsx`: large, 32, 16, a tab, light and dark, an app icon |
 | landing | `/prototypes/lab/landing` | `landing/rounds.ts`, `landing/round-N/` | `quincy-lab-landing-picks` | a hero or a whole page, scaled into the frame |
+| cuts | `/prototypes/lab/cuts` | `cuts/rounds.ts`, `cuts/round-N/<group>/` | `quincy-lab-cuts-picks` | an editor surface or a decisive part of one, at 960×720 on the kit, scaled into the frame |
 
 ## The loop
 
@@ -80,7 +81,9 @@ and 17"), and a reused number makes an old pick point at a new piece.
   system was the point. Visual round 2 used its own shared kit. Icon pieces
   use the sheet and the kit primitives as hex values. Landing pieces came
   after the kit was decided, so they build from `@/components/kit`,
-  `@/components/showcase` and `@/components/mascot`.
+  `@/components/showcase` and `@/components/mascot`. Cuts pieces are app
+  surfaces, so they build from the kit and the mascot, and share one
+  fixture and one drawing in `cuts/round-1/fixture.ts` and `parts.tsx`.
 - **One accent colour per piece.** Everything else is neutral.
 - **Real Quincy subjects**: a voice note becoming ideas, a draft, a number
   against your own baseline, the week, Approve. Never lorem.

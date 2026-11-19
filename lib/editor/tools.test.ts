@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import { createScene } from "./document"
-import { applyOps, newElement } from "./ops"
-import { findMainTrack } from "./timeline"
+import { applyOps, applyToScene, newElement, targetInScene } from "./ops"
+import { findMainTrack, sceneDurationUs } from "./timeline"
 import { secondsToUs, us } from "./time"
-import { addCaptions, removeSilences } from "./tools"
+import { addCaptions, MAX_CUT_STEPS, removeSilences, removeSilenceSteps } from "./tools"
 import type { Word } from "./transcript"
 import {
   UNLOCKED,
@@ -293,5 +293,83 @@ describe("removeSilences", () => {
 
     const ops = removeSilences(withCaptions, WORDS, options)
     expect(ops.filter((op) => op.op === "replace_elements")).toHaveLength(2)
+  })
+})
+
+describe("targets (plans/036)", () => {
+  const options = {
+    mediaId: "va-1",
+    author: "agent" as const,
+    sourceDurationUs: secondsToUs(60),
+  }
+
+  it("addCaptions presses the captions control", () => {
+    const base = scene()
+    const ops = addCaptions(base, WORDS, { mediaId: "va-1", author: "agent" })
+    for (const op of ops) {
+      expect(op.target).toEqual({ action: "press", kind: "control", control: "captions" })
+    }
+  })
+
+  it("removeSilences names every pause it cuts, in scene time", () => {
+    const base = scene()
+    const ops = removeSilences(base, WORDS, options)
+    for (const op of ops) {
+      expect(op.target?.kind).toBe("range")
+      expect(targetInScene(base, op.target!)).toBe(true)
+    }
+  })
+
+  it("removeSilenceSteps is one pause per step, each aimed at the scene it lands on", () => {
+    let current = scene()
+    const steps = removeSilenceSteps(current, WORDS, options)
+    // Head, the hole in the middle, and the tail.
+    expect(steps).toHaveLength(3)
+    for (const step of steps) {
+      for (const op of step) {
+        expect(op.target).toMatchObject({ kind: "range", action: "cut" })
+        expect(targetInScene(current, op.target!)).toBe(true)
+      }
+      current = applyToScene(current, step, "agent")
+    }
+  })
+
+  it("arrives at the same cut as removeSilences", () => {
+    const base = scene()
+    const batch = apply(base, removeSilences(base, WORDS, options))
+
+    let stepped = base
+    for (const step of removeSilenceSteps(base, WORDS, options)) {
+      stepped = applyToScene(stepped, step, "agent")
+    }
+
+    expect(sceneDurationUs(stepped)).toBe(sceneDurationUs(batch))
+    const windows = (s: Scene) =>
+      (findMainTrack(s)!.elements as VideoElement[]).map((clip) => [clip.trimStartUs, clip.trimEndUs])
+    expect(windows(stepped)).toEqual(windows(batch))
+  })
+
+  it("keeps the captions in step with the spine at every step", () => {
+    const base = scene()
+    let current = apply(base, addCaptions(base, WORDS, { mediaId: "va-1", author: "agent" }))
+    for (const step of removeSilenceSteps(current, WORDS, options)) {
+      expect(step.some((op) => op.op === "replace_elements" && op.trackId !== findMainTrack(current)!.id)).toBe(true)
+      current = applyToScene(current, step, "agent")
+    }
+    expect(captionsOf(current)[0].startUs).toBe(secondsToUs(0.12))
+  })
+
+  it("never streams more steps than its ceiling", () => {
+    // Forty words a second apart: thirty-nine pauses.
+    const many: Word[] = Array.from({ length: 40 }, (_, index) => ({
+      text: `w${index}`,
+      startUs: secondsToUs(index * 1.4),
+      endUs: secondsToUs(index * 1.4 + 0.3),
+      confidence: 1,
+    }))
+    const steps = removeSilenceSteps(scene(), many, options)
+    expect(steps.length).toBeLessThanOrEqual(MAX_CUT_STEPS)
+    const multi = steps.find((step) => step[0].target?.kind === "range" && step[0].target.spans.length > 1)
+    expect(multi).toBeDefined()
   })
 })

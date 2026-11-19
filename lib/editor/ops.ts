@@ -2,6 +2,7 @@ import { createIdGenerator } from "ai"
 
 import { changedPaths, createProvenance, stampFields } from "./provenance"
 import { rippleTrack, sceneDurationUs } from "./timeline"
+import type { Us, UsRange } from "./time"
 import type {
   Author,
   Effect,
@@ -30,7 +31,119 @@ const newKeyframeId = createIdGenerator({ prefix: "vk", size: 16 })
  * every caller. A caller that forgets is the bug that quietly breaks undo, so
  * there is no path that can forget.
  */
-export type EditOp =
+export type EditOp = EditOpBody & {
+  /**
+   * What the op acts on, for the eye rather than the reducer.
+   *
+   * The reducer ignores it. It exists so the editor can show *where* an edit
+   * landed: Quincy's cursor glides to this target, operates it the way a
+   * person would, and the op lands with the press (plans/036, "the one
+   * contract every phase keeps": a cursor press is an op landing, and the
+   * cursor never draws anything that did not happen).
+   *
+   * Optional on the type because a document stored before targets existed
+   * still has to reduce; every builder in edits.ts and tools.ts fills it, and
+   * their tests assert that the target exists in the scene the op was built
+   * from.
+   */
+  target?: OpTarget
+}
+
+/**
+ * Where an op lands, in the scene as it stood just before the op applied.
+ *
+ * `action` is the gesture the cursor makes on arrival: `cut` drag-selects the
+ * target and presses ⌫, `zoom` drag-selects it and presses the Zoom control
+ * that appears over the selection, `press` clicks it. Times are scene time
+ * (the timeline), never source time, because the lanes draw scene time.
+ */
+export type OpTarget = { action: "cut" | "zoom" | "press" } & (
+  /** A clip, caption or text element. `atUs` is a point on it (a split). */
+  | { kind: "element"; trackId: string; elementId: string; atUs?: Us }
+  /** One effect on an element. */
+  | { kind: "effect"; trackId: string; elementId: string; effectId: string }
+  /**
+   * Stretches of a track, in scene time. Usually one; a step that removes
+   * several pauses at once names each, and the cursor drags across the first.
+   */
+  | { kind: "range"; trackId: string; spans: UsRange[] }
+  /** A whole lane: a look or a framing applied to every clip on the spine. */
+  | { kind: "track"; trackId: string }
+  /** A control on the desk rather than something in the document. */
+  | { kind: "control"; control: "captions" | "frame" }
+)
+
+/**
+ * Give every op in a batch the target its builder knows, keeping any target
+ * an inner builder already set. `force` overwrites them: a look applied to the
+ * whole spine is built clip by clip, but it is one gesture on one lane.
+ */
+export function aimed(
+  ops: EditOp[],
+  target: OpTarget,
+  { force = false }: { force?: boolean } = {}
+): EditOp[] {
+  return ops.map((op) => (op.target && !force ? op : { ...op, target }))
+}
+
+/** The `data-target` key the lanes carry for a target. Stable and DOM-safe. */
+export function targetKey(target: OpTarget): string {
+  switch (target.kind) {
+    case "element":
+      return `element:${target.elementId}`
+    case "effect":
+      return `effect:${target.effectId}`
+    case "range":
+      return `range:${target.trackId}:${Math.round(target.spans[0]?.startUs ?? 0)}-${Math.round(target.spans[0]?.endUs ?? 0)}`
+    case "track":
+      return `track:${target.trackId}`
+    case "control":
+      return `control:${target.control}`
+  }
+}
+
+/**
+ * Whether a target names something in `scene`: the element, the effect, the
+ * lane, or a stretch inside the cut. A control is on the desk, not in the
+ * document, so it always resolves.
+ *
+ * The test every builder's targets pass against the scene they were built
+ * from (plans/036: a press is an op landing on its real target).
+ */
+export function targetInScene(scene: Scene, target: OpTarget): boolean {
+  if (target.kind === "control") return true
+
+  const track = scene.tracks.find((candidate) => candidate.id === target.trackId)
+  if (!track) return false
+
+  switch (target.kind) {
+    case "track":
+      return true
+    case "element":
+      return track.elements.some((element) => element.id === target.elementId)
+    case "effect": {
+      const element = track.elements.find(
+        (candidate) => candidate.id === target.elementId
+      )
+      return Boolean(
+        element &&
+          "effects" in element &&
+          element.effects.some((effect) => effect.id === target.effectId)
+      )
+    }
+    case "range": {
+      const end = sceneDurationUs(scene)
+      return (
+        target.spans.length > 0 &&
+        target.spans.every(
+          (span) => span.startUs >= 0 && span.endUs <= end && span.endUs > span.startUs
+        )
+      )
+    }
+  }
+}
+
+type EditOpBody =
   /**
    * Scene-level properties: the name, and the canvas the cut is framed in.
    *
@@ -77,6 +190,19 @@ export type EditOp =
     }
   | { op: "update_settings"; patch: Partial<VideoDocument["settings"]> }
   | { op: "rename"; name: string }
+  /**
+   * A whole scene: one more cut over the same assets (plans/036, phase D,
+   * three cuts from one recording). Added after the last scene; an id that
+   * is already there is a no-op, so a replayed batch cannot add it twice.
+   */
+  | { op: "add_scene"; scene: Scene }
+  /**
+   * Take a scene out. The main scene cannot go (the project opens on it).
+   * When the scene was the one on screen, the main scene is.
+   */
+  | { op: "remove_scene"; sceneId: string }
+  /** Which scene the editor shows and a request edits. */
+  | { op: "select_scene"; sceneId: string }
 
 export type TrackPatch = Partial<Pick<Track, "name" | "muted" | "hidden">>
 
@@ -174,6 +300,27 @@ function applyOne(
 
     case "update_settings":
       return { ...document, settings: { ...document.settings, ...op.patch } }
+
+    case "add_scene":
+      if (document.scenes.some((scene) => scene.id === op.scene.id)) return document
+      return { ...document, scenes: [...document.scenes, { ...op.scene, isMain: false }] }
+
+    case "remove_scene": {
+      const gone = document.scenes.find((scene) => scene.id === op.sceneId)
+      if (!gone || gone.isMain) return document
+      const scenes = document.scenes.filter((scene) => scene.id !== op.sceneId)
+      const main = scenes.find((scene) => scene.isMain) ?? scenes[0]
+      return {
+        ...document,
+        scenes,
+        currentSceneId:
+          document.currentSceneId === op.sceneId && main ? main.id : document.currentSceneId,
+      }
+    }
+
+    case "select_scene":
+      if (!document.scenes.some((scene) => scene.id === op.sceneId)) return document
+      return { ...document, currentSceneId: op.sceneId }
 
     case "update_scene":
       return mapScene(document, op.sceneId, (scene) => ({
@@ -307,6 +454,49 @@ function documentDurationUs(document: VideoDocument) {
   const main =
     document.scenes.find((scene) => scene.isMain) ?? document.scenes[0]
   return main ? sceneDurationUs(main) : (0 as never)
+}
+
+/**
+ * A scene after some ops, without a document around it.
+ *
+ * For builders that plan in steps (`removeSilenceSteps`) and for the gate's
+ * dry run: each needs the scene a batch would leave, and the reducer is the
+ * only thing allowed to say what that is.
+ */
+export function applyToScene(
+  scene: Scene,
+  ops: EditOp[],
+  author: Author
+): Scene {
+  const document = {
+    version: 1,
+    metadata: {
+      id: "dry-run",
+      name: "",
+      durationUs: 0,
+      createdAt: "",
+      updatedAt: "",
+    },
+    settings: {
+      fps: 30,
+      canvas: { width: 1920, height: 1080 },
+      background: { type: "color", color: "#000" },
+    },
+    scenes: [scene],
+    currentSceneId: scene.id,
+  } as unknown as VideoDocument
+
+  const { snapshot } = applyOps(
+    {
+      document,
+      revision: 0,
+      lock: { status: "unlocked", runId: null, lockedBy: null, startedAt: null },
+    },
+    ops,
+    { author }
+  )
+
+  return snapshot.document.scenes[0]
 }
 
 /* ── Helpers the agent tools and the UI both build ops with ─────────────── */

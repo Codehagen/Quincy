@@ -157,6 +157,17 @@ export async function saveDocument(
 }
 
 /**
+ * How long a lock is honoured before another run may take it.
+ *
+ * The agent route's `maxDuration` is 120 s, and the platform can end the
+ * function there without running a single callback, so the `onFinish` that
+ * unlocks never comes. Without an expiry that project stays read-only for
+ * good. Five minutes is the longest route's limit plus a wide margin: a live
+ * run is never taken over, and a dead one frees itself within minutes.
+ */
+export const LOCK_STALE_MS = 5 * 60 * 1000
+
+/**
  * Take the document for the length of an agent run.
  *
  * A lock rather than a merge, and the reasoning is in DocumentLock: a real
@@ -166,14 +177,17 @@ export async function saveDocument(
  * Conditional on the document being unlocked, in one statement, for the same
  * reason saveDocument puts the revision in the where clause — two runs claiming
  * at once is exactly the case a lock exists to prevent, so it cannot be checked
- * in application code.
+ * in application code. A lock older than `LOCK_STALE_MS` counts as unlocked.
  */
 export async function lockProject(
   id: string,
   userId: string,
   runId: string,
-  lockedBy: Author = "agent"
+  lockedBy: Author = "agent",
+  now: Date = new Date()
 ): Promise<boolean> {
+  const staleBefore = new Date(now.getTime() - LOCK_STALE_MS).toISOString()
+
   const claimed = await db
     .update(videoProject)
     .set({
@@ -181,9 +195,9 @@ export async function lockProject(
         status: "locked",
         runId,
         lockedBy,
-        startedAt: new Date().toISOString(),
+        startedAt: now.toISOString(),
       },
-      updatedAt: new Date(),
+      updatedAt: now,
     })
     .where(
       and(
@@ -191,7 +205,8 @@ export async function lockProject(
         eq(videoProject.userId, userId),
         // `->>` reads the field as text, which is what a string comparison in
         // SQL needs. Comparing the whole jsonb object would depend on key order.
-        sql`${videoProject.lock} ->> 'status' = 'unlocked'`
+        // A lock with no `startedAt` casts to null and is never stale.
+        sql`(${videoProject.lock} ->> 'status' = 'unlocked' or (${videoProject.lock} ->> 'startedAt')::timestamptz < ${staleBefore}::timestamptz)`
       )
     )
     .returning({ id: videoProject.id })
@@ -199,9 +214,30 @@ export async function lockProject(
   return claimed.length > 0
 }
 
-export async function unlockProject(id: string, userId: string): Promise<void> {
+/**
+ * Give the document back.
+ *
+ * With a `runId`, only that run's lock comes off. A run that outlived its
+ * lock (see `LOCK_STALE_MS`) must not release the lock a later run took, and
+ * the agent route hands the browser a self-check offer before its own
+ * cleanup has run: the check takes the lock under its own id, and the run's
+ * late unlock has to leave it alone.
+ */
+export async function unlockProject(
+  id: string,
+  userId: string,
+  runId?: string
+): Promise<void> {
   await db
     .update(videoProject)
     .set({ lock: UNLOCKED, updatedAt: new Date() })
-    .where(and(eq(videoProject.id, id), eq(videoProject.userId, userId)))
+    .where(
+      and(
+        eq(videoProject.id, id),
+        eq(videoProject.userId, userId),
+        runId === undefined
+          ? undefined
+          : sql`${videoProject.lock} ->> 'runId' = ${runId}`
+      )
+    )
 }

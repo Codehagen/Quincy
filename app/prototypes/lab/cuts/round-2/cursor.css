@@ -1,0 +1,149 @@
+/*
+ * Quincy's cursor (cursor.tsx). The glide is a transition on `translate`
+ * with a strong ease-out, so a new target mid-glide retargets. The press
+ * (a tap of the arrow and a ring) and a target's flash are one-shot
+ * keyframes, replayed by remounting or by the attribute starting to match.
+ * Reduced motion: the component draws no cursor; targets still flash.
+ */
+
+.qc-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  pointer-events: none;
+  transition-property: translate, opacity;
+  transition-duration: var(--qc-glide, 170ms);
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qc-cursor[data-parked] {
+  opacity: 0.4;
+  transition-duration: 280ms;
+}
+
+.qc-press {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.qc-tap {
+  animation: qc-tap 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes qc-tap {
+  0% {
+    scale: 1;
+  }
+  35% {
+    scale: 0.84;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.qc-ring {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid var(--kit-ink);
+  animation: qc-ring 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.qc-ring[data-tone="soft"] {
+  border: 0;
+  background-color: var(--kit-ink);
+}
+
+@keyframes qc-ring {
+  from {
+    scale: 0.35;
+    opacity: 0.85;
+  }
+  to {
+    scale: 1.7;
+    opacity: 0;
+  }
+}
+
+/* A target lights the moment an op lands on it, then lets go. */
+.qc-target[data-hot] {
+  animation: qc-flash 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.qc-target[data-hot][data-tone="highlight"] {
+  animation-name: qc-flash-highlight;
+}
+
+.qc-target[data-hot][data-tone="well"] {
+  animation-name: qc-flash-well;
+}
+
+@keyframes qc-flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 2px var(--kit-ink);
+    background-color: var(--kit-selected);
+  }
+}
+
+@keyframes qc-flash-highlight {
+  0%,
+  35% {
+    box-shadow: 0 0 0 2px var(--kit-ink);
+    background-color: var(--kit-highlight);
+  }
+}
+
+@keyframes qc-flash-well {
+  0%,
+  30% {
+    background-color: var(--kit-selected);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qc-cursor {
+    transition: none;
+  }
+  .qc-tap,
+  .qc-ring {
+    animation: none;
+  }
+  .qc-ring {
+    display: none;
+  }
+}
+
+/* The reading stage: a thin ink line sweeps the lanes while the take is read. */
+.qc-scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background-color: var(--kit-ink);
+  opacity: 0.5;
+  animation: qc-scan 1100ms cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes qc-scan {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: var(--qc-scan-to, 600px) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qc-scan {
+    animation: none;
+    display: none;
+  }
+}

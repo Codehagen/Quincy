@@ -16,6 +16,11 @@ export const EDITOR_TOOL_SENTENCES = {
     done: "Removed the silences",
     failed: "Could not remove the silences.",
   },
+  remove_fillers: {
+    running: "Removing the fillers",
+    done: "Removed the fillers",
+    failed: "Could not remove the fillers.",
+  },
   add_captions: {
     running: "Adding captions",
     done: "Added captions",

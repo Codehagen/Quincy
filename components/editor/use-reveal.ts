@@ -43,7 +43,25 @@ export type Reveal = {
    * are coalesced into one paint and there is no animation at all.
    */
   animating: boolean
+  /** Each element's own travel. */
+  travelMs: number
+  /** The sweep from first to last element; zero moves them together. */
+  staggerTotalMs: number
+  /** The curve: ease-out for the sweep, ease-in-out for a gap closing. */
+  easing: string
 }
+
+/**
+ * How one press of Quincy's cursor closes a gap (plans/036, round 4's
+ * timeline): everything after the cut moves together, 200 ms, ease-in-out,
+ * while the removed clip has already left the layout. One press is one
+ * change, so there is nothing to sweep across.
+ */
+export const GAP_CLOSE = {
+  travelMs: 200,
+  staggerTotalMs: 0,
+  easing: "cubic-bezier(0.45, 0, 0.2, 1)",
+} as const
 
 /** Each clip's own travel. Long enough to read as movement, short enough to ignore. */
 export const REVEAL_TRAVEL_MS = 220
@@ -58,9 +76,13 @@ export const REVEAL_TRAVEL_MS = 220
  */
 const REVEAL_STAGGER_TOTAL_MS = 420
 
-export function revealDelayMs(index: number, count: number): number {
-  if (count <= 1) return 0
-  return Math.round((index / (count - 1)) * REVEAL_STAGGER_TOTAL_MS)
+export function revealDelayMs(
+  index: number,
+  count: number,
+  totalMs: number = REVEAL_STAGGER_TOTAL_MS
+): number {
+  if (count <= 1 || totalMs <= 0) return 0
+  return Math.round((index / (count - 1)) * totalMs)
 }
 
 export function useReveal() {
@@ -84,7 +106,10 @@ export function useReveal() {
    * afterwards would record the result and animate nothing.
    */
   const capture = React.useCallback(
-    (scene: Scene | undefined) => {
+    (
+      scene: Scene | undefined,
+      motion: Partial<Pick<Reveal, "travelMs" | "staggerTotalMs" | "easing">> = {}
+    ) => {
       if (!scene) return
 
       /**
@@ -107,7 +132,17 @@ export function useReveal() {
         }
       }
 
-      setReveal({ startsUs, spanUs: sceneDurationUs(scene), animating: false })
+      const travelMs = motion.travelMs ?? REVEAL_TRAVEL_MS
+      const staggerTotalMs = motion.staggerTotalMs ?? REVEAL_STAGGER_TOTAL_MS
+
+      setReveal({
+        startsUs,
+        spanUs: sceneDurationUs(scene),
+        animating: false,
+        travelMs,
+        staggerTotalMs,
+        easing: motion.easing ?? "ease-out",
+      })
 
       // Two frames: one to paint the old positions, one to start the move.
       frames.current.push(
@@ -126,7 +161,7 @@ export function useReveal() {
       // transition and a later hand edit does not slide.
       timer.current = window.setTimeout(
         () => setReveal(null),
-        REVEAL_TRAVEL_MS + REVEAL_STAGGER_TOTAL_MS + 60
+        travelMs + staggerTotalMs + 60
       )
     },
     [clear]

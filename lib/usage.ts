@@ -1,9 +1,10 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm"
+import { and, desc, eq, gte, lt, notInArray, sql } from "drizzle-orm"
 
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
 import { cooldownDecision } from "./cooldown"
 import { estimateCostMicros, type Micros } from "./pricing"
+import { ATTEMPT_ONLY_LABELS } from "./usage-attempts"
 
 /**
  * Record what a turn consumed.
@@ -22,15 +23,16 @@ export async function recordUsage(input: {
   inputTokens: number
   cachedInputTokens: number
   outputTokens: number
-}): Promise<void> {
+}): Promise<string> {
   const costMicros = estimateCostMicros(input.model, {
     inputTokens: input.inputTokens,
     cachedInputTokens: input.cachedInputTokens,
     outputTokens: input.outputTokens,
   })
 
+  const id = `use_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
   await db.insert(usageEvent).values({
-    id: `use_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+    id,
     userId: input.userId,
     conversationId: input.conversationId ?? null,
     model: input.model,
@@ -39,6 +41,36 @@ export async function recordUsage(input: {
     outputTokens: input.outputTokens,
     costMicros,
   })
+  return id
+}
+
+/**
+ * Fill in a row written ahead of the call it meters.
+ *
+ * For a path whose row is also its claim: the self-check writes its row
+ * before the model call, so a second request for the same run is refused
+ * even while the first is still waiting on the model, and fills in what was
+ * spent once the call returns.
+ */
+export async function settleUsage(
+  id: string,
+  userId: string,
+  input: {
+    model: string
+    inputTokens: number
+    cachedInputTokens: number
+    outputTokens: number
+  }
+): Promise<void> {
+  await db
+    .update(usageEvent)
+    .set({
+      inputTokens: input.inputTokens,
+      cachedInputTokens: input.cachedInputTokens,
+      outputTokens: input.outputTokens,
+      costMicros: estimateCostMicros(input.model, input),
+    })
+    .where(and(eq(usageEvent.id, id), eq(usageEvent.userId, userId)))
 }
 
 export type UsageSummary = {
@@ -68,10 +100,14 @@ export async function summariseUsage(
   // `input_tokens` (see lib/editor/ingest-meter.ts) — summed in here they
   // would be counted as tokens. A gateway model slug has no colon in it.
   const tokenRow = sql`${usageEvent.model} not like '%:%'`
+  // A run's start-of-run attempt row is not a turn of its own: the run
+  // meters itself in a second row (usage-attempts.ts). Cost is unaffected,
+  // since attempt rows cost nothing; only the count would double.
+  const countedRow = notInArray(usageEvent.model, ATTEMPT_ONLY_LABELS)
 
   const [row] = await db
     .select({
-      turns: sql<number>`count(*)::int`,
+      turns: sql<number>`(count(*) filter (where ${countedRow}))::int`,
       inputTokens: sql<number>`coalesce(sum(${usageEvent.inputTokens}) filter (where ${tokenRow}), 0)::int`,
       cachedInputTokens: sql<number>`coalesce(sum(${usageEvent.cachedInputTokens}) filter (where ${tokenRow}), 0)::int`,
       outputTokens: sql<number>`coalesce(sum(${usageEvent.outputTokens}) filter (where ${tokenRow}), 0)::int`,
@@ -140,7 +176,11 @@ export async function spendCooldown(
   return cooldownDecision(recent?.createdAt ?? null, cooldownMs)
 }
 
-/** The most recent turns, for the activity list on /credits. */
+/**
+ * The most recent turns, for the activity list on /credits. Attempt rows that
+ * only shadow a metered run are left out (usage-attempts.ts): each would be a
+ * $0.00 line beside the run it started.
+ */
 export async function recentUsage(userId: string, limit = 10) {
   return db
     .select({
@@ -152,7 +192,12 @@ export async function recentUsage(userId: string, limit = 10) {
       createdAt: usageEvent.createdAt,
     })
     .from(usageEvent)
-    .where(eq(usageEvent.userId, userId))
+    .where(
+      and(
+        eq(usageEvent.userId, userId),
+        notInArray(usageEvent.model, ATTEMPT_ONLY_LABELS)
+      )
+    )
     .orderBy(desc(usageEvent.createdAt))
     .limit(limit)
 }

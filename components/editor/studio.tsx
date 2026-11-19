@@ -1,8 +1,15 @@
 "use client"
 
 import * as React from "react"
+import {
+  Delete02Icon,
+  Redo02Icon,
+  ScissorIcon,
+  Undo02Icon,
+} from "@hugeicons/core-free-icons"
 
 import {
+  currentScene,
   LANDSCAPE_CANVAS,
   SQUARE_CANVAS,
   VERTICAL_CANVAS,
@@ -26,6 +33,9 @@ import {
   trimEdge,
 } from "@/lib/editor/edits"
 import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
+import { addCaptions } from "@/lib/editor/tools"
+import type { Word } from "@/lib/editor/transcript"
+import type { TakeReading } from "@/lib/editor/reading"
 import { us } from "@/lib/editor/time"
 import {
   sourceRangesFor,
@@ -39,24 +49,34 @@ import type {
   VideoDocument,
   VideoElement,
 } from "@/lib/editor/types"
-import { HIT_44 } from "@/components/kit/control-styles"
 import { cn } from "@/lib/utils"
 
-import { StudioChat } from "./studio-chat"
+import { AgentCursors } from "./agent-cursor/agent-cursor"
+import { CutSpines, type CutView } from "./cut-spines"
+import type { CutsData, RecommendData } from "@/lib/editor/stream-parts"
+import { useDirector } from "./agent-cursor/director"
+import { StudioChat, type StudioHarness } from "./studio-chat"
+import { useStrongLine } from "./use-strong-line"
 import { StudioEffects } from "./studio-effects"
-import { StudioFrame, type StudioTool } from "./studio-frame"
-import { PlayheadClock } from "./studio-parts"
+import { DeskIconButton, FrameMenu, SceneMenu, TimelineZoom, type FrameShape } from "./desk-controls"
+import { ProjectName } from "./project-name"
+import { StudioFrame, useWideDesk, type SideView, type StudioTool } from "./studio-frame"
+import { StudioLibrary } from "./studio-library"
+import { formatClockTenths, PlayButton, PlayheadClock } from "./studio-parts"
 import { StudioLanes, type TrimDrag } from "./studio-lanes"
-import { StudioSide, type SideTab } from "./studio-side"
 import { StudioTranscript, type TranscriptSelection } from "./studio-transcript"
 import type { CompositionMedia } from "./composition"
 import { ExportButton } from "./export-button"
 import { StudioPreview } from "./studio-preview"
-import { ZoomControls, useZoom } from "./studio-zoom"
+import { useZoom } from "./studio-zoom"
+import { ArrivalPasses } from "./arrival/arrival"
+import { scanPasses } from "./arrival/passes"
+import { useArrival } from "./arrival/use-arrival"
 import { useDocument } from "./use-document"
+import { editorOwnsKey } from "./editor-keys"
 import { useExport } from "./use-export"
 import { useFrameThrottle } from "./use-frame-throttle"
-import { useReveal } from "./use-reveal"
+import { GAP_CLOSE, useReveal } from "./use-reveal"
 import { usePlayer, usePlayheadSelector } from "./use-player"
 
 /**
@@ -79,6 +99,8 @@ export type MediaEntry = {
   proxyUrl: string | null
   seekIndexUrl: string | null
   filmstrip: Filmstrip | null
+  /** What Quincy noticed in the take; null without a transcript. */
+  reading: TakeReading | null
 }
 
 /**
@@ -111,6 +133,7 @@ export function Studio({
   revision,
   media,
   localFile,
+  harness,
 }: {
   projectId: string
   document: VideoDocument
@@ -118,19 +141,49 @@ export function Studio({
   media: Record<string, MediaEntry>
   /** The File from this session's upload, if the editor was reached that way. */
   localFile?: File | null
+  /** Prototype mock only: a local network in place of the routes (studio-chat.tsx). */
+  harness?: StudioHarness
 }) {
   const {
     document,
     apply,
     applyAgentOps,
     syncRevision,
-    undo,
-    redo,
+    awaitSync,
+    syncLost,
+    undo: undoDocument,
+    redo: redoDocument,
+    beginRun,
+    endRun,
+    historyIds,
+    runEntry,
     canUndo,
     canRedo,
     save,
     retry,
-  } = useDocument(projectId, initialDocument, revision)
+  } = useDocument(projectId, initialDocument, revision, harness?.fetch)
+
+  /**
+   * Undo and redo jump the lanes without the cursor: one crossfade, 150ms
+   * (plans/036). The class is re-added on the node so the fade replays on
+   * every press without remounting the lanes.
+   */
+  const lanesRef = React.useRef<HTMLDivElement | null>(null)
+  const fadeLanes = React.useCallback(() => {
+    const node = lanesRef.current
+    if (!node) return
+    node.classList.remove("agent-fade")
+    void node.offsetWidth
+    node.classList.add("agent-fade")
+  }, [])
+  const undo = React.useCallback(() => {
+    undoDocument()
+    fadeLanes()
+  }, [undoDocument, fadeLanes])
+  const redo = React.useCallback(() => {
+    redoDocument()
+    fadeLanes()
+  }, [redoDocument, fadeLanes])
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   /**
@@ -139,9 +192,20 @@ export function Studio({
    * and the agent never touches either.
    */
   const [hoverUs, setHoverUs] = React.useState<number | null>(null)
+  /**
+   * The same value for handlers. Split reads where the pointer is at the
+   * instant of the press, so it has no reason to be rebuilt every frame the
+   * pointer moves — and rebuilding it re-bound the window's key listener with
+   * it, sixty times a second, for as long as the pointer was over the lane.
+   */
+  const hoverRef = React.useRef<number | null>(null)
+  const writeHover = React.useCallback((value: number | null) => {
+    hoverRef.current = value
+    setHoverUs(value)
+  }, [])
   // One write per frame. The lane draws its own head from the pointer; this
-  // state is for the preview seek, the scrub badge and split-at-hover.
-  const { schedule: onHover } = useFrameThrottle(setHoverUs)
+  // state is for the preview seek and the scrub badge.
+  const { schedule: onHover } = useFrameThrottle(writeHover)
   /**
    * A trim edge mid-flight. Held here rather than in the document because a
    * drag is not an edit until it lands — applying every pointermove would be
@@ -150,9 +214,7 @@ export function Studio({
   const [trim, setTrim] = React.useState<TrimDrag | null>(null)
   const zoom = useZoom()
 
-  const scene =
-    document.scenes.find((s) => s.id === document.currentSceneId) ??
-    document.scenes[0]
+  const scene = currentScene(document)
   const canvas = scene?.canvas ?? document.settings.canvas
   const trackId = scene ? mainTrackId(scene) : null
 
@@ -162,6 +224,15 @@ export function Studio({
 
   const durationUs = us(scene ? sceneDurationUs(scene) : 0)
   const fps = document.settings.fps
+
+  /** The cut as the starters read it: its frame now, and whether it has captions. */
+  const hasCaptions = Boolean(
+    scene?.tracks.some((t) => t.kind === "caption" && t.elements.length > 0)
+  )
+  const chatFrame = React.useMemo(
+    () => ({ width: canvas.width, height: canvas.height, hasCaptions }),
+    [canvas.width, canvas.height, hasCaptions]
+  )
 
   const player = usePlayer({ fps, durationUs })
 
@@ -302,15 +373,82 @@ export function Studio({
     sceneRef.current = scene
   })
 
-  const applyStreamedOps = React.useCallback(
-    (ops: Parameters<typeof applyAgentOps>[0]) => {
+  /**
+   * Quincy's cursor (plans/036). The run's ops reach the document through the
+   * director, one press at a time: the press and the change land together,
+   * and the clips after a cut slide into the gap (one move, 200ms).
+   */
+  const deskRef = React.useRef<HTMLDivElement | null>(null)
+  const documentRef = React.useRef(document)
+  React.useEffect(() => {
+    documentRef.current = document
+  })
+  const sceneById = React.useCallback(
+    (id?: string) => (id ? documentRef.current.scenes.find((s) => s.id === id) : sceneRef.current),
+    []
+  )
+  const spanUs = React.useCallback(
+    (sceneId?: string) => {
+      const target = sceneById(sceneId)
+      return target ? sceneDurationUs(target) : 0
+    },
+    [sceneById]
+  )
+  /** Where one of three cuts keeps its targets: its spine, so its cursor never finds another cut's. */
+  const scopeOf = React.useCallback(
+    (sceneId: string) =>
+      deskRef.current?.querySelector<HTMLElement>(`[data-cut-scene="${CSS.escape(sceneId)}"]`) ?? null,
+    []
+  )
+  const onLand = React.useCallback(
+    (beat: { ops: Parameters<typeof applyAgentOps>[0]; sceneId?: string }) => {
       // Before, not after. Reading the scene once the ops have landed records
-      // the result and animates nothing.
-      capture(sceneRef.current)
-      applyAgentOps(ops)
+      // the result and animates nothing. A cut's spine slides on its own.
+      if (!beat.sceneId) capture(sceneRef.current, GAP_CLOSE)
+      applyAgentOps(beat.ops)
     },
     [capture, applyAgentOps]
   )
+  const director = useDirector({ root: deskRef, spanUs, onLand, scopeOf })
+
+  /**
+   * Three cuts (plans/036, phase D): while they are on the desk the lanes
+   * panel shows their three spines and the preview the lead cut. Opening
+   * one puts it in the full lanes; the spines come back from the switcher.
+   */
+  const [cutSet, setCutSet] = React.useState<{ cuts: CutView[]; recommendedId: string | null } | null>(null)
+  const [cutsShown, setCutsShown] = React.useState(false)
+
+  /** The reading, with the strong line once it has been chosen. */
+  const reading = useStrongLine(asset?.id, asset?.reading ?? null, harness?.fetch)
+
+  /** The arrival: the reading played once, the first time this take is opened (phase G). */
+  const arrival = useArrival({ assetId: asset?.id ?? null, hasReading: reading !== null, mode: harness?.arrival })
+  const passes = React.useMemo(
+    () =>
+      reading && asset
+        ? scanPasses(reading, { width: asset.width, height: asset.height, rotation: asset.rotation, fps: asset.fps })
+        : [],
+    [reading, asset]
+  )
+
+  /** Where the self-check grabs its frames: the scene now, the canvas, the proxies. */
+  const look = React.useMemo(
+    () => ({
+      scene: sceneById,
+      canvas,
+      proxyUrls: Object.fromEntries(
+        Object.entries(media).map(([id, entry]) => [id, entry.proxyUrl])
+      ),
+    }),
+    [canvas, media, sceneById]
+  )
+
+  /**
+   * "+ Captions from the transcript" by hand: the stored transcript, read
+   * once, and the same builder the agent's add_captions uses. Spends nothing.
+   */
+  const [captionsPending, setCaptionsPending] = React.useState(false)
 
   /**
    * Every hand edit goes through here, and it is the only place that knows
@@ -324,6 +462,55 @@ export function Studio({
     },
     [apply, running]
   )
+
+  const openScene = React.useCallback(
+    (sceneId: string) => {
+      if (running) return
+      commit([{ op: "select_scene", sceneId }])
+      setCutsShown(false)
+    },
+    [commit, running]
+  )
+
+  const cutsDesk = React.useMemo(
+    () => ({
+      onCuts: (data: CutsData) => {
+        setCutSet({ cuts: data.cuts, recommendedId: null })
+        setCutsShown(true)
+      },
+      onRecommend: (pick: RecommendData) =>
+        setCutSet((prev) => (prev ? { ...prev, recommendedId: pick.sceneId } : prev)),
+      undoCut: (sceneId: string) => commit([{ op: "remove_scene", sceneId }]),
+      hasScene: (sceneId: string) => document.scenes.some((s) => s.id === sceneId),
+      durationOf: (sceneId: string) => {
+        const target = document.scenes.find((s) => s.id === sceneId)
+        return target ? sceneDurationUs(target) : 0
+      },
+      aspectOf: (sceneId: string) => {
+        const c = document.scenes.find((s) => s.id === sceneId)?.canvas ?? document.settings.canvas
+        return c.width / c.height
+      },
+    }),
+    [commit, document]
+  )
+  const liveCuts = cutSet?.cuts.filter((cut) => document.scenes.some((s) => s.id === cut.sceneId)) ?? []
+  const showSpines = cutsShown && liveCuts.length > 0
+
+  const addCaptionsByHand = React.useCallback(async () => {
+    const clip = scene ? findMainTrack(scene)?.elements.find((e) => e.kind === "video") : undefined
+    if (!scene || !clip || clip.kind !== "video" || captionsPending) return
+    setCaptionsPending(true)
+    try {
+      const response = await (harness?.fetch ?? fetch)(`/api/editor/assets/${clip.mediaId}/transcript`)
+      if (!response.ok) return
+      const { words } = (await response.json()) as { words: Word[] }
+      commit(addCaptions(scene, words, { mediaId: clip.mediaId, author: "user" }))
+    } catch {
+      // Offline: the button is still there to press again.
+    } finally {
+      setCaptionsPending(false)
+    }
+  }, [scene, captionsPending, commit, harness])
 
   /**
    * Cut where the pointer is, and fall back to the playhead when it is not over
@@ -340,12 +527,13 @@ export function Studio({
    */
   const split = React.useCallback(() => {
     if (!scene || !trackId) return
-    // Read at call time, not rendered from: the playhead is no longer state,
-    // and an event handler wants where it is now, not where it last rendered.
-    const at =
-      hoverUs === null ? player.readPlayhead() : us(Math.round(hoverUs))
+    // Read at call time, not rendered from: neither the playhead nor the
+    // hover is state this reads, and an event handler wants where they are
+    // now, not where they last rendered.
+    const hover = hoverRef.current
+    const at = hover === null ? player.readPlayhead() : us(Math.round(hover))
     commit(splitAt(scene, trackId, at))
-  }, [commit, scene, trackId, hoverUs, player])
+  }, [commit, scene, trackId, player])
 
   const commitTrim = React.useCallback(
     (drag: TrimDrag) => {
@@ -583,10 +771,19 @@ export function Studio({
      binding for the first time.
      ──────────────────────────────────────────────────────────────────── */
 
-  const [tab, setTab] = React.useState<SideTab>("chat")
+  /** The right panel: the chat by default, the transcript, or hidden. */
+  const [side, setSide] = React.useState<SideView | null>("chat")
 
-  /** Which rail tool is open. Closed by default: the preview is the point. */
-  const [tool, setTool] = React.useState<StudioTool | null>(null)
+  /**
+   * Which rail tool is open. Undefined until the person picks: then Media
+   * from `xl` up (the library is where a cut starts) and closed below, where
+   * it would take the preview's room. Before the width is known the frame
+   * decides in CSS (`libraryAuto`), so nothing flashes on load.
+   */
+  const [toolChoice, setTool] = React.useState<StudioTool | null | undefined>(undefined)
+  const wideDesk = useWideDesk()
+  const tool: StudioTool | null =
+    toolChoice !== undefined ? toolChoice : wideDesk === false ? null : "media"
 
   const [transcriptSelection, setTranscriptSelection] =
     React.useState<TranscriptSelection | null>(null)
@@ -706,34 +903,14 @@ export function Studio({
   }, [commit, scene, trackId, selectedId, selectedWords, deleteWords])
 
   /**
-   * Keyboard, because this is an editor. Ignored while a text field has focus,
-   * or typing an s into the composer would split the timeline.
+   * Keyboard, because this is an editor. Who owns a press (a text field, a
+   * focused control, the chat margin, or the editor) is decided in
+   * editor-keys.ts, where it is tested.
    */
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable
-      ) {
-        return
-      }
-
-      // A focused control owns its own keys: Space presses a toolbar button
-      // rather than toggling playback, and Backspace on one must not delete the
-      // selected clip. The timeline is the exception — its clips are buttons,
-      // and clicking one focuses it, so Backspace there is the delete it was
-      // selected for. Undo and Escape mean the editor from anywhere.
-      const control = target?.closest(
-        "button, a[href], select, [role=button], [role=menuitem], [role=slider], [role=option], [role=tab], [role=switch], [role=checkbox]"
-      )
-      const editorWide =
-        event.key === "Escape" ||
-        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")
-      if (control && !control.closest("[data-editor-keys]") && !editorWide) {
-        return
-      }
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (!editorOwnsKey(target, event)) return
 
       if (event.key === " ") {
         event.preventDefault()
@@ -768,15 +945,51 @@ export function Studio({
 
   if (!scene) return null
 
+  const mediaList = Object.values(media)
+
   return (
     <StudioFrame
-      title={document.metadata.name}
-      playing={player.playing}
-      onTogglePlaying={player.toggle}
-      clock={<PlayheadClock player={player} />}
+      deskRef={deskRef}
+      overlay={<AgentCursors director={director} />}
+      name={
+        <ProjectName
+          name={document.metadata.name}
+          onRename={(name) => commit([{ op: "rename", name }])}
+          disabled={running}
+        />
+      }
+      topCenter={
+        <>
+          <FrameMenu
+            shapes={FRAMES}
+            canvas={canvas}
+            onChange={setFrame}
+            fit={fit}
+            onFitChange={setFit}
+            disabled={running}
+          />
+          <div className="flex items-center gap-0.5">
+            <DeskIconButton
+              icon={Undo02Icon}
+              label="Undo"
+              shortcut={["mod", "Z"]}
+              side="bottom"
+              onClick={undo}
+              disabled={running || !canUndo}
+            />
+            <DeskIconButton
+              icon={Redo02Icon}
+              label="Redo"
+              shortcut={["shift", "mod", "Z"]}
+              side="bottom"
+              onClick={redo}
+              disabled={running || !canRedo}
+            />
+          </div>
+        </>
+      }
       hoverUs={hoverUs}
       running={running}
-      durationUs={durationUs}
       preview={
         <StudioPreview
           player={player}
@@ -799,14 +1012,38 @@ export function Studio({
           disabled={running}
         />
       }
-      toolbarEnd={
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-          <FrameControls
-            canvas={canvas}
-            onChange={setFrame}
-            fit={fit}
-            onFitChange={setFit}
-            disabled={running}
+      transport={
+        <>
+          <PlayButton playing={player.playing} onToggle={player.toggle} size="sm" />
+          {/* One line, fixed-width digits: the clock never wraps or jitters. */}
+          <span className="text-kit-small whitespace-nowrap text-kit-ink tabular-nums">
+            <PlayheadClock player={player} />
+            <span className="text-kit-ink-muted">
+              {" / "}
+              {formatClockTenths(durationUs)}
+            </span>
+          </span>
+        </>
+      }
+      toolbar={
+        <>
+          {document.scenes.length > 1 ? (
+            <SceneMenu
+              scenes={document.scenes}
+              currentId={showSpines ? null : scene.id}
+              cutsLabel={liveCuts.length > 0 ? `All ${liveCuts.length} cuts` : null}
+              onPick={openScene}
+              onShowCuts={() => setCutsShown(true)}
+              disabled={running}
+            />
+          ) : null}
+          <DeskIconButton icon={ScissorIcon} label="Split" shortcut={["S"]} onClick={split} disabled={running} />
+          <DeskIconButton
+            icon={Delete02Icon}
+            label="Delete the selected clip"
+            shortcut={["⌫"]}
+            onClick={remove}
+            disabled={running || !selectedId}
           />
           <EffectControls
             chip={liveEffect}
@@ -815,87 +1052,119 @@ export function Studio({
             onRemove={dropEffect}
             disabled={running}
           />
-          <EditActions
-            onSplit={split}
-            onDelete={remove}
-            onUndo={undo}
-            onRedo={redo}
-            disabled={running}
-            canDelete={Boolean(selectedId)}
-            canUndo={canUndo}
-            canRedo={canRedo}
-          />
-          <ZoomControls
-            zoom={zoom.zoom}
-            onFit={zoom.fit}
-            onZoomIn={zoom.zoomIn}
-            onZoomOut={zoom.zoomOut}
-            canZoomIn={zoom.canZoomIn}
-            canZoomOut={zoom.canZoomOut}
-          />
-        </div>
+        </>
+      }
+      toolbarEnd={
+        <TimelineZoom
+          zoom={zoom.zoom}
+          onZoom={zoom.set}
+          onZoomIn={zoom.zoomIn}
+          onZoomOut={zoom.zoomOut}
+          canZoomIn={zoom.canZoomIn}
+          canZoomOut={zoom.canZoomOut}
+        />
       }
       tool={tool}
+      libraryAuto={toolChoice === undefined && wideDesk === null}
       onToolChange={setTool}
       panel={
-        <StudioEffects
-          applied={appliedEffects}
-          hasClip={clipAtPlayhead !== null}
-          onApply={applyFromPanel}
-          onRemove={removeFromPanel}
+        tool === "effects" ? (
+          <StudioEffects
+            applied={appliedEffects}
+            hasClip={clipAtPlayhead !== null}
+            onApply={applyFromPanel}
+            onRemove={removeFromPanel}
+            locked={running}
+          />
+        ) : (
+          <StudioLibrary media={mediaList} />
+        )
+      }
+      side={side}
+      onSideChange={setSide}
+      chat={
+        <StudioChat
+          projectId={projectId}
+          director={director}
+          controls={{
+            beginRun,
+            endRun,
+            awaitSync,
+            syncLost,
+            undo,
+            redo,
+            historyIds,
+            runEntry,
+            durationUs,
+          }}
+          onSaved={syncRevision}
+          onRunningChange={setRunning}
+          reading={reading}
+          arrival={arrival}
+          passes={
+            arrival.played ? (
+              <ArrivalPasses passes={passes} atMs={arrival.atMs} settled={arrival.phase === "settled"} />
+            ) : null
+          }
+          frame={chatFrame}
+          look={look}
+          desk={cutsDesk}
+          harness={harness}
+        />
+      }
+      transcript={
+        <StudioTranscript
+          lines={lines}
+          selectedIds={selectedWordIds}
+          liveWordId={liveWordId}
+          onSelect={selectWords}
+          onSeek={(atUs) => player.seekTo(us(Math.round(atUs)))}
+          onDelete={deleteWords}
+          onZoom={zoomWords}
           locked={running}
         />
       }
-      chat={
-        <StudioSide
-          tab={tab}
-          onTabChange={setTab}
-          chat={
-            <StudioChat
-              projectId={projectId}
-              onOps={applyStreamedOps}
-              onSaved={syncRevision}
-              onRunningChange={setRunning}
-            />
-          }
-          transcript={
-            <StudioTranscript
-              lines={lines}
-              selectedIds={selectedWordIds}
-              liveWordId={liveWordId}
-              onSelect={selectWords}
-              onSeek={(atUs) => player.seekTo(us(Math.round(atUs)))}
-              onDelete={deleteWords}
-              onZoom={zoomWords}
-              locked={running}
-            />
-          }
-        />
-      }
     >
-      <StudioLanes
-        scene={scene}
-        player={player}
-        playing={player.playing}
-        onHover={onHover}
-        onSeek={player.seekTo}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        seekIndex={seekIndex}
-        filmstrips={filmstrips}
-        zoom={zoom.zoom}
-        onZoomBy={zoom.scaleBy}
-        onZoomSpan={zoomToSpan}
-        trim={trim}
-        onTrim={setTrim}
-        onTrimCommit={commitTrim}
-        reveal={reveal}
-        selectedEffectId={liveEffect?.id ?? null}
-        onSelectEffect={setSelectedEffect}
-        onMoveEffect={moveSelectedEffect}
-        onResizeEffect={resizeSelectedEffect}
-        locked={running}
-      />
+      <div ref={lanesRef}>
+        {showSpines ? (
+          <CutSpines
+            cuts={liveCuts}
+            scenes={document.scenes}
+            recommendedId={cutSet?.recommendedId ?? null}
+            onOpen={openScene}
+            disabled={running}
+            filmstrips={filmstrips}
+            seekIndex={seekIndex}
+          />
+        ) : (
+          <StudioLanes
+            onAddCaptions={asset?.id ? () => void addCaptionsByHand() : undefined}
+            captionsPending={captionsPending}
+            scene={scene}
+            player={player}
+            playing={player.playing}
+            onHover={onHover}
+            onSeek={player.seekTo}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            seekIndex={seekIndex}
+            filmstrips={filmstrips}
+            zoom={zoom.zoom}
+            onZoomBy={zoom.scaleBy}
+            onZoomSpan={zoomToSpan}
+            trim={trim}
+            onTrim={setTrim}
+            onTrimCommit={commitTrim}
+            reveal={reveal}
+            selectedEffectId={liveEffect?.id ?? null}
+            onSelectEffect={setSelectedEffect}
+            onMoveEffect={moveSelectedEffect}
+            onResizeEffect={resizeSelectedEffect}
+            locked={running}
+            scanning={arrival.phase === "scanning"}
+          />
+        )}
+      </div>
     </StudioFrame>
   )
 }
@@ -912,14 +1181,10 @@ export function Studio({
  * right as the work does, rather than putting the output shape where the input
  * belongs.
  */
-const FRAMES: {
-  label: string
-  hint: string
-  canvas: typeof LANDSCAPE_CANVAS
-}[] = [
-  { label: "16:9", hint: "Wide", canvas: LANDSCAPE_CANVAS },
-  { label: "9:16", hint: "Vertical", canvas: VERTICAL_CANVAS },
-  { label: "1:1", hint: "Square", canvas: SQUARE_CANVAS },
+const FRAMES: readonly FrameShape[] = [
+  { key: "wide", label: "16:9", hint: "Wide", canvas: LANDSCAPE_CANVAS },
+  { key: "vertical", label: "9:16", hint: "Vertical", canvas: VERTICAL_CANVAS },
+  { key: "square", label: "1:1", hint: "Square", canvas: SQUARE_CANVAS },
 ]
 
 /** The shared look of every segmented button in the toolbar. */
@@ -938,90 +1203,7 @@ const FRAMES: {
 const SEGMENT =
   "relative h-6 rounded px-2 text-kit-small whitespace-nowrap before:absolute before:-inset-y-2 before:inset-x-0 transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.96] outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus disabled:pointer-events-none disabled:opacity-50"
 
-const SEGMENT_ON = "bg-kit-object text-kit-ink shadow-kit-control"
 const SEGMENT_OFF = "text-kit-ink-muted hover:text-kit-ink"
-
-/**
- * The frame, and how the picture meets it.
- *
- * One group and not two. They were separate for a version and the toolbar ran
- * out of room — five groups clipped the zoom stepper off the right edge — but
- * the better reason is that they are one decision: 9:16 and Fill is a vertical
- * cut, 9:16 and Fit is a wide take with bars, and choosing the shape without
- * choosing what happens to the footage is only half an answer. The divider says
- * they are related rather than the same.
- */
-function FrameControls({
-  canvas,
-  onChange,
-  fit,
-  onFitChange,
-  disabled,
-}: {
-  canvas: { width: number; height: number }
-  onChange: (canvas: { width: number; height: number }) => void
-  fit: "cover" | "contain"
-  // Fit first, because it is where a project starts: the whole picture, nothing
-  // discarded. Fill is the choice you make after seeing what the bars cost.
-  onFitChange: (fit: "cover" | "contain") => void
-  disabled?: boolean
-}) {
-  const fits = [
-    { value: "contain" as const, label: "Fit", hint: "Show all of it" },
-    { value: "cover" as const, label: "Fill", hint: "Crop to the frame" },
-  ]
-
-  return (
-    <div
-      role="group"
-      aria-label="Frame"
-      className="flex items-center gap-0.5 rounded-md bg-kit-well p-0.5"
-    >
-      {FRAMES.map((frame) => {
-        const active =
-          canvas.width === frame.canvas.width &&
-          canvas.height === frame.canvas.height
-
-        return (
-          <button
-            key={frame.label}
-            type="button"
-            onClick={() => onChange(frame.canvas)}
-            disabled={disabled}
-            aria-pressed={active}
-            title={`${frame.hint} — ${frame.label}`}
-            className={cn(
-              SEGMENT,
-              "tabular-nums",
-              active ? SEGMENT_ON : SEGMENT_OFF
-            )}
-          >
-            {frame.label}
-          </button>
-        )
-      })}
-
-      <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-kit-hairline" />
-
-      {fits.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onFitChange(option.value)}
-          disabled={disabled}
-          aria-pressed={fit === option.value}
-          title={`${option.label} — ${option.hint}`}
-          className={cn(
-            SEGMENT,
-            fit === option.value ? SEGMENT_ON : SEGMENT_OFF
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 /** Two seconds of push, which is an emphasis rather than a new framing. */
 const DEFAULT_ZOOM_US = 2_000_000
@@ -1129,65 +1311,6 @@ function EffectControls({
   )
 }
 
-function EditActions({
-  onSplit,
-  onDelete,
-  onUndo,
-  onRedo,
-  canDelete,
-  canUndo,
-  canRedo,
-  disabled,
-}: {
-  onSplit: () => void
-  onDelete: () => void
-  onUndo: () => void
-  onRedo: () => void
-  canDelete: boolean
-  canUndo: boolean
-  canRedo: boolean
-  /** A run holds the document. Everything here writes to it. */
-  disabled?: boolean
-}) {
-  return (
-    <div className="flex items-center gap-0.5">
-      <Action onClick={onSplit} disabled={disabled}>
-        Split
-      </Action>
-      <Action onClick={onDelete} disabled={disabled || !canDelete}>
-        Delete
-      </Action>
-      <Action onClick={onUndo} disabled={disabled || !canUndo}>
-        Undo
-      </Action>
-      <Action onClick={onRedo} disabled={disabled || !canRedo}>
-        Redo
-      </Action>
-    </div>
-  )
-}
-
-function Action({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void
-  disabled?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`relative h-7 rounded-md px-2 ${HIT_44} text-kit-small text-kit-ink-muted transition-colors duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus disabled:pointer-events-none disabled:text-kit-ink-disabled`}
-    >
-      {children}
-    </button>
-  )
-}
-
 /**
  * Says what happened to the last edit, and only when there is something to say.
  *
@@ -1210,9 +1333,11 @@ function SaveBadge({
         ? "Unsaved"
         : save.status === "conflict"
           ? "Someone else edited this — reload to continue"
-          : save.message
+          : save.status === "unsynced"
+            ? "Could not confirm what Quincy saved — reload to continue"
+            : save.message
 
-  const bad = save.status === "conflict" || save.status === "error"
+  const bad = save.status === "conflict" || save.status === "error" || save.status === "unsynced"
 
   return (
     <span className="flex items-center gap-2">
