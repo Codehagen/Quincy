@@ -276,6 +276,147 @@ export function deleteSpeech(
 }
 
 /**
+ * Remove several elements at once, as one revision: what Delete means with
+ * more than one clip selected. Spine clips ripple, so the cut closes up once
+ * rather than once per clip; anything over the spine comes off its lane and
+ * leaves a gap, as a single delete does. Refuses to empty the spine.
+ */
+export function removeElements(
+  scene: Scene,
+  elementIds: readonly string[]
+): EditOp[] {
+  const ids = new Set(elementIds)
+  if (ids.size === 0) return []
+  const spine = findMainTrack(scene)
+  const ops: EditOp[] = []
+
+  for (const track of scene.tracks) {
+    if (track.isMain) continue
+    for (const element of track.elements) {
+      if (!ids.has(element.id)) continue
+      ops.push({
+        op: "remove_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+      })
+    }
+  }
+
+  if (spine && spine.elements.some((element) => ids.has(element.id))) {
+    const kept = spine.elements.filter((element) => !ids.has(element.id))
+    if (kept.length === 0) return []
+    const remaining = layOut(kept)
+    ops.push(
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining)
+    )
+  }
+
+  if (ops.length === 0) return []
+  return aimed(ops, {
+    action: "cut",
+    kind: "track",
+    trackId: spine?.id ?? scene.tracks[0].id,
+  })
+}
+
+/**
+ * Put a copy of a clip into the spine at an instant, and push what follows
+ * along. A paste or a duplicate on the spine.
+ *
+ * Inside a clip, the clip is split there and the copy goes between the
+ * halves; on a cut, it goes into the cut. The spine stays magnetic: the
+ * result is laid out from 0 with no gaps, as one `replace_elements`, so it is
+ * one revision and one undo.
+ */
+export function insertOnSpine(
+  scene: Scene,
+  clip: VideoElement,
+  atUs: number,
+  author: Author = "user"
+): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
+  const copy = newElement<VideoElement>(
+    { ...clip, id: undefined, startUs: us(0) },
+    author
+  )
+  const out: TimelineElement[] = []
+  let placed = false
+
+  for (const element of spine.elements) {
+    const end = element.startUs + element.durationUs
+    if (!placed && atUs <= element.startUs) {
+      out.push(copy)
+      placed = true
+    }
+    if (
+      !placed &&
+      element.kind === "video" &&
+      atUs > element.startUs &&
+      atUs < end
+    ) {
+      const original = element as VideoElement
+      const offset = atUs - original.startUs
+      const sourceAt = us(
+        Math.round(
+          original.trimStartUs +
+            (offset / original.durationUs) *
+              (original.trimEndUs - original.trimStartUs)
+        )
+      )
+      out.push(
+        newElement<VideoElement>(
+          {
+            ...original,
+            id: undefined,
+            durationUs: us(offset),
+            trimEndUs: sourceAt,
+          },
+          author
+        ),
+        copy,
+        newElement<VideoElement>(
+          {
+            ...original,
+            id: undefined,
+            durationUs: us(original.durationUs - offset),
+            trimStartUs: sourceAt,
+          },
+          author
+        )
+      )
+      placed = true
+      continue
+    }
+    out.push(element)
+  }
+  if (!placed) out.push(copy)
+
+  const remaining = layOut(out)
+
+  return aimed(
+    [
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining),
+    ],
+    { action: "press", kind: "track", trackId: spine.id }
+  )
+}
+
+/**
  * Cut a stretch of the timeline out of the spine, between an in and an out.
  *
  * What I, O and Delete mean: the range is in timeline time, because that is

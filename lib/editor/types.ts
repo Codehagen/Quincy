@@ -55,6 +55,17 @@ export type DocumentMetadata = {
    * the first voice it heard). Absent means unnamed: "Speaker 1".
    */
   speakers?: Record<string, string>
+  /**
+   * Places the person marked with M to come back to. Bound to the source
+   * instant like chapters, so a cut before one does not move it off its
+   * word, and one whose moment is cut out is simply not shown.
+   */
+  markers?: Marker[]
+}
+
+export type Marker = {
+  mediaId: string
+  sourceUs: Us
 }
 
 export type Chapter = {

@@ -207,10 +207,10 @@ type EditOpBody =
     }
   | { op: "update_settings"; patch: Partial<VideoDocument["settings"]> }
   | { op: "rename"; name: string }
-  /** The project's library and speaker names (types.ts DocumentMetadata). */
+  /** The project's library, speaker names and markers (types.ts DocumentMetadata). */
   | {
       op: "update_metadata"
-      patch: Partial<Pick<DocumentMetadata, "library" | "speakers">>
+      patch: Partial<Pick<DocumentMetadata, "library" | "speakers" | "markers">>
     }
   /** The project's chapters, whole (chapters.ts validates them). Empty clears. */
   | { op: "set_chapters"; chapters: Chapter[] }

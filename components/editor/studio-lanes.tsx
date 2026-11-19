@@ -169,6 +169,8 @@ export function StudioLanes({
   onMoveElement,
   wordEdgesUs,
   marks,
+  alsoSelected = [],
+  markerTimes = [],
 }: {
   /**
    * The in and out marks (I and O). Either may be unset; with both, the
@@ -181,7 +183,12 @@ export function StudioLanes({
   onHover: (timeUs: number | null) => void
   onSeek: (timeUs: Us) => void
   selectedId: string | null
-  onSelect: (elementId: string | null) => void
+  /** `additive`: Shift or ⌘/Ctrl was held, so the clip joins the selection. */
+  onSelect: (elementId: string | null, additive?: boolean) => void
+  /** Clips selected along with `selectedId` (Shift-click, ⌘A). */
+  alsoSelected?: readonly string[]
+  /** Where the markers (M) land now, in scene time. */
+  markerTimes?: readonly number[]
   seekIndex: LaneSeekIndex | null
   /** The frame sheets, by media id. Absent for assets ingested before they existed. */
   filmstrips: Record<string, FilmstripSheet | null>
@@ -780,6 +787,19 @@ export function StudioLanes({
             </div>
           ) : null}
 
+          {/* Markers (M): a small ink notch on the ruler, and a hairline
+              down the lanes so a clip edge can be lined up to it. */}
+          {markerTimes.map((atUs) => (
+            <div
+              key={atUs}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 z-10 w-px -translate-x-1/2 bg-kit-ink/30 select-none"
+              style={{ left: `${(atUs / Math.max(1, span)) * 100}%` }}
+            >
+              <span className="absolute top-0 left-1/2 size-2 -translate-x-1/2 rotate-45 rounded-[1px] bg-kit-ink" />
+            </div>
+          ))}
+
           {/* The marks. A rule at each one set, and with both a tint between
               them on every lane, because X cuts that stretch out of the cut
               and the clips under it should be visibly the ones that go. */}
@@ -867,7 +887,10 @@ export function StudioLanes({
                       element={element}
                       geometry={geometryOf(track.id, element)}
                       span={span}
-                      selected={element.id === selectedId}
+                      selected={
+                        element.id === selectedId ||
+                        alsoSelected.includes(element.id)
+                      }
                       onSelect={onSelect}
                       seekIndex={track.kind === "video" ? seekIndex : null}
                       strip={
@@ -1538,7 +1561,7 @@ function Clip({
   onMove?: (startUs: number, toTrackId: string | null) => void
   span: number
   selected: boolean
-  onSelect: (elementId: string) => void
+  onSelect: (elementId: string, additive?: boolean) => void
   seekIndex: LaneSeekIndex | null
   strip: FilmstripSheet | null
   trimming: boolean
@@ -1620,7 +1643,7 @@ function Clip({
             swallow.current = false
             return
           }
-          onSelect(element.id)
+          onSelect(element.id, event.shiftKey || event.metaKey || event.ctrlKey)
         }}
         data-owns-drag={movable ? "" : undefined}
         onPointerDown={(event) => {

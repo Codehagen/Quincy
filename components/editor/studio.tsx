@@ -21,12 +21,20 @@ import {
 } from "@/lib/editor/document"
 import { effectSpec, stepAmount } from "@/lib/editor/effect-catalogue"
 import { effectChips, type EffectChip } from "@/lib/editor/effect-lane"
+import {
+  copyElement,
+  duplicateElement,
+  pasteElement,
+  type ClipboardItem,
+} from "@/lib/editor/clipboard"
 import { hintFor, keyActionFor } from "@/lib/editor/keymap"
+import { placeMarkers, toggleMarker } from "@/lib/editor/markers"
 import {
   applyEffect,
   cropSpine,
   deleteAndRipple,
   deleteTimelineRange,
+  removeElements,
   deleteSpeech,
   mainTrackId,
   moveEffect,
@@ -232,6 +240,36 @@ export function Studio({
   }, [redoDocument, fadeLanes])
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  /**
+   * Clips selected along with `selectedId`: Shift-click or ⌘A. Kept apart so
+   * everything that reads one selected clip (the toolbar, the panels) goes on
+   * reading the first, and only Delete and the lanes need the rest.
+   */
+  const [alsoSelected, setAlsoSelected] = React.useState<string[]>([])
+  // Read through a ref: the lanes memoise their clips, so a callback that
+  // closed over `selectedId` would see the selection from before the first
+  // click and treat a Shift-click as a fresh one.
+  const selectedRef = React.useRef(selectedId)
+  React.useEffect(() => {
+    selectedRef.current = selectedId
+  }, [selectedId])
+  const selectClip = React.useCallback(
+    (elementId: string | null, additive = false) => {
+      const current = selectedRef.current
+      if (!additive || elementId === null || current === null) {
+        setSelectedId(elementId)
+        setAlsoSelected([])
+        return
+      }
+      if (current === elementId) return
+      setAlsoSelected((rest) =>
+        rest.includes(elementId)
+          ? rest.filter((id) => id !== elementId)
+          : [...rest, elementId]
+      )
+    },
+    []
+  )
   /**
    * Where the pointer is over the lane, or null. Kept separate from the
    * playhead on purpose: hover previews an instant, clicking commits to it,
@@ -1213,6 +1251,11 @@ export function Studio({
     }
 
     if (!trackId || !selectedId) return
+    if (alsoSelected.length > 0) {
+      commit(removeElements(scene, [selectedId, ...alsoSelected]))
+      selectClip(null)
+      return
+    }
     // Something over the cut (b-roll, a picture, text, music) comes off its
     // own lane and leaves a gap; only the spine ripples.
     const over = studioTools.selected
@@ -1239,6 +1282,8 @@ export function Studio({
     selectedWords,
     deleteWords,
     studioTools.selected,
+    alsoSelected,
+    selectClip,
   ])
 
   /**
@@ -1252,16 +1297,24 @@ export function Studio({
   }>({ inUs: null, outUs: null })
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
 
-  /** Every place a cut falls on the spine, with the start and the end. */
+  const markerTimes = React.useMemo(
+    () => (scene ? placeMarkers(scene, document.metadata.markers) : []),
+    [scene, document.metadata.markers]
+  )
+
+  /** What ⌘C copied. In the editor, not the system clipboard: a clip is not text. */
+  const clipboard = React.useRef<ClipboardItem | null>(null)
+
+  /** Every place a cut falls on the spine, with the start and the end, and the markers. */
   const cutPoints = React.useMemo(() => {
     const spine = scene ? findMainTrack(scene) : null
-    const points = new Set<number>([0])
+    const points = new Set<number>([0, ...markerTimes])
     for (const element of spine?.elements ?? []) {
       points.add(element.startUs)
       points.add(element.startUs + element.durationUs)
     }
     return [...points].sort((x, y) => x - y)
-  }, [scene])
+  }, [scene, markerTimes])
 
   const seekBy = React.useCallback(
     (deltaUs: number) => {
@@ -1316,8 +1369,14 @@ export function Studio({
     if (!action) return
 
     // Escape is "never mind": it never swallows the press, so a dialog or a
-    // menu still closes on it.
-    if (action !== "deselect") event.preventDefault()
+    // menu still closes on it. Copy and paste with nothing to copy or paste
+    // leave the browser's own to happen.
+    const passive =
+      action === "deselect" ||
+      (action === "copy" && !selectedId) ||
+      (action === "paste" && !clipboard.current)
+    if (passive && action !== "deselect") return
+    if (!passive) event.preventDefault()
 
     // While Quincy cuts, the document is read-only: the keys that only look
     // still work, the ones that edit do nothing.
@@ -1328,6 +1387,9 @@ export function Studio({
       action === "trim-end" ||
       action === "delete" ||
       action === "add-zoom" ||
+      action === "add-marker" ||
+      action === "paste" ||
+      action === "duplicate" ||
       action === "undo" ||
       action === "redo"
     if (edits && running) return
@@ -1428,7 +1490,7 @@ export function Studio({
         // app, and a selected effect, a selected phrase and a marked range
         // each leave something destructive one key away.
         setSelectedEffect(null)
-        setSelectedId(null)
+        selectClip(null)
         setTranscriptSelection(null)
         setMarks({ inUs: null, outUs: null })
         break
@@ -1444,6 +1506,27 @@ export function Studio({
       case "shortcuts":
         setShortcutsOpen(true)
         break
+      case "add-marker":
+        if (scene) commit(toggleMarker(scene, document.metadata, at))
+        break
+      case "copy":
+        if (scene && selectedId)
+          clipboard.current = copyElement(scene, selectedId)
+        break
+      case "paste":
+        if (scene && clipboard.current)
+          commit(pasteElement(scene, clipboard.current, at))
+        break
+      case "duplicate":
+        if (scene && selectedId) commit(duplicateElement(scene, selectedId))
+        break
+      case "select-all": {
+        const spine = scene ? findMainTrack(scene) : null
+        const ids = spine?.elements.map((element) => element.id) ?? []
+        setSelectedId(ids[0] ?? null)
+        setAlsoSelected(ids.slice(1))
+        break
+      }
     }
   })
 
@@ -1773,7 +1856,9 @@ export function Studio({
             onHover={onHover}
             onSeek={player.seekTo}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectClip}
+            alsoSelected={selectedId ? alsoSelected : []}
+            markerTimes={markerTimes}
             seekIndex={seekIndex}
             filmstrips={filmstrips}
             zoom={zoom.zoom}

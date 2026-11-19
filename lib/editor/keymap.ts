@@ -47,6 +47,11 @@ export type KeyAction =
   | "timeline-out"
   | "timeline-fit"
   | "shortcuts"
+  | "add-marker"
+  | "copy"
+  | "paste"
+  | "duplicate"
+  | "select-all"
 
 export type KeyGroup = "Playback" | "Editing" | "View"
 
@@ -261,6 +266,41 @@ export const KEYMAP: readonly KeyEntry[] = [
     group: "Editing",
     hints: [["Z"]],
     bindings: [b("add-zoom", "z", { mod: false, shift: false, alt: false })],
+  },
+  {
+    action: "add-marker",
+    label: "Add a marker (again to take it away)",
+    group: "Editing",
+    hints: [["M"]],
+    bindings: [b("add-marker", "m", { mod: false, alt: false })],
+  },
+  {
+    action: "copy",
+    label: "Copy the selected clip",
+    group: "Editing",
+    hints: [["mod", "C"]],
+    bindings: [b("copy", "c", { mod: true, shift: false })],
+  },
+  {
+    action: "paste",
+    label: "Paste at the playhead",
+    group: "Editing",
+    hints: [["mod", "V"]],
+    bindings: [b("paste", "v", { mod: true, shift: false })],
+  },
+  {
+    action: "duplicate",
+    label: "Duplicate the selected clip",
+    group: "Editing",
+    hints: [["mod", "D"]],
+    bindings: [b("duplicate", "d", { mod: true, shift: false })],
+  },
+  {
+    action: "select-all",
+    label: "Select every clip in the cut",
+    group: "Editing",
+    hints: [["mod", "A"]],
+    bindings: [b("select-all", "a", { mod: true, shift: false })],
   },
   {
     action: "undo",
