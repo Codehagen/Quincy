@@ -168,19 +168,46 @@ export function usePlayer({
     }
   }, [fps])
 
+  /**
+   * Leave a hover preview before playing.
+   *
+   * With the pointer resting on the lanes, the picture sits wherever the
+   * hover put it and frame events are ignored so the playhead is not dragged
+   * along. Pressing Space there used to play from the hovered frame with the
+   * frames still ignored: the video moved and the playhead bar stood still.
+   * Playback starts from the playhead, the way the bar says it will.
+   */
+  const leavePreview = React.useCallback(() => {
+    if (!previewing.current) return
+    previewing.current = false
+    ref.current?.seekTo(framesFor(playheadRef.current, fps))
+  }, [fps])
+
   const play = React.useCallback(() => {
     setError(null)
+    leavePreview()
     ref.current?.play()
-  }, [])
+  }, [leavePreview])
 
   const pause = React.useCallback(() => ref.current?.pause(), [])
 
   const toggle = React.useCallback(() => {
     const player = ref.current
     if (!player) return
-    if (player.isPlaying()) player.pause()
-    else player.play()
-  }, [])
+    if (player.isPlaying()) {
+      player.pause()
+      return
+    }
+    setError(null)
+    leavePreview()
+    // At the end of the cut, Space plays it again from the top.
+    if (playheadRef.current >= durationUs - usForFrame(1, fps)) {
+      playheadRef.current = us(0)
+      for (const listener of listenersRef.current) listener(us(0))
+      player.seekTo(0)
+    }
+    player.play()
+  }, [leavePreview, durationUs, fps])
 
   const seekTo = React.useCallback(
     (timeUs: Us) => {
