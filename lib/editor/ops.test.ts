@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest"
 
 import { createDocument, createSnapshot, createTrack } from "./document"
 import {
+  aimed,
   applyOps,
   DocumentLockedError,
   RevisionConflictError,
+  targetKey,
   type EditOp,
+  type OpTarget,
 } from "./ops"
 import { createProvenance, isAgentAuthored } from "./provenance"
 import { secondsToUs, us, type Us } from "./time"
@@ -395,5 +398,36 @@ describe("track ops", () => {
     )
 
     expect(result.snapshot.document.scenes[0].tracks[0].muted).toBe(true)
+  })
+})
+
+describe("targets", () => {
+  const rename: EditOp = { op: "rename", name: "x" }
+  const clip: OpTarget = { action: "press", kind: "element", trackId: "t", elementId: "e" }
+  const lane: OpTarget = { action: "press", kind: "track", trackId: "t" }
+
+  it("aimed fills a missing target and keeps one an inner builder set", () => {
+    const [filled] = aimed([rename], clip)
+    expect(filled.target).toEqual(clip)
+    const [kept] = aimed([filled], lane)
+    expect(kept.target).toEqual(clip)
+    const [forced] = aimed([filled], lane, { force: true })
+    expect(forced.target).toEqual(lane)
+  })
+
+  it("the reducer ignores targets", () => {
+    const snapshot = createSnapshot(createDocument({ name: "t" }))
+    const plain = applyOps(snapshot, [rename], { author: "user" }).snapshot.document
+    const aimedDoc = applyOps(snapshot, aimed([rename], clip), { author: "user" }).snapshot.document
+    expect(aimedDoc.metadata.name).toBe(plain.metadata.name)
+  })
+
+  it("keys are stable and distinct per kind", () => {
+    expect(targetKey(clip)).toBe("element:e")
+    expect(targetKey(lane)).toBe("track:t")
+    expect(
+      targetKey({ action: "cut", kind: "range", trackId: "t", spans: [{ startUs: us(100), endUs: us(900) }] })
+    ).toBe("range:t:100-900")
+    expect(targetKey({ action: "press", kind: "control", control: "captions" })).toBe("control:captions")
   })
 })

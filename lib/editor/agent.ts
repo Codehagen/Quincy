@@ -16,10 +16,10 @@ import {
   reframe,
   splitAt,
 } from "./edits"
-import { applyOps, type EditOp } from "./ops"
+import { aimed, applyOps, applyToScene, type EditOp } from "./ops"
 import { findMainTrack, sceneDurationUs } from "./timeline"
 import { secondsToUs, us } from "./time"
-import { addCaptions, removeSilences } from "./tools"
+import { addCaptions, removeSilenceSteps } from "./tools"
 import { DEFAULT_SILENCE, type Word } from "./transcript"
 import type {
   ProjectSnapshot,
@@ -59,10 +59,45 @@ export type AgentContext = {
    * that turns out to be empty is a tool that found nothing to do, which is an
    * answer and not an error.
    */
-  commit: (ops: EditOp[]) => void
+  commit: (ops: EditOp[], meta?: CommitMeta) => void
   /** The transcript, fetched once per run and only if something asks. */
   words: () => Promise<Word[] | null>
 }
+
+/**
+ * Which tool call a batch came from, so the margin can say what each press
+ * did ("Cut a pause · 0.4 s") and Stop can tell a landed step from a skipped
+ * one.
+ */
+export type CommitMeta = {
+  toolCallId?: string
+  toolName: string
+  /** The cut a three-cuts sub-run works on, so the browser hands it to that cursor. */
+  sceneId?: string
+}
+
+/**
+ * One run's working snapshot, seen by a sub-run that cuts one scene (plans/036,
+ * phase D). The snapshot is shared, so the three cuts of a three-cuts run land
+ * in one document under one lock; only "the scene under the cursor" differs,
+ * and every commit is tagged with it. Ops already name their scene, and one
+ * commit applies whole before the next, so three sub-runs cannot interleave
+ * inside an op.
+ */
+export function scopedTo(context: AgentContext, sceneId: string): AgentContext {
+  return {
+    snapshot: () => {
+      const shared = context.snapshot()
+      return { ...shared, document: { ...shared.document, currentSceneId: sceneId } }
+    },
+    commit: (ops, meta) =>
+      context.commit(ops, { toolName: meta?.toolName ?? "edit", ...meta, sceneId }),
+    words: context.words,
+  }
+}
+
+/** What a tool's `execute` is handed besides its input. */
+type CallOptions = { toolCallId?: string } | undefined
 
 const CANVASES = {
   wide: LANDSCAPE_CANVAS,
@@ -88,24 +123,33 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
    * does is tell the user their silences are gone.
    */
   const run = (
-    build: (scene: Scene) => EditOp[],
+    meta: CommitMeta,
+    build: (scene: Scene) => EditOp[] | EditOp[][],
     describe: (scene: Scene, before: Scene) => string,
     nothing: string
   ): string => {
     const scene = currentScene()
     if (!scene) return "This project has no scene to edit."
 
-    const ops = build(scene)
-    if (ops.length === 0) return nothing
+    // A builder that plans in steps hands back one batch per press; each is
+    // committed (and streamed) on its own, so the browser can land them one
+    // at a time. The run still saves once, at the end.
+    const steps = asSteps(build(scene))
+    if (steps.length === 0) return nothing
 
-    context.commit(ops)
+    for (const ops of steps) context.commit(ops, meta)
 
     const after = currentScene()
     return after ? describe(after, scene) : "Done."
   }
 
   const withWords = async (
-    build: (scene: Scene, words: Word[], mediaId: string) => EditOp[],
+    meta: CommitMeta,
+    build: (
+      scene: Scene,
+      words: Word[],
+      mediaId: string
+    ) => EditOp[] | EditOp[][],
     describe: (scene: Scene, before: Scene) => string,
     nothing: string
   ): Promise<string> => {
@@ -118,7 +162,12 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
     const mediaId = spineMedia(scene)
     if (!scene || !mediaId) return "This project has no footage on its spine."
 
-    return run((current) => build(current, words, mediaId), describe, nothing)
+    return run(
+      meta,
+      (current) => build(current, words, mediaId),
+      describe,
+      nothing
+    )
   }
 
   return {
@@ -139,13 +188,15 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
             "Silence left at each end of a cut. Default 120. Zero produces jump-cut voice."
           ),
       }),
-      execute: async ({ minSilenceMs, paddingMs }) =>
+      execute: async ({ minSilenceMs, paddingMs }, options?: CallOptions) =>
         withWords(
+          { toolCallId: options?.toolCallId, toolName: "remove_silences" },
           (scene, words, mediaId) => {
             const source = spineClip(scene, mediaId)
             if (!source) return []
 
-            return removeSilences(scene, words, {
+            // In steps, one pause per press, so the cursor can cut each one.
+            return removeSilenceSteps(scene, words, {
               mediaId,
               author: "agent",
               sourceDurationUs: source.sourceDurationUs,
@@ -207,8 +258,9 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
             "1 gives the word-at-a-time look and is the default. Higher reads as a phrase at a time."
           ),
       }),
-      execute: async ({ wordsPerSegment }) =>
+      execute: async ({ wordsPerSegment }, options?: CallOptions) =>
         withWords(
+          { toolCallId: options?.toolCallId, toolName: "add_captions" },
           (scene, words, mediaId) =>
             addCaptions(scene, words, {
               mediaId,
@@ -222,18 +274,34 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     reframe: tool({
       description:
-        "Change the shape of the frame the cut is composed for. Use for 'make it vertical', 'make it 16:9', 'square it up'. This does not crop — the picture is fitted inside the new frame.",
+        "Change the shape of the frame the cut is composed for. Use for 'make it vertical', 'make it 16:9', 'square it up'. By default the picture fills the new frame, cropped around the centre; use the crop tool after it to keep another part.",
       inputSchema: z.object({
         shape: z
           .enum(["wide", "vertical", "square"])
           .describe(
             "wide is 16:9, vertical is 9:16 for TikTok and Reels, square is 1:1."
           ),
+        show: z
+          .enum(["fill", "whole"])
+          .optional()
+          .describe(
+            "fill (the default) crops the footage to the new frame. whole fits all of it in with bars — for a screen recording or a slide."
+          ),
       }),
-      execute: async ({ shape }) =>
+      execute: async ({ shape, show }, options?: CallOptions) =>
         run(
-          (scene) => reframe(scene, CANVASES[shape] ?? LANDSCAPE_CANVAS),
-          () => `Reframed to ${shape}.`,
+          { toolCallId: options?.toolCallId, toolName: "reframe" },
+          (scene) => {
+            // The canvas alone leaves a clip at its default `contain`: a 16:9
+            // talking head becomes a strip between two bars inside 9:16, which
+            // reads as "still 16:9". Asked for a shape, a person means the
+            // picture in that shape, so fill unless told to show it whole.
+            const ops = reframe(scene, CANVASES[shape] ?? LANDSCAPE_CANVAS)
+            if (ops.length === 0 || show === "whole") return ops
+            return [...ops, ...cropSpine(scene, { fit: "cover" })]
+          },
+          () =>
+            `Reframed to ${shape}${show === "whole" ? ", the whole picture fitted in" : ", the picture filling the frame"}.`,
           `It is already ${shape}.`
         ),
     }),
@@ -247,8 +315,9 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .min(0)
           .describe("Where to cut, in seconds from the start of the cut."),
       }),
-      execute: async ({ atSeconds }) =>
+      execute: async ({ atSeconds }, options?: CallOptions) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "split_clip" },
           (scene) => {
             const trackId = mainTrackId(scene)
             if (!trackId) return []
@@ -261,25 +330,18 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     delete_clip: tool({
       description:
-        "Remove one clip from the spine and close the gap behind it. Clips are numbered from 1, in the order describe_timeline lists them.",
-      inputSchema: z.object({
-        clipNumber: z
-          .number()
-          .int()
-          .min(1)
-          .describe("1 for the first clip on the spine."),
-      }),
-      execute: async ({ clipNumber }) =>
-        run(
-          (scene) => {
-            const trackId = mainTrackId(scene)
-            const clip = findMainTrack(scene)?.elements[clipNumber - 1]
-            if (!trackId || !clip) return []
-            return deleteAndRipple(scene, trackId, clip.id)
-          },
-          (scene) => `Deleted clip ${clipNumber}. ${describeScene(scene)}`,
-          `There is no clip ${clipNumber} on the spine.`
-        ),
+        "Remove clips from the spine and close the gaps behind them. Clips are numbered from 1, in the order describe_timeline lists them. To remove several, name them all in one call: the numbers are read against the cut as it stands before any of them goes. Removing more than 30% of the take, or whole spoken sentences, asks the person first.",
+      inputSchema: deleteClipInput,
+      execute: async (input, options?: CallOptions) => {
+        const numbers = clipNumbersOf(input)
+        return run(
+          { toolCallId: options?.toolCallId, toolName: "delete_clip" },
+          (scene) => deleteClipSteps(scene, numbers),
+          (scene) =>
+            `Deleted ${numbers.length === 1 ? "clip" : "clips"} ${numbers.join(", ")}. ${describeScene(scene)}`,
+          `There is no clip ${numbers.join(" or ")} on the spine.`
+        )
+      },
     }),
 
     crop: tool({
@@ -305,8 +367,9 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .optional()
           .describe("Frame one clip rather than the whole spine."),
       }),
-      execute: async ({ keep, show, clipNumber }) =>
+      execute: async ({ keep, show, clipNumber }, options?: CallOptions) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "crop" },
           (scene) => {
             const options = {
               at: keep,
@@ -369,8 +432,12 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
             "Stay pushed in for the rest of the window instead of easing back out."
           ),
       }),
-      execute: async ({ clipNumber, scale, fromSeconds, toSeconds, hold }) =>
+      execute: async (
+        { clipNumber, scale, fromSeconds, toSeconds, hold },
+        options?: CallOptions
+      ) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "punch_in" },
           (scene) => {
             const clip = findMainTrack(scene)?.elements[clipNumber - 1]
             if (!clip) return []
@@ -433,15 +500,21 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .optional()
           .describe("Grade one clip rather than the whole spine."),
       }),
-      execute: async ({ look, amount, clipNumber }) =>
+      execute: async ({ look, amount, clipNumber }, options?: CallOptions) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "apply_look" },
           (scene) => {
             if (clipNumber === undefined) {
               const spine = findMainTrack(scene)
               if (!spine) return []
 
-              return spine.elements.flatMap((element) =>
-                applyEffect(scene, element.id, look, amount)
+              // One gesture on the lane, though it is built clip by clip.
+              return aimed(
+                spine.elements.flatMap((element) =>
+                  applyEffect(scene, element.id, look, amount)
+                ),
+                { action: "press", kind: "track", trackId: spine.id },
+                { force: true }
               )
             }
 
@@ -479,15 +552,20 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .optional()
           .describe("Clear it from one clip rather than the whole spine."),
       }),
-      execute: async ({ look, clipNumber }) =>
+      execute: async ({ look, clipNumber }, options?: CallOptions) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "clear_look" },
           (scene) => {
             if (clipNumber === undefined) {
               const spine = findMainTrack(scene)
               if (!spine) return []
 
-              return spine.elements.flatMap((element) =>
-                removeEffectsOfType(scene, element.id, look)
+              return aimed(
+                spine.elements.flatMap((element) =>
+                  removeEffectsOfType(scene, element.id, look)
+                ),
+                { action: "press", kind: "track", trackId: spine.id },
+                { force: true }
               )
             }
 
@@ -509,8 +587,9 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .min(1)
           .describe("1 for the first clip on the spine."),
       }),
-      execute: async ({ clipNumber }) =>
+      execute: async ({ clipNumber }, options?: CallOptions) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "clear_punch_in" },
           (scene) => {
             const clip = findMainTrack(scene)?.elements[clipNumber - 1]
             return clip ? clearZoom(scene, clip.id) : []
@@ -546,8 +625,12 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
             "How long the fade down takes. Omit or 0 to leave the end alone."
           ),
       }),
-      execute: async ({ clipNumber, inSeconds, outSeconds }) =>
+      execute: async (
+        { clipNumber, inSeconds, outSeconds },
+        options?: CallOptions
+      ) =>
         run(
+          { toolCallId: options?.toolCallId, toolName: "fade_clip" },
           (scene) => {
             const clip = findMainTrack(scene)?.elements[clipNumber - 1]
             if (!clip) return []
@@ -572,6 +655,93 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       },
     }),
   }
+}
+
+const deleteClipInput = z.object({
+  clipNumber: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("1 for the first clip on the spine."),
+  clipNumbers: z
+    .array(z.number().int().min(1))
+    .optional()
+    .describe(
+      "Several clips at once, numbered as the cut stands now. Use this rather than several calls."
+    ),
+})
+
+/** The clips a delete_clip call names, once each, as given. */
+export function clipNumbersOf(input: {
+  clipNumber?: number
+  clipNumbers?: number[]
+}): number[] {
+  const all = [
+    ...(input.clipNumbers ?? []),
+    ...(input.clipNumber !== undefined ? [input.clipNumber] : []),
+  ]
+  return [...new Set(all)]
+}
+
+/**
+ * Delete clips by their numbers in the cut as it stands, one step each.
+ *
+ * Last first, so a number still means the clip it meant when the call was
+ * made: deleting clip 2 before clip 5 would make the old clip 5 the new 4.
+ * Each step is built against the scene the previous one left, so every press
+ * lands a whole, rippled cut.
+ */
+export function deleteClipSteps(scene: Scene, numbers: number[]): EditOp[][] {
+  const trackId = mainTrackId(scene)
+  const spine = findMainTrack(scene)
+  if (!trackId || !spine) return []
+
+  const ids = [...numbers]
+    .sort((a, b) => b - a)
+    .flatMap((number) => {
+      const clip = spine.elements[number - 1]
+      return clip ? [clip.id] : []
+    })
+
+  const steps: EditOp[][] = []
+  let current = scene
+  for (const id of ids) {
+    const ops = deleteAndRipple(current, trackId, id)
+    if (ops.length === 0) continue
+    steps.push(ops)
+    current = applyToScene(current, ops, "agent")
+  }
+  return steps
+}
+
+/**
+ * What a gated tool would do to `scene`, without doing it.
+ *
+ * The gate's dry run (gate.ts): the same builder the tool's `execute` calls,
+ * with the same input, against the same working scene. Null for a tool the
+ * gate does not measure.
+ */
+export function dryRun(
+  toolName: string,
+  input: unknown,
+  scene: Scene
+): EditOp[][] | null {
+  if (toolName === "delete_clip") {
+    const parsed = deleteClipInput.safeParse(input)
+    if (!parsed.success) return []
+    return deleteClipSteps(scene, clipNumbersOf(parsed.data))
+  }
+  return null
+}
+
+/** A builder's result as steps: one batch is one step. */
+function asSteps(built: EditOp[] | EditOp[][]): EditOp[][] {
+  if (built.length === 0) return []
+  const steps = Array.isArray(built[0])
+    ? (built as EditOp[][])
+    : [built as EditOp[]]
+  return steps.filter((step) => step.length > 0)
 }
 
 /**
@@ -688,7 +858,7 @@ function isVideo(element: { kind: string }): element is VideoElement {
 export function createRun(options: {
   initial: ProjectSnapshot
   runId: string
-  onCommit: (ops: EditOp[]) => void
+  onCommit: (ops: EditOp[], meta?: CommitMeta) => void
   /** Called at most once, and only if a tool asks for the transcript. */
   loadWords: () => Promise<Word[] | null>
 }): AgentContext & { touched: () => boolean } {
@@ -702,14 +872,14 @@ export function createRun(options: {
   return {
     snapshot: () => snapshot,
     touched: () => changed,
-    commit: (ops) => {
+    commit: (ops, meta) => {
       if (ops.length === 0) return
       snapshot = applyOps(snapshot, ops, {
         author: "agent",
         runId: options.runId,
       }).snapshot
       changed = true
-      options.onCommit(ops)
+      options.onCommit(ops, meta)
     },
     words: () => (words ??= options.loadWords()),
   }

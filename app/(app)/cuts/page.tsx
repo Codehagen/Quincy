@@ -1,7 +1,8 @@
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
-import { Card, KitPage, List, Mono, NavRow, Stage, Text } from "@/components/kit"
+import { ButtonLink, Card, KitPage, List, Mono, NavRow, Stage, Text } from "@/components/kit"
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { SampleButton } from "@/components/editor/sample-button"
 import { UploadDrop } from "@/components/editor/upload-drop"
 import { StageSkeleton } from "@/components/quincy/stage-skeleton"
@@ -69,6 +70,12 @@ async function Cuts({ searchParams }: { searchParams: Promise<{ all?: string }> 
     <KitPage
       title="Cuts"
       summary={SUMMARY}
+      // Cuts is full screen, without the app sidebar: this is the way back.
+      actions={
+        <ButtonLink href="/studio" icon={ArrowLeft01Icon}>
+          Back to Studio
+        </ButtonLink>
+      }
     >
       <Stage
         lead="A recording in."

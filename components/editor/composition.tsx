@@ -300,6 +300,11 @@ function Caption({ element }: { element: CaptionElement }) {
         justifyContent: "flex-end",
         alignItems: "center",
         paddingBottom: height * captionInset(width, height),
+        // Canvas pixels from where the style puts it, negative is up: the
+        // self-check lifts a caption off a face this way (lib/editor/self-check.ts).
+        transform: element.transform.position.y
+          ? `translateY(${element.transform.position.y}px)`
+          : undefined,
         pointerEvents: "none",
       }}
     >

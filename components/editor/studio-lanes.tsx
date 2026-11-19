@@ -24,7 +24,7 @@ import {
   type EffectHost,
 } from "@/lib/editor/effect-lane"
 import { trimPreviewDeltaUs } from "@/lib/editor/edits"
-import { sceneDurationUs } from "@/lib/editor/timeline"
+import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
 import { us, type Us } from "@/lib/editor/time"
 import type {
   Scene,
@@ -34,10 +34,10 @@ import type {
 } from "@/lib/editor/types"
 import { cn } from "@/lib/utils"
 
+import { ScanSweep } from "./arrival/arrival"
 import type { Filmstrip as FilmstripSheet } from "./studio"
 import {
-  ClipWaveform,
-  Filmstrip,
+  ClipFace,
   TimeRuler,
   TRACK_ICON,
   formatClock,
@@ -46,7 +46,6 @@ import {
 import { useFrameThrottle } from "./use-frame-throttle"
 import type { Player } from "./use-player"
 import {
-  REVEAL_TRAVEL_MS,
   revealDelayMs,
   revealOffsetPx,
   type Reveal,
@@ -158,6 +157,9 @@ export function StudioLanes({
   onMoveEffect,
   onResizeEffect,
   locked,
+  onAddCaptions,
+  captionsPending = false,
+  scanning = false,
 }: {
   scene: Scene
   player: Player
@@ -195,6 +197,11 @@ export function StudioLanes({
    * like it worked, then silently is not there.
    */
   locked?: boolean
+  /** The arrival's reading is playing: the sweep runs over the Main lane (phase G). */
+  scanning?: boolean
+  /** Build captions from the stored transcript; absent when there is none. */
+  onAddCaptions?: () => void
+  captionsPending?: boolean
 }) {
   /**
    * The clip being trimmed, and by how much the cut would change if the drag
@@ -443,6 +450,22 @@ export function StudioLanes({
     if ((event.target as HTMLElement).closest("[data-owns-drag]")) return
     if (event.button !== 0) return
 
+    // A drag that starts on the ruler scrubs: the playhead follows the pointer
+    // and the preview with it. Only a drag across the lanes chooses a range.
+    if ((event.target as HTMLElement).closest("[data-scrub]")) {
+      const onScrubMove = (move: PointerEvent) =>
+        onSeek(us(Math.round(clientXToUs(move.clientX))))
+      const endScrub = () => {
+        window.removeEventListener("pointermove", onScrubMove)
+        window.removeEventListener("pointerup", endScrub)
+        window.removeEventListener("pointercancel", endScrub)
+      }
+      window.addEventListener("pointermove", onScrubMove)
+      window.addEventListener("pointerup", endScrub)
+      window.addEventListener("pointercancel", endScrub)
+      return
+    }
+
     const fromUs = clientXToUs(event.clientX)
     gesture.current = {
       originX: event.clientX,
@@ -525,7 +548,7 @@ export function StudioLanes({
     <div className="flex">
       {/* Outside the scroll container, so the headers stay put while the lanes
           scroll under them. */}
-      <div className="w-[88px] shrink-0 pt-5">
+      <div className="w-[88px] shrink-0 pt-5 pointer-coarse:pt-11">
         {scene.tracks.map((track) => (
           <React.Fragment key={track.id}>
             {/* One header for the group, and blanks under it. Repeating
@@ -576,7 +599,9 @@ export function StudioLanes({
         onClickCapture={onLaneClickCapture}
       >
         <div
-          className="relative"
+          // Its own stacking context: the playhead, the band and the handles
+          // (z-10 to z-30) layer among themselves, never over the page.
+          className="relative isolate"
           style={{ width: `${zoom * 100}%` }}
           onPointerMove={onLanePointerMove}
           onPointerLeave={onLanePointerLeave}
@@ -590,27 +615,49 @@ export function StudioLanes({
             onSeek(us(Math.round(pointerToUs(event))))
           }}
         >
-          {/* More marks as it widens: seven labels across a 16x lane leaves
-              twelve seconds between them, which is not a ruler. */}
-          <TimeRuler
-            spanUs={span}
-            marks={Math.min(25, 7 + Math.round(Math.log2(zoom) * 3))}
-          />
+          {/* One label per ~96px of lane, so they never touch; before the
+              lane is measured, seven. The step is rounded from this. */}
+          {/* The ruler is the scrub strip (onLanePointerDownCapture). No pan
+              on touch here, so a finger dragging along it scrubs instead of
+              scrolling the lanes. */}
+          {/* Hidden until the lane is measured: drawn at seven labels first,
+              every label jumped to its place a frame later. 44px tall under a
+              coarse pointer; a pseudo-element cannot grow it, since the
+              scroller clips above it and the effect chips sit below. */}
+          <div
+            data-scrub=""
+            className={cn(
+              "cursor-ew-resize touch-none pointer-coarse:h-11",
+              laneWidth === 0 && "invisible"
+            )}
+          >
+            <TimeRuler
+              spanUs={span}
+              marks={laneWidth > 0 ? Math.max(2, Math.floor(laneWidth / 96)) : 7}
+            />
+          </div>
           <LivePlayhead player={player} spanUs={span} live={playing} />
 
           {/* The range being chosen. Drawn over every lane rather than inside
               one, because the gesture is about a stretch of time and not about
               a track — and inert, so it cannot swallow the release that ends
-              the drag it is describing. */}
+              the drag it is describing. A tint, not a fill: the clips under it
+              are what is being chosen, so they stay visible, and the range it
+              will zoom to is named on it. */}
           {band ? (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-20 rounded-[3px] border border-kit-ink-muted bg-kit-track"
+              className="pointer-events-none absolute inset-y-0 z-20 rounded-[3px] border border-kit-ink-muted bg-kit-ink/8 select-none"
               style={{
                 left: `${(Math.min(band.fromUs, band.toUs) / span) * 100}%`,
                 width: `${(Math.abs(band.toUs - band.fromUs) / span) * 100}%`,
               }}
-            />
+            >
+              <span className="absolute top-0.5 left-1 rounded border border-kit-hairline bg-kit-object px-1 text-kit-mono whitespace-nowrap text-kit-ink-muted tabular-nums">
+                Zoom to {formatClock(Math.min(band.fromUs, band.toUs))}–
+                {formatClock(Math.max(band.fromUs, band.toUs))}
+              </span>
+            </div>
           ) : null}
 
           {/* The hover head. Quieter than the playhead — it is a question, not
@@ -619,7 +666,7 @@ export function StudioLanes({
           <div
             ref={hoverHead}
             aria-hidden="true"
-            className="pointer-events-none invisible absolute inset-y-0 left-0 z-10 w-px"
+            className="pointer-events-none invisible absolute inset-y-0 left-0 z-10 w-px select-none"
           >
             <div className="h-full w-px bg-kit-ink-muted" />
             <span
@@ -656,7 +703,23 @@ export function StudioLanes({
                 </EffectRow>
               ))}
 
-              <Lane track={track}>
+              <Lane
+                track={track}
+                overlay={
+                  scanning && track.id === findMainTrack(scene)?.id ? (
+                    <ScanSweep widthPercent={(sceneDurationUs(scene) / span) * 100} />
+                  ) : null
+                }
+                emptyContent={
+                  track.kind === "caption" && onAddCaptions ? (
+                    <CaptionsButton
+                      onPress={onAddCaptions}
+                      pending={captionsPending}
+                      disabled={locked}
+                    />
+                  ) : null
+                }
+              >
                 {track.elements.map((element, index) =>
                   track.kind === "caption" ? (
                     <CaptionChip
@@ -728,6 +791,13 @@ function EffectRow({
           empty && "border border-dashed border-kit-hairline"
         )}
       >
+        {/* An empty row says what goes in it and how, as the caption lane's
+            button does. Text only, and inert: a press here still seeks. */}
+        {empty ? (
+          <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-kit-meta whitespace-nowrap text-kit-ink-muted select-none">
+            Zooms go here. + Zoom adds one.
+          </span>
+        ) : null}
         {children}
       </div>
     </div>
@@ -740,8 +810,9 @@ function EffectRow({
  * The spine is taller than the rest because it is the only one showing
  * pictures, and the pictures keep the footage's own shape — a portrait frame at
  * 36px is 20 pixels across, which reads as a stripe rather than as a shot.
- * 60px, which leaves a 44px picture once the lane's padding and the clip's
- * inset come out of it. Measured rather than guessed: the spine is 44px and
+ * 76px, which leaves a 60px clip once the lane's padding and the clip's
+ * inset come out of it: 44px of pictures over 16px of waveform (the desk,
+ * plans/036 phase E). Measured rather than guessed: the spine was 44px and
  * the other lanes are 25px. Two rounds of estimating from
  * screenshots put it at 95px, because the screenshots were retina and every
  * dimension in them was double.
@@ -751,8 +822,8 @@ function EffectRow({
  * is a misalignment waiting for someone to change one of them.
  */
 const LANE_HEIGHT: Record<Track["kind"], string> = {
-  video: "h-[60px]",
-  broll: "h-[60px]",
+  video: "h-[76px]",
+  broll: "h-[76px]",
   audio: "h-11",
   caption: "h-11",
   text: "h-11",
@@ -768,23 +839,70 @@ const LANE_HEIGHT: Record<Track["kind"], string> = {
 function Lane({
   track,
   children,
+  emptyContent,
+  overlay,
 }: {
   track: Track
   children: React.ReactNode
+  /** Drawn over the lane's content, never in its way. */
+  overlay?: React.ReactNode
+  /** What an empty lane offers instead of a blank, if anything. */
+  emptyContent?: React.ReactNode
 }) {
   const empty = track.elements.length === 0
 
   return (
     <div className={cn("relative py-1", LANE_HEIGHT[track.kind])}>
+      {/* The lane is a target for Quincy's cursor: a stretch of time is
+          placed on it as a fraction of its width (plans/036). Empty lanes are
+          quiet: a recess, no border (a border reads as a drop zone). */}
       <div
-        className={cn(
-          "relative h-full rounded-[3px]",
-          empty && "border border-kit-hairline bg-kit-well"
-        )}
+        data-target={`track:${track.id}`}
+        data-lane-kind={track.kind}
+        className={cn("relative h-full rounded-[3px]", empty && "bg-kit-well")}
       >
-        {children}
+        {empty ? emptyContent : children}
+        {overlay}
       </div>
     </div>
+  )
+}
+
+/**
+ * "+ Captions from the transcript", in the empty caption lane.
+ *
+ * A real control a person can press, and the one Quincy's cursor presses for
+ * the same edit (`add_captions` targets `control:captions`). Building captions
+ * reads the stored transcript and spends nothing.
+ */
+function CaptionsButton({
+  onPress,
+  pending,
+  disabled,
+}: {
+  onPress: () => void
+  pending: boolean
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      data-target="control:captions"
+      disabled={disabled || pending}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        onPress()
+      }}
+      className={cn(
+        "absolute inset-y-1 left-1 flex items-center rounded-kit-chip bg-kit-control px-2 text-kit-small text-kit-ink shadow-kit-control",
+        "transition-[scale,background-color] duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none",
+        "hover:bg-kit-row-hover disabled:text-kit-ink-muted",
+        "before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
+      )}
+    >
+      {pending ? "Adding captions…" : "+ Captions from the transcript"}
+    </button>
   )
 }
 
@@ -999,6 +1117,7 @@ function EffectChipView({
      */
     <div
       className={cn("group/chip absolute inset-y-0", preview && "z-30")}
+      data-target={chip.effectId ? `effect:${chip.effectId}` : undefined}
       style={{
         left: `${(startUs / span) * 100}%`,
         width: chipWidth((durationUs / span) * 100),
@@ -1225,6 +1344,15 @@ function chipWidth(percent: number): string {
 
 const CHIP_GUTTER_PX = 6
 
+/**
+ * How wide a clip must be to show its name: the name at the mono face's
+ * 12px (about 7.2px a character) plus the plate's padding and inset, capped
+ * so a long name truncates on a roomy clip instead of vanishing from it.
+ */
+function labelMinPx(name: string): number {
+  return Math.min(72, Math.ceil(name.length * 7.2) + 16)
+}
+
 type Geometry = { startUs: number; durationUs: number }
 
 function Clip({
@@ -1262,8 +1390,8 @@ function Clip({
 }) {
   const clip = element as VideoElement
   const trimmable = element.kind === "video"
-  /** Whether this clip is drawing footage rather than the flat placeholder. */
-  const showsFrames = trimmable && Boolean(strip)
+  const widthPx = (geometry.durationUs / span) * laneWidth
+  const labelFits = laneWidth === 0 || widthPx >= labelMinPx(element.name)
 
   const offsetPx = revealOffsetPx(
     reveal,
@@ -1282,15 +1410,18 @@ function Clip({
         // transition-duration under `reduce`, and useReveal declines to capture
         // at all — so this is belt and braces on a preference that matters.
         reveal?.animating &&
-          "transition-transform ease-out motion-reduce:transition-none"
+          "transition-transform motion-reduce:transition-none"
       )}
+      // What Quincy's cursor presses (plans/036): the clip itself.
+      data-target={`element:${element.id}`}
       style={{
         left: `${(geometry.startUs / span) * 100}%`,
         width: `${(geometry.durationUs / span) * 100}%`,
         transform: offsetPx ? `translateX(${offsetPx}px)` : undefined,
-        transitionDuration: reveal ? `${REVEAL_TRAVEL_MS}ms` : undefined,
+        transitionDuration: reveal ? `${reveal.travelMs}ms` : undefined,
+        transitionTimingFunction: reveal?.easing,
         transitionDelay: reveal?.animating
-          ? `${revealDelayMs(revealIndex, revealCount)}ms`
+          ? `${revealDelayMs(revealIndex, revealCount, reveal.staggerTotalMs)}ms`
           : undefined,
       }}
     >
@@ -1305,32 +1436,27 @@ function Clip({
         onPointerDown={(event) => event.stopPropagation()}
         title={element.name}
         className={cn(
-          "absolute inset-0 overflow-hidden rounded-[4px] border border-kit-hairline bg-kit-selected text-left",
+          // One outer radius; the strips inside are square and clipped here.
+          // Depth from the control elevation rather than a border.
+          "absolute inset-0 overflow-hidden rounded-kit-chip bg-kit-object text-left shadow-kit-control",
           // No reduced-motion gate: globals.css flattens every
           // transition-duration under `reduce`, so CSS motion is covered
           // project-wide.
-          "transition-[background-color] duration-150 ease-out",
-          "hover:bg-kit-row-hover",
+          // Frames cover the clip's own fill, so hover lifts it a step as
+          // well: the background change alone shows only on the strip.
+          "transition-[background-color,box-shadow] duration-150 ease-out",
+          "hover:bg-kit-row-hover hover:shadow-kit-object",
           "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
           selected && "ring-2 ring-kit-ink"
         )}
       >
-        <Filmstrip
+        <ClipFace
           strip={trimmable ? strip : null}
+          wave={trimmable ? seekIndex : null}
           trimStartUs={clip.trimStartUs ?? 0}
           trimEndUs={clip.trimEndUs ?? 0}
-          widthPx={(geometry.durationUs / span) * laneWidth}
+          widthPx={widthPx}
         />
-
-        {trimmable && seekIndex ? (
-          <ClipWaveform
-            peaks={seekIndex.values}
-            intervalUs={seekIndex.intervalUs}
-            trimStartUs={clip.trimStartUs}
-            trimEndUs={clip.trimEndUs}
-            overFrames={showsFrames}
-          />
-        ) : null}
 
         <span
           aria-hidden="true"
@@ -1345,22 +1471,15 @@ function Clip({
           }}
         />
 
-        {/* A scrim under the name, and only when there is something to read it
-            against. Dark text on video is legible over a jacket and invisible
-            over a window, and there is no colour that is legible over both —
-            so the picture is darkened where the label sits rather than the
-            label being asked to cope. */}
-        {showsFrames ? (
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-black/55 to-transparent"
-          />
-        ) : null}
-
+        {/* The name sits on its own small plate over the frames, so it reads
+            over a window or a jacket alike. A clip too narrow for it keeps
+            the name for screen readers only. Before the lane is measured
+            (the first render, on server and client alike) it shows. */}
         <span
           className={cn(
-            "relative block truncate px-1.5 pt-2 text-kit-mono leading-none",
-            showsFrames ? "text-white" : "text-kit-ink"
+            labelFits
+              ? "absolute top-1 left-1 block max-w-[calc(100%-8px)] truncate rounded-[2px] bg-kit-object/85 px-1 text-kit-mono leading-4 text-kit-ink"
+              : "sr-only"
           )}
         >
           {element.name}
@@ -1525,7 +1644,13 @@ function TrimHandle({
         // Touch has no hover to reveal them, so they show at rest there.
         "pointer-coarse:opacity-60 pointer-coarse:focus-visible:opacity-100",
         trimming && "opacity-100 pointer-coarse:opacity-100",
-        edge === "start" ? "-left-1.5" : "-right-1.5"
+        // The effect chip's handle ring, not the browser's 1px outline.
+        "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+        // Inside the clip, as the effect chips' handles are. Straddling the
+        // edge put the last clip's end handle 6px past the lane, which gave
+        // the lanes 6px of sideways scroll. The hit area keeps its size (the
+        // clip's full height, at least 44px on touch); it only moved in.
+        edge === "start" ? "left-0" : "right-0"
       )}
     >
       <span
@@ -1592,15 +1717,17 @@ function CaptionChip({
         // inside them. The lane is no taller for this.
         "absolute inset-y-0.5 flex items-center overflow-hidden rounded-[3px] bg-kit-track",
         reveal?.animating &&
-          "transition-transform ease-out motion-reduce:transition-none"
+          "transition-transform motion-reduce:transition-none"
       )}
+      data-target={`element:${element.id}`}
       style={{
         left: `${(geometry.startUs / span) * 100}%`,
         width: chipWidth((geometry.durationUs / span) * 100),
         transform: offsetPx ? `translateX(${offsetPx}px)` : undefined,
-        transitionDuration: reveal ? `${REVEAL_TRAVEL_MS}ms` : undefined,
+        transitionDuration: reveal ? `${reveal.travelMs}ms` : undefined,
+        transitionTimingFunction: reveal?.easing,
         transitionDelay: reveal?.animating
-          ? `${revealDelayMs(revealIndex, revealCount)}ms`
+          ? `${revealDelayMs(revealIndex, revealCount, reveal.staggerTotalMs)}ms`
           : undefined,
       }}
     >

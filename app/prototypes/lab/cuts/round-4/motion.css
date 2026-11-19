@@ -1,0 +1,257 @@
+/*
+ * Round 4's choreography (BRIEF.md has the timeline). Only transform and
+ * opacity animate; the run's fold (grid-template-rows, in TaskFold) is the
+ * one exception. Every transition names its properties. Under reduced
+ * motion the cursor and the drag boxes are not drawn (director.ts), the
+ * highlight is opacity only, and everything else is instant.
+ */
+
+/* ---------------------------------------------------------------- cursor */
+
+.qc4-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0;
+  transition-property: translate, opacity;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.qc4-cursor[data-shown] {
+  opacity: 1;
+}
+
+.qc4-cursor[data-support] {
+  scale: 0.9;
+  transform-origin: 0 0;
+}
+
+.qc4-cursor[data-support][data-shown] {
+  opacity: 0.7;
+}
+
+/* The park: exit is faster than entry. */
+.qc4-cursor[data-parked] {
+  opacity: 0;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+.qc4-press {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.qc4-tap {
+  animation: qc4-tap var(--qc4-press, 90ms) ease-out both;
+}
+
+@keyframes qc4-tap {
+  50% {
+    scale: 0.92;
+  }
+}
+
+.qc4-ring {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid var(--kit-ink);
+  animation: qc4-ring 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes qc4-ring {
+  from {
+    scale: 0.6;
+    opacity: 0.9;
+  }
+  to {
+    scale: 1.4;
+    opacity: 0;
+  }
+}
+
+/* The ⌫ key cap in the tag: opacity only. */
+.qc4-cap {
+  animation: qc4-cap 220ms ease-out both;
+}
+
+@keyframes qc4-cap {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- targets */
+
+/* Layers inside a target, under its content: hover, the drag selection, the hit. */
+.qc4-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.qc4-hover {
+  background-color: var(--kit-row-hover);
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 100ms;
+  transition-timing-function: ease-out;
+}
+
+.qc4-hover[data-on] {
+  opacity: 1;
+}
+
+/* The drag selection: grows from the left edge with the cursor, same speed. */
+.qc4-sel {
+  background-color: var(--kit-selected);
+  box-shadow: inset 0 0 0 1.5px var(--kit-ink);
+  transform-origin: left center;
+  scale: 0 1;
+  opacity: 0;
+  transition-property: scale, opacity;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Translucent: the selection sits over the clip, and the wave shows through. */
+.qc4-sel[data-on] {
+  scale: 1 1;
+  opacity: 0.65;
+}
+
+/* The hit: an ink (or highlighter) wash that lets go. Opacity only. */
+.qc4-hot {
+  box-shadow: inset 0 0 0 2px var(--kit-ink);
+  background-color: var(--kit-selected);
+  animation: qc4-hot 420ms ease-out both;
+}
+
+.qc4-hot[data-tone="highlight"] {
+  background-color: var(--kit-highlight);
+}
+
+@keyframes qc4-hot {
+  0%,
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* A real control reacts to Quincy's press exactly as to a pointer. */
+.qc4-btn {
+  transition-property: scale;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.qc4-btn[data-pressed] {
+  scale: 0.96;
+}
+
+/* Clips: a removed one leaves layout at once; the ones after it slide in. */
+.qc4-clip {
+  transition-property: translate;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+/* Captions arrive as one wave, left to right. */
+.qc4-wave {
+  animation: qc4-in 120ms ease-out both;
+}
+
+@keyframes qc4-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The zoom control over a selection. */
+.qc4-toolbar {
+  animation: qc4-in 120ms ease-out both;
+}
+
+/* "Read-only while Quincy cuts": in 120ms, out with the fold (200ms). */
+.qc4-held {
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
+}
+
+.qc4-held[data-on] {
+  opacity: 1;
+  transition-duration: 120ms;
+}
+
+/* Undo: the lanes revert as one crossfade. */
+.qc4-fade {
+  animation: qc4-in 150ms ease-out both;
+}
+
+/* The receipt and the checkpoint arrive with the fold, no stagger. */
+.qc4-appear {
+  animation: qc4-in 200ms ease-in-out both;
+}
+
+/* The self-check's frames: one entrance, together. */
+.qc4-rise {
+  animation: qc4-rise 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes qc4-rise {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qc4-cursor,
+  .qc4-sel {
+    display: none;
+  }
+  .qc4-hover,
+  .qc4-btn,
+  .qc4-clip,
+  .qc4-held {
+    transition: none;
+  }
+  .qc4-wave,
+  .qc4-toolbar,
+  .qc4-fade,
+  .qc4-appear,
+  .qc4-rise,
+  .qc4-tap,
+  .qc4-ring,
+  .qc4-cap {
+    animation: none;
+  }
+  /* The one highlight left: opacity only, brief. */
+  .qc4-hot {
+    animation: qc4-hot 300ms linear both;
+  }
+}
+
+/* The tune panel's two visual switches, set on the piece's wrapper. */
+[data-qc4-tone="highlight"] .qc4-hot {
+  background-color: var(--kit-highlight);
+}
+[data-qc4-ring="off"] .qc4-ring {
+  display: none;
+}

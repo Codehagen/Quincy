@@ -117,3 +117,24 @@ export function ceilingVerdict(spentMicros: number): CeilingVerdict {
 
   return { ok: true }
 }
+
+/**
+ * The ceiling, asked before a request that spends several runs at once.
+ *
+ * `ceilingVerdict` refuses only once the day is spent, which is right for one
+ * call: a call is small next to the ceiling. A three-cuts request buys three
+ * runs and three checks, so it is refused up front when what is left of the
+ * day cannot cover all of it — never stopped halfway with two cuts made.
+ */
+export function ceilingCovers(spentMicros: number, needMicros: number): CeilingVerdict {
+  const left = dailyCeilingMicros() - spentMicros
+  if (left <= 0) return ceilingVerdict(spentMicros)
+  if (needMicros > left) {
+    return {
+      ok: false,
+      error:
+        "Three cuts would run past what is left of today's work. Ask for one cut, or try three tomorrow.",
+    }
+  }
+  return { ok: true }
+}

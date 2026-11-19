@@ -1,0 +1,240 @@
+/*
+ * The chat margin is real shadcn (components/ui, components/ai-elements);
+ * the owner chose it for this surface (round-3/BRIEF.md). Its components
+ * paint with shadcn's variables (--background, --muted, --primary …), which
+ * outside the kit still mean the old brass and sand. Inside this one wrapper
+ * they point at the kit, so the margin reads as the page around it: ink
+ * primary, the well grey for muted and selected, hairline borders, no blue.
+ * globals.css is untouched; this works because globals.css maps the colour
+ * utilities in `@theme inline`, so `bg-muted` reads `var(--muted)` here.
+ */
+
+.cuts-shadcn {
+  --background: var(--kit-ground);
+  --foreground: var(--kit-ink);
+  --card: var(--kit-object);
+  --card-foreground: var(--kit-ink);
+  --popover: var(--kit-object);
+  --popover-foreground: var(--kit-ink);
+  --primary: var(--kit-primary);
+  --primary-foreground: var(--kit-primary-on);
+  --primary-hover: var(--kit-primary-hover);
+  --secondary: var(--kit-control);
+  --secondary-foreground: var(--kit-ink);
+  --muted: var(--kit-well);
+  --muted-foreground: var(--kit-ink-muted);
+  --accent: var(--kit-selected);
+  --accent-foreground: var(--kit-ink);
+  --destructive: var(--kit-danger);
+  --destructive-foreground: var(--kit-primary-on);
+  --border: var(--kit-hairline);
+  --input: var(--kit-hairline);
+  --ring: var(--kit-focus);
+  --radius: var(--radius-kit-control);
+  color: var(--kit-ink);
+  font-family: inherit;
+}
+
+
+/* Two kit rules shadcn's button breaks, kept inside the scope rather than
+   by editing components/ui: no `transition-all` (name the properties), and
+   hover on the ink fill is --kit-primary-hover, never an alpha that reads as
+   disabled (AGENTS.md). Unlayered, so these beat the utilities. */
+.cuts-shadcn [data-slot="button"] {
+  transition-property: color, background-color, border-color, box-shadow, translate;
+}
+@media (hover: hover) {
+  .cuts-shadcn [data-slot="button"].bg-primary:hover {
+    background-color: var(--kit-primary-hover);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cuts-shadcn [data-slot="button"] {
+    transition: none;
+  }
+}
+
+/* Trace lines wrap in a narrow margin instead of truncating to "Tran…":
+   the title wraps, the description shrinks and wraps under it. */
+.cuts-shadcn [data-slot="trace-line"] {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.cuts-shadcn [data-slot="trace-title"] {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+/* The step lengths and the frame captions under a receipt. shadcn draws them
+   at muted/70, about 2.9:1 on the margin; the muted ink itself passes 4.5:1
+   in both modes. No alpha: an alpha's contrast depends on what is behind it. */
+.cuts-shadcn [data-slot="trace-description"] {
+  flex-shrink: 1;
+  white-space: normal;
+  color: var(--kit-ink-muted);
+}
+.cuts-shadcn [data-slot="trace-icon"] {
+  align-self: center;
+}
+
+/* A line that starts with an icon is icon | title, so a long title wraps in
+   its own column. Wrapping the whole line put the icon alone on a row above
+   it. A description goes under the title. */
+.cuts-shadcn :not([data-slot="trace-collapsible-trigger"]) > [data-slot="trace-line"]:not([data-row]):has(> [data-slot="trace-icon"]:first-child) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.5rem;
+  align-items: start;
+}
+.cuts-shadcn :not([data-slot="trace-collapsible-trigger"]) > [data-slot="trace-line"]:not([data-row]):has(> [data-slot="trace-icon"]:first-child) > [data-slot="trace-description"] {
+  grid-column: 2;
+}
+
+/* The fold's trigger: icon | title | chevron. The line inside it gives its
+   children to the trigger's grid (its colour and shimmer still inherit), so
+   only the title wraps and the chevron stays at the end of the first line:
+   "Cut A · Reels and TikTok · 4 edits · 00:13.0" wrapped with the icon alone
+   above it. */
+.cuts-shadcn [data-slot="trace-collapsible-trigger"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.5rem;
+  align-items: start;
+}
+.cuts-shadcn [data-slot="trace-collapsible-trigger"] > [data-slot="trace-line"] {
+  display: contents;
+}
+.cuts-shadcn :is([data-slot="trace-collapsible-trigger"], [data-slot="trace-line"]:not([data-row])) [data-slot="trace-icon"] {
+  /* On the first line of a wrapped title: (20px line − 16px icon) / 2. */
+  align-self: start;
+  margin-top: 2px;
+}
+.cuts-shadcn [data-slot="trace-collapsible-trigger"] > [data-slot="trace-icon"] {
+  margin-left: -0.25rem;
+}
+
+/* A run's step: label | duration, the duration right-aligned and muted, so
+   "0.4 s" never wraps to a line of its own. */
+.cuts-shadcn [data-slot="trace-line"][data-row] {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 0.5rem;
+  width: 100%;
+}
+.cuts-shadcn [data-slot="trace-line"][data-row] [data-slot="trace-description"] {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* The 44px hit area under a coarse pointer (globals.css draws it as
+   `[data-slot="button"]::after`) needs a positioned button; the kit's button
+   carries `relative` for this, shadcn's does not. */
+.cuts-shadcn [data-slot="button"] {
+  position: relative;
+}
+
+/* Hover on the outline and ghost buttons is the row hover, not an alpha.
+   Only those two: a destructive or link button keeps its own hover. */
+@media (hover: hover) {
+  .cuts-shadcn [data-slot="button"]:is([data-variant="outline"], [data-variant="ghost"]):hover {
+    background-color: var(--kit-row-hover);
+  }
+}
+
+/* The 44px floor under a coarse pointer for the two controls the global
+   button rule (globals.css) does not reach: the fold's trigger (20px tall)
+   and the thread's Scroll-to-end (27px; already absolute, so it is not given
+   `relative`). */
+@media (pointer: coarse) {
+  .cuts-shadcn [data-slot="trace-collapsible-trigger"] {
+    position: relative;
+  }
+  .cuts-shadcn [data-slot="trace-collapsible-trigger"]::after,
+  .cuts-shadcn [data-slot="message-scroller-button"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    translate: -50% -50%;
+  }
+}
+
+/* The thread is a focusable scroller: on focus it takes the desk's ring (2px
+   ink, as the timeline's handles), not shadcn's 1px auto outline. Inset,
+   since the scroller's root clips what falls outside it. */
+.cuts-shadcn [data-slot="message-scroller-viewport"]:focus-visible {
+  outline: 2px solid var(--kit-focus);
+  outline-offset: -2px;
+}
+
+/* Scroll-to-end: shadcn exits it over 400ms on an ease-in. Exits are quicker
+   than entrances and start fast: 150ms on the kit's ease-out. The property
+   list is restated because the button rule above names only colours. */
+.cuts-shadcn [data-slot="message-scroller-button"] {
+  transition-property: translate, scale, opacity;
+}
+.cuts-shadcn [data-slot="message-scroller-button"][data-active="false"] {
+  transition-duration: 150ms;
+  transition-timing-function: var(--ease-kit-out);
+}
+/* Reduced motion: it fades and never moves or scales. */
+@media (prefers-reduced-motion: reduce) {
+  .cuts-shadcn [data-slot="message-scroller-button"] {
+    transition-property: opacity;
+  }
+  .cuts-shadcn [data-slot="message-scroller-button"][data-active="false"] {
+    --tw-translate-y: 0;
+    scale: none;
+  }
+}
+
+/* The checkpoint's "Revision 2" is a counter: digits of one width. */
+.cuts-shadcn [data-slot="marker-content"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Motion, as the Chat pattern ships it (plans/036, phase H) ──────────
+   Only the person's message animates: MESSAGE_ANIMATIONS["slide-up"] from
+   the shadcn site (opacity 0 and 10px down, 260ms, [0.16, 1, 0.3, 1]),
+   written as CSS because the app has no motion library. Quincy's replies
+   are not animated in. */
+.cuts-msg-in {
+  animation: cuts-msg-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes cuts-msg-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+/* The empty state leaves as the thread arrives: one crossfade. Out of the
+   layout at once (absolute, inert), so the thread never waits for it;
+   quicker than an entrance, a 4px nudge up. */
+.cuts-empty-leave {
+  animation: cuts-empty-leave 150ms var(--ease-kit-out) both;
+}
+@keyframes cuts-empty-leave {
+  to {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cuts-msg-in,
+  .cuts-empty-leave {
+    animation: none;
+  }
+  .cuts-empty-leave {
+    visibility: hidden;
+  }
+  /* The run's fold and its chevron: Trace's height and rotate transitions
+     have no reduced path of their own. */
+  .cuts-shadcn [data-slot="trace-collapsible-content"],
+  .cuts-shadcn [data-slot="trace-collapsible-trigger"] [data-slot="trace-icon"] {
+    transition: none;
+  }
+}

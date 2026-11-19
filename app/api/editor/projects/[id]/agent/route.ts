@@ -10,7 +10,17 @@ import {
 } from "ai"
 
 import { getAsset } from "@/lib/editor/assets"
-import { createRun, describeScene, editorTools } from "@/lib/editor/agent"
+import {
+  createRun,
+  describeScene,
+  dryRun,
+  editorTools,
+  type CommitMeta,
+} from "@/lib/editor/agent"
+import { gateVerdict, GATED_TOOLS } from "@/lib/editor/gate"
+import { needsCheck } from "@/lib/editor/self-check"
+import { threeCutsResponse } from "@/lib/editor/three-cuts-run"
+import { signOffer } from "@/lib/editor/self-check-server"
 import type { EditOp } from "@/lib/editor/ops"
 import {
   getProject,
@@ -78,9 +88,11 @@ You edit by calling tools. Never describe an edit you have not made — call the
 Rules that matter:
 - The user's cut is theirs. Do one thing they asked for, not the four you would also do. If a request is broad ("make this good"), do the obvious first step and say what else you would suggest.
 - A tool that reports it changed nothing changed nothing. Say so plainly rather than claiming success.
-- Reframing does not crop. Going from wide to vertical fits the picture inside the taller frame with black either side; say that, because it is not what most people expect.
+- Reframing fills the new frame by cropping around the centre, so a wide take made vertical keeps the speaker and loses the sides. For a screen recording, where the sides matter, pass show: "whole" to fit the whole picture with bars, and say so.
 - Captions are built from the transcript and are not automatic. If someone asks why there are no captions, that is the answer.
-- Be brief. Two sentences after a cut lands, not a paragraph. Lead with what changed.
+- Be brief. Two sentences after a cut lands, not a paragraph. Lead with what changed, in words: the run's summary line already shows the number of edits and the length before and after, so do not repeat numbers.
+- To remove several clips, name them all in one delete_clip call.
+- A large cut (more than 30% of the take, or whole spoken sentences) waits for the person's answer. When they say no, do not try it again; say you left it as it was and offer a smaller cut.
 - No preamble, no restating the request, no "great question".`
 
 export async function POST(
@@ -93,15 +105,28 @@ export async function POST(
     return Response.json({ error: "Not signed in." }, { status: 401 })
   }
 
+  /**
+   * Development only: play the model's part from a script (replay-model.ts),
+   * so the cursor and the gate can be watched on a real project without a
+   * model call. Never in production, whatever the request says. A replay
+   * calls no model, so the entitlement gate below does not apply to it; the
+   * test account has no plan, and the replay is how the motion is checked.
+   */
+  const replay =
+    process.env.NODE_ENV !== "production" &&
+    new URL(request.url).searchParams.get("replay") === "1"
+
   // The money gate, above the body parse and above the lock — a request that
   // cannot spend must not take the document hostage either.
-  const entitlement = await resolveEntitlementForRequest(session.user)
+  if (!replay) {
+    const entitlement = await resolveEntitlementForRequest(session.user)
 
-  if (!isEntitled(entitlement)) {
-    return paywallResponse(entitlement)
+    if (!isEntitled(entitlement)) {
+      return paywallResponse(entitlement)
+    }
   }
 
-  if (!process.env.AI_GATEWAY_API_KEY) {
+  if (!replay && !process.env.AI_GATEWAY_API_KEY) {
     return Response.json(
       { error: "AI_GATEWAY_API_KEY is not set. Add it to .env.local." },
       { status: 503 }
@@ -110,7 +135,7 @@ export async function POST(
 
   const { id } = await params
 
-  let body: { messages?: UIMessage[] }
+  let body: { messages?: UIMessage[]; mode?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -137,6 +162,25 @@ export async function POST(
   const verdict = inputVerdict(messages)
   if (!verdict.ok) {
     return Response.json({ error: verdict.error }, { status: 413 })
+  }
+
+  /**
+   * Three cuts from one recording (plans/036, phase D): one orchestrating run
+   * under this project's one lock, with its own cooldown and a ceiling that
+   * must cover all three cuts before any starts (lib/editor/three-cuts-run.ts).
+   */
+  if (body.mode === "three-cuts") {
+    return threeCutsResponse({
+      request,
+      projectId: id,
+      userId: session.user.id,
+      replay,
+      model: MODEL,
+      system: SYSTEM,
+      maxSteps: MAX_STEPS,
+      runId: generateRunId(),
+      messageId: generateMessageId(),
+    })
   }
 
   // Rolling 24 hours rather than the calendar day, so a session either side of
@@ -173,6 +217,9 @@ export async function POST(
 
   const startedAtRevision = project.revision
 
+  /** What this run changed, for whether it earns the self-check. */
+  const committedTools = new Set<string>()
+
   const run = createRun({
     initial: {
       document: project.document,
@@ -185,7 +232,10 @@ export async function POST(
       },
     },
     runId,
-    onCommit: (ops) => streamOps(ops),
+    onCommit: (ops, meta) => {
+      if (meta?.toolName) committedTools.add(meta.toolName)
+      streamOps(ops, meta)
+    },
     loadWords: async () => {
       const scene =
         project.document.scenes.find(
@@ -208,19 +258,34 @@ export async function POST(
    * rather than by constructing the run inside `execute` — where the `finally`
    * that unlocks could not see it.
    */
-  let streamOps: (ops: EditOp[]) => void = () => {}
+  let streamOps: (ops: EditOp[], meta?: CommitMeta) => void = () => {}
 
   const scene =
     project.document.scenes.find(
       (candidate) => candidate.id === project.document.currentSceneId
     ) ?? project.document.scenes[0]
 
+  /**
+   * Tool calls the browser already knows about. The SDK re-evaluates the
+   * approval policy when an approved call is replayed, and the question must
+   * not be asked a second time.
+   */
+  const knownCalls = new Set(
+    messages.flatMap((message) =>
+      message.parts.flatMap((part) =>
+        "toolCallId" in part && typeof part.toolCallId === "string"
+          ? [part.toolCallId]
+          : []
+      )
+    )
+  )
+
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      streamOps = (ops) =>
+      streamOps = (ops, meta) =>
         writer.write({
           type: "data-ops",
-          data: { ops },
+          data: { ops, toolCallId: meta?.toolCallId, toolName: meta?.toolName },
           // Transient: the browser applies these to its own document and the
           // document is what persists. Keeping them in the message history
           // would mean a reload replays every edit of every past run on top of
@@ -229,13 +294,57 @@ export async function POST(
         })
 
       const result = streamText({
-        model: MODEL,
+        model: replay
+          ? (await import("@/lib/editor/replay-model")).replayModel(scene)
+          : MODEL,
         system: scene
           ? `${SYSTEM}\n\nThe cut as it stands: ${describeScene(scene)}`
           : SYSTEM,
         messages: await convertToModelMessages(messages),
         tools: editorTools(run),
         stopWhen: isStepCount(MAX_STEPS),
+        /**
+         * The gate. A tool that could remove speech is dry-run against the
+         * working scene with the same builder its execute uses; if the ops
+         * would remove more than 30% of the take or whole spoken sentences,
+         * the call waits for the person instead of landing. The reason, in
+         * words, rides beside the request as a data part, because the SDK's
+         * approval request carries no text of its own.
+         */
+        toolApproval: async ({ toolCall }) => {
+          if (!GATED_TOOLS.has(toolCall.toolName)) return undefined
+
+          const working = run.snapshot().document
+          const current =
+            working.scenes.find((s) => s.id === working.currentSceneId) ??
+            working.scenes[0]
+          if (!current) return undefined
+
+          const steps = dryRun(toolCall.toolName, toolCall.input, current)
+          if (!steps) return undefined
+
+          const verdict = gateVerdict({
+            toolName: toolCall.toolName,
+            before: current,
+            steps,
+            words: await run.words(),
+          })
+          if (!verdict.ask) return undefined
+
+          if (!knownCalls.has(toolCall.toolCallId)) {
+            writer.write({
+              type: "data-gate",
+              id: toolCall.toolCallId,
+              data: {
+                toolCallId: toolCall.toolCallId,
+                reason: verdict.reason,
+                sentences: verdict.sentences,
+                percent: verdict.percent,
+              },
+            })
+          }
+          return "user-approval"
+        },
       })
 
       writer.merge(
@@ -245,9 +354,10 @@ export async function POST(
           generateMessageId,
           onEnd: async () => {
             try {
-              const usage = await result.usage
+              // A replay calls no model, so there is nothing to meter.
+              const usage = replay ? null : await result.usage
 
-              await recordUsage({
+              if (usage) await recordUsage({
                 userId: session.user.id,
                 conversationId: `project:${id}`,
                 model: MODEL,
@@ -289,6 +399,17 @@ export async function POST(
                 data: { revision: saved.revision },
                 transient: true,
               })
+
+              // The self-check (plans/036, phase C): only a run that changed
+              // the picture or captions is offered one, and the offer is
+              // signed so the check route can hold it to one per run.
+              if (needsCheck(committedTools)) {
+                writer.write({
+                  type: "data-check",
+                  data: { offer: signOffer(id, runId) },
+                  transient: true,
+                })
+              }
             } catch (cause) {
               const conflict = cause instanceof RevisionConflictError
 

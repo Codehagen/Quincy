@@ -28,6 +28,9 @@ export type SliderProps = Omit<
     onValueChange?: (value: number) => void
     /** Once, on release. Save here, not in onValueChange. */
     onValueCommitted?: (value: number) => void
+    /** What a screen reader says for a value, when the number on the track
+        is not the number a person means ("2.0×" for a log scale). */
+    getAriaValueText?: (value: number) => string
   }
 
 /**
@@ -45,6 +48,7 @@ export function Slider({
   onValueChange,
   onValueCommitted,
   "aria-label": ariaLabel,
+  getAriaValueText,
   ...props
 }: SliderProps) {
   return (
@@ -61,6 +65,7 @@ export function Slider({
           <SliderPrimitive.Indicator className="h-full rounded-full bg-kit-primary" />
           <SliderPrimitive.Thumb
             getAriaLabel={() => ariaLabel}
+            getAriaValueText={getAriaValueText ? (_formatted, v) => getAriaValueText(v) : undefined}
             className={
               "size-6 rounded-full bg-kit-knob shadow-kit-knob-on-fill outline-hidden " +
               "transition-[scale] duration-(--kit-duration-press) ease-kit-out motion-reduce:transition-none " +

@@ -4,7 +4,7 @@ import { createRun, describeScene, editorTools } from "./agent"
 import { EDITOR_TOOL_SENTENCES } from "./turn-sentences"
 import { planTurn } from "@/lib/studio-turn"
 import { createScene, LANDSCAPE_CANVAS, VERTICAL_CANVAS } from "./document"
-import { newElement, type EditOp } from "./ops"
+import { applyToScene, newElement, targetInScene, type EditOp } from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import type { Word } from "./transcript"
@@ -163,6 +163,18 @@ describe("editorTools", () => {
 
     expect(said).toMatch(/nothing to split/i)
     expect(streamed).toHaveLength(0)
+  })
+
+  it("fills the new frame unless asked to show the whole picture", async () => {
+    // A canvas change alone leaves the clips at `contain`: a wide take drawn
+    // as a strip with bars inside 9:16, which reads as no reframe at all.
+    const filled = harness()
+    await call(filled.tools.reframe, { shape: "vertical" })
+    expect(spineOf(filled.run).every((clip) => (clip as { fit?: string }).fit === "cover")).toBe(true)
+
+    const whole = harness()
+    await call(whole.tools.reframe, { shape: "vertical", show: "whole" })
+    expect(spineOf(whole.run).some((clip) => (clip as { fit?: string }).fit === "cover")).toBe(false)
   })
 
   it("does not claim a reframe it did not perform", async () => {
@@ -354,5 +366,38 @@ describe("the editor chat's words for each tool", () => {
       kind: "work",
       steps: [{ kind: "step", state: "done", label: "Removed the silences" }],
     })
+  })
+})
+
+describe("targets on the stream (plans/036)", () => {
+  it("every batch a tool streams is aimed at something in the scene it lands on", async () => {
+    const { run, tools, streamed } = harness({ words: WORDS })
+    let current = run.snapshot().document.scenes[0]
+
+    await call(tools.remove_silences, {})
+    await call(tools.add_captions, {})
+    await call(tools.split_clip, { atSeconds: 1 })
+    await call(tools.punch_in, { clipNumber: 1 })
+    await call(tools.apply_look, { look: "brightness" })
+    await call(tools.fade_clip, { clipNumber: 1, inSeconds: 0.5 })
+    await call(tools.reframe, { shape: "vertical" })
+    await call(tools.delete_clip, { clipNumbers: [2] })
+
+    expect(streamed.length).toBeGreaterThan(8)
+    for (const batch of streamed) {
+      for (const op of batch) {
+        expect(op.target).toBeDefined()
+        expect(targetInScene(current, op.target!)).toBe(true)
+      }
+      current = applyToScene(current, batch, "agent")
+    }
+  })
+
+  it("tightens one pause per streamed batch", async () => {
+    const { tools, streamed } = harness({ words: WORDS })
+    await call(tools.remove_silences, {})
+    // Head, the gap between "two" and "three", and the tail.
+    expect(streamed).toHaveLength(3)
+    expect(streamed.every((batch) => batch[0].target?.action === "cut")).toBe(true)
   })
 })

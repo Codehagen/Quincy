@@ -1,0 +1,90 @@
+/*
+ * The arrival (plans/036, phase G). Transform and opacity only. State moves
+ * by CSS transitions on data attributes, so a skip mid-scan retargets from
+ * where each part is instead of restarting.
+ */
+
+/* ── The passes ─────────────────────────────────────────────────────── */
+
+.arrival-pass {
+  opacity: 0;
+  translate: 0 4px;
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    translate 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.arrival-pass[data-state="reading"],
+.arrival-pass[data-state="done"] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* What the pass found fades in with its check. */
+.arrival-found {
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.arrival-pass[data-state="done"] .arrival-found {
+  opacity: 1;
+}
+
+/* The passes give way when the noticed block arrives: quicker than it enters. */
+.arrival-passes {
+  transition: opacity 150ms var(--ease-kit-out);
+}
+.arrival-passes[data-settled] {
+  opacity: 0;
+}
+
+
+/* ── The one entrance: noticed and starters together ───────────────── */
+
+.arrival-enter[data-arrival="scanning"] {
+  opacity: 0;
+  translate: 0 6px;
+}
+.arrival-enter[data-played] {
+  transition:
+    opacity 240ms cubic-bezier(0.23, 1, 0.32, 1),
+    translate 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ── The sweep ──────────────────────────────────────────────────────── */
+
+.arrival-sweep {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.arrival-sweep-line {
+  position: absolute;
+  inset-block: 0;
+  left: -2px;
+  width: 2px;
+  border-radius: 1px;
+  background-color: var(--kit-ink);
+  opacity: 0.55;
+}
+/* A faint wash behind the line: what it has just read. */
+.arrival-sweep-wash {
+  position: absolute;
+  inset-block: 0;
+  right: 100%;
+  width: 56px;
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in oklab, var(--kit-ink) 9%, transparent)
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrival-pass,
+  .arrival-found,
+  .arrival-passes,
+  .arrival-enter[data-played] {
+    transition: none;
+  }
+  .arrival-sweep {
+    display: none;
+  }
+}

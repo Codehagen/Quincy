@@ -68,6 +68,17 @@ date-time, number input, reorder, tree, virtualised lists) uses ui-sdk
 (`@ui-sdk/react` + `@ui-sdk/core`, Apache-2.0, beta, https://ui-sdk.dev). One
 component never mixes both.
 
+**One exception: the Cuts chat margin is shadcn.** The editor's chat margin
+(`components/editor/studio-chat.tsx`) is built from shadcn registry components
+(`components/ui/` button, message, bubble, trace, marker, item, collapsible,
+separator, checkbox, message-scroller) and the AI Elements patterns in
+`components/ai-elements/`, themed to the kit by the `.cuts-shadcn` scope class
+(`components/editor/cuts-shadcn.css`), which maps shadcn's variables onto
+`--kit-*` and fixes the two rules its button breaks (no `transition-all`;
+hover on ink is `--kit-primary-hover`). The owner chose it in the Cuts lab
+(docs/design/decisions.md, "Cuts, decided"). Nothing else in the app uses
+these components without a decision of its own.
+
 **New UI uses the kit's `--kit-*` tokens, never raw values.** The landing (`/`)
 is the reference: white ground (`--kit-ground`), objects lifted by elevation,
 grey `--kit-stage` only as a recess. Use the semantic utilities (`bg-kit-*`,

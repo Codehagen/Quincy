@@ -1,7 +1,7 @@
 import { createIdGenerator } from "ai"
 
 import { DEFAULT_CAPTION_STYLE } from "./document"
-import { newElement, type EditOp } from "./ops"
+import { aimed, applyToScene, newElement, type EditOp } from "./ops"
 import { stampFields } from "./provenance"
 import {
   findMainTrack,
@@ -9,7 +9,8 @@ import {
   remapCaptions,
   splitBySourceRanges,
 } from "./timeline"
-import { us, type Us } from "./time"
+import { timelineSpans } from "./edits"
+import { us, type Us, type UsRange } from "./time"
 import {
   buildCaptionSeeds,
   detectSilences,
@@ -118,15 +119,20 @@ export function addCaptions(
   const captions = captionTrack(scene)
   const placed = remapCaptions(built, spine)
 
-  return [
-    ...(captions.op ? [captions.op] : []),
-    {
-      op: "replace_elements",
-      sceneId: scene.id,
-      trackId: captions.id,
-      elements: placed,
-    },
-  ]
+  return aimed(
+    [
+      ...(captions.op ? [captions.op] : []),
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: captions.id,
+        elements: placed,
+      },
+    ],
+    // The desk's "+ Captions from the transcript" control, which is what a
+    // person would press for the same edit.
+    { action: "press", kind: "control", control: "captions" }
+  )
 }
 
 /**
@@ -154,9 +160,6 @@ export function removeSilences(
     silence?: SilenceOptions
   }
 ): EditOp[] {
-  const spine = findMainTrack(scene)
-  if (!spine) return []
-
   const silences = detectSilences(
     words,
     options.sourceDurationUs,
@@ -164,12 +167,124 @@ export function removeSilences(
   )
   if (silences.length === 0) return []
 
+  return cutSourceRanges(scene, silences, options)
+}
+
+/**
+ * The most presses one tightening is drawn as.
+ *
+ * A ceiling on what one run streams, not on what it removes: every step
+ * re-sends the spine (and the caption lane, when it has captions), so a take
+ * with two hundred pauses as two hundred steps would stream the spine two
+ * hundred times and keep the cursor busy for a minute. Past this, neighbouring
+ * pauses share a step.
+ */
+export const MAX_CUT_STEPS = 12
+
+/**
+ * Caption elements one tightening may re-send, summed over its steps.
+ *
+ * The caption lane rides with every step so the words never drift from the
+ * picture mid-run, and on a long take with word-by-word captions that is the
+ * heavy part of the stream. A lane of 300 captions gets four steps, not twelve.
+ */
+export const MAX_CAPTION_ELEMENTS_STREAMED = 1200
+
+/**
+ * The same tightening as `removeSilences`, as a sequence of steps: one pause
+ * (or a few neighbouring ones, past `MAX_CUT_STEPS`) per step, in the order
+ * they sit on the timeline.
+ *
+ * What the agent streams, so Quincy's cursor can drag across each pause and
+ * press ⌫ on it, and the press is that step's op landing. Each step is built
+ * against the scene the previous steps left, so every intermediate timeline is
+ * a whole, consistent cut: the spine and the captions move together in every
+ * step, which is the reason removeSilences batches in the first place.
+ * Applied in order, the steps arrive at the same cut as `removeSilences`.
+ */
+export function removeSilenceSteps(
+  scene: Scene,
+  words: Word[],
+  options: {
+    mediaId: string
+    author: Author
+    sourceDurationUs: Us
+    silence?: SilenceOptions
+  }
+): EditOp[][] {
+  const silences = detectSilences(
+    words,
+    options.sourceDurationUs,
+    options.silence ?? DEFAULT_SILENCE
+  )
+  if (silences.length === 0) return []
+
+  const captionCount = scene.tracks
+    .filter((track) => track.kind === "caption")
+    .reduce((sum, track) => sum + track.elements.length, 0)
+  const maxSteps =
+    captionCount === 0
+      ? MAX_CUT_STEPS
+      : Math.max(
+          1,
+          Math.min(
+            MAX_CUT_STEPS,
+            Math.floor(MAX_CAPTION_ELEMENTS_STREAMED / captionCount)
+          )
+        )
+
+  const steps: EditOp[][] = []
+  let current = scene
+
+  for (const group of chunk(silences, maxSteps)) {
+    const ops = cutSourceRanges(current, group, options)
+    if (ops.length === 0) continue
+
+    steps.push(ops)
+    current = applyToScene(current, ops, options.author)
+  }
+
+  return steps
+}
+
+/** Split a list into at most `count` runs of neighbours, as even as it goes. */
+function chunk<T>(items: T[], count: number): T[][] {
+  const size = Math.ceil(items.length / Math.max(1, count))
+  const out: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    out.push(items.slice(index, index + size))
+  }
+  return out
+}
+
+/**
+ * Cut source ranges out of the spine and bring the captions with them.
+ *
+ * The whole edit is one batch. Splitting the spine, closing the gaps and
+ * repositioning several hundred captions are three changes to one cut, and
+ * applying them separately would render a timeline where the clips have moved
+ * and the words have not — which for the few frames it lasts looks exactly like
+ * the bug this function exists to avoid.
+ *
+ * Captions are remapped rather than shifted. Remove two separate silences and
+ * every word after the second one has moved by a different amount than the
+ * words between them, so a single delta is wrong the moment there is more than
+ * one cut.
+ */
+function cutSourceRanges(
+  scene: Scene,
+  ranges: UsRange[],
+  options: { mediaId: string; author: Author }
+): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
   const cut = spine.elements.flatMap((element) => {
     if (element.kind !== "video" || element.mediaId !== options.mediaId) {
       return [element]
     }
 
-    const pieces = splitBySourceRanges(element, silences, newElementId)
+    const pieces = splitBySourceRanges(element, ranges, newElementId)
     // Unchanged clips come back as the same object and must not be repainted
     // as somebody's work. The rest had their window moved, and `replace_elements`
     // does not stamp the way `update_element` does, so it is stamped here — or
@@ -190,6 +305,11 @@ export function removeSilences(
   // Nothing survived: every word was inside a range we were told to remove.
   // An empty spine is not a tightened cut, so refuse rather than deliver one.
   if (cut.length === 0) return []
+  // Nothing changed: every range fell outside what the spine still plays.
+  const unchanged =
+    cut.length === spine.elements.length &&
+    cut.every((element, index) => element === spine.elements[index])
+  if (unchanged) return []
 
   const tightened: Track = { ...spine, elements: layOut(cut) }
 
@@ -221,7 +341,13 @@ export function removeSilences(
     })
   }
 
-  return ops
+  // The pauses as the lanes draw them now: what the cursor drags across.
+  return aimed(ops, {
+    action: "cut",
+    kind: "range",
+    trackId: spine.id,
+    spans: timelineSpans(spine, [{ mediaId: options.mediaId, ranges }]),
+  })
 }
 
 /**

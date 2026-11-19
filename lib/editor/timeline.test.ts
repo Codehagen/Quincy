@@ -7,6 +7,7 @@ import {
   remapCaptions,
   rippleTrack,
   sourceToTimelineUs,
+  timelineToSourceUs,
   speechRegions,
   splitBySourceRanges,
   trackEndUs,
@@ -234,6 +235,49 @@ describe("sourceToTimelineUs", () => {
   it("ignores clips from a different asset", () => {
     const track = spine([videoElement({ mediaId: "other" })])
     expect(sourceToTimelineUs(track, "media-1", s(1))).toBeNull()
+  })
+})
+
+describe("timelineToSourceUs", () => {
+  // A take cut at 4–6 s: the second clip starts at 4 s on the timeline and
+  // shows the source from 6 s.
+  const cut = spine([
+    videoElement({ id: "a", trimEndUs: s(4), durationUs: s(4) }),
+    videoElement({ id: "b", startUs: s(4), trimStartUs: s(6), trimEndUs: s(10), durationUs: s(4) }),
+  ])
+
+  it("maps a time after a cut to the source after the removed range", () => {
+    const hit = timelineToSourceUs(cut, s(5))
+    expect(hit?.clip.id).toBe("b")
+    expect(hit?.sourceUs).toBe(s(7))
+  })
+
+  it("maps a time before the cut one to one", () => {
+    expect(timelineToSourceUs(cut, s(1.5))?.sourceUs).toBe(s(1.5))
+  })
+
+  it("round-trips with sourceToTimelineUs", () => {
+    const hit = timelineToSourceUs(cut, s(6.25))!
+    expect(sourceToTimelineUs(cut, "media-1", hit.sourceUs)).toBe(s(6.25))
+  })
+
+  it("keeps the last instant of a window one frame inside it", () => {
+    const end = s(8) - 1
+    expect(timelineToSourceUs(cut, end, 40_000)?.sourceUs).toBe(s(10) - 40_000)
+  })
+
+  it("never seeks past the media, even when the window claims more", () => {
+    const track = spine([videoElement({ trimEndUs: s(12), durationUs: s(12), sourceDurationUs: s(10) })])
+    expect(timelineToSourceUs(track, s(11.9), 40_000)?.sourceUs).toBe(s(10) - 40_000)
+  })
+
+  it("follows a window played at another speed", () => {
+    const track = spine([videoElement({ trimStartUs: s(2), trimEndUs: s(10), durationUs: s(4) })])
+    expect(timelineToSourceUs(track, s(1))?.sourceUs).toBe(s(4))
+  })
+
+  it("answers null where no clip plays", () => {
+    expect(timelineToSourceUs(cut, s(8))).toBeNull()
   })
 })
 

@@ -56,3 +56,6 @@ docs/private/
 
 # Maintainer-only agent notes (environment facts)
 AGENTS.local.md
+
+# The owner's own take for /prototypes/cuts-mock: made locally, never committed
+/public/prototypes/cuts-mock/local/

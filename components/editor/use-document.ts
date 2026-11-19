@@ -5,6 +5,11 @@ import * as React from "react"
 import { applyOps, type EditOp } from "@/lib/editor/ops"
 import { UNLOCKED, type VideoDocument } from "@/lib/editor/types"
 
+import { amend, commit, createHistory, idsOf, redo as redoHistory, undo as undoHistory, type History } from "./history"
+
+/** The browser's fetch, called through a stable function so it can be a default. */
+export const networkFetch: typeof fetch = (input, init) => fetch(input, init)
+
 /**
  * The document being edited, the history behind it, and getting it saved.
  *
@@ -51,9 +56,8 @@ const MAX_ATTEMPTS = 3
 const RETRY_DELAY = [1500, 4000, 10_000]
 
 type State = {
-  document: VideoDocument
-  past: VideoDocument[]
-  future: VideoDocument[]
+  /** The document now, and the undo and redo entries behind it (history.ts). */
+  history: History<VideoDocument>
   /** What the server last confirmed it holds. Never a local guess. */
   revision: number
   /**
@@ -68,6 +72,28 @@ type State = {
   seq: number
   /** The `seq` the server has. Unsaved work is exactly `seq !== savedSeq`. */
   savedSeq: number
+  /**
+   * An agent run is landing, and whether its first op has pushed the history.
+   *
+   * One run is one undo (plans/036): a tightening lands as a dozen presses,
+   * one batch each, and undoing it a press at a time would be twelve undos
+   * for what the person asked for in one sentence. The first batch of a run
+   * pushes the document as it was before the run; the rest replace it.
+   */
+  run: "idle" | "open" | "pushed"
+  /** The history entry the last run committed: its checkpoint asks for this one. */
+  runEntry: number | null
+}
+
+export function initialState(document: VideoDocument, revision: number): State {
+  return {
+    history: createHistory(document),
+    revision,
+    seq: 0,
+    savedSeq: 0,
+    run: "idle",
+    runEntry: null,
+  }
 }
 
 type Action =
@@ -93,8 +119,11 @@ type Action =
    * the agent's ops left behind rather than whatever a request captured.
    */
   | { type: "synced"; revision: number }
+  | { type: "run-start" }
+  | { type: "run-end" }
 
-function reduce(state: State, action: Action): State {
+/** Exported for its tests (use-document.test.ts). */
+export function reduce(state: State, action: Action): State {
   switch (action.type) {
     case "apply": {
       if (action.ops.length === 0) return state
@@ -103,18 +132,16 @@ function reduce(state: State, action: Action): State {
         // A synthetic snapshot: applyOps wants one, but the concurrency check
         // belongs to the server. No expectedRevision is passed, so it reduces
         // and stamps without asserting anything about what the server holds.
-        { document: state.document, revision: state.revision, lock: UNLOCKED },
+        { document: state.history.present, revision: state.revision, lock: UNLOCKED },
         action.ops,
         { author: "user" }
       )
 
       return {
         ...state,
-        document: result.snapshot.document,
-        past: [...state.past, state.document],
         // Any new edit forks the timeline; a redo stack that survived it would
         // offer to reapply changes to a document that no longer exists.
-        future: [],
+        history: commit(state.history, result.snapshot.document),
         seq: state.seq + 1,
       }
     }
@@ -123,16 +150,19 @@ function reduce(state: State, action: Action): State {
       if (action.ops.length === 0) return state
 
       const result = applyOps(
-        { document: state.document, revision: state.revision, lock: UNLOCKED },
+        { document: state.history.present, revision: state.revision, lock: UNLOCKED },
         action.ops,
         { author: "agent" }
       )
 
+      const joins = state.run === "pushed"
       return {
         ...state,
-        document: result.snapshot.document,
-        past: [...state.past, state.document],
-        future: [],
+        history: joins
+          ? amend(state.history, result.snapshot.document)
+          : commit(state.history, result.snapshot.document),
+        run: state.run === "idle" ? "idle" : "pushed",
+        runEntry: state.run === "open" ? state.history.nextId : state.runEntry,
         // seq and savedSeq move together: the browser is being told what the
         // server already has, so this is a change to the document that is not
         // a change to save.
@@ -144,30 +174,20 @@ function reduce(state: State, action: Action): State {
     case "synced":
       return { ...state, revision: action.revision }
 
-    case "undo": {
-      const previous = state.past.at(-1)
-      if (!previous) return state
+    case "run-start":
+      return { ...state, run: "open", runEntry: null }
 
-      return {
-        ...state,
-        document: previous,
-        past: state.past.slice(0, -1),
-        future: [state.document, ...state.future],
-        seq: state.seq + 1,
-      }
+    case "run-end":
+      return { ...state, run: "idle" }
+
+    case "undo": {
+      if (state.history.past.length === 0) return state
+      return { ...state, history: undoHistory(state.history), seq: state.seq + 1 }
     }
 
     case "redo": {
-      const [next, ...rest] = state.future
-      if (!next) return state
-
-      return {
-        ...state,
-        document: next,
-        past: [...state.past, state.document],
-        future: rest,
-        seq: state.seq + 1,
-      }
+      if (state.history.future.length === 0) return state
+      return { ...state, history: redoHistory(state.history), seq: state.seq + 1 }
     }
 
     case "saved":
@@ -181,16 +201,13 @@ function reduce(state: State, action: Action): State {
 export function useDocument(
   projectId: string,
   initial: VideoDocument,
-  initialRevision: number
+  initialRevision: number,
+  /** The network. The prototype mock passes a local one (StudioHarness). */
+  fetcher: typeof fetch = networkFetch
 ) {
-  const [state, dispatch] = React.useReducer(reduce, {
-    document: initial,
-    past: [],
-    future: [],
-    revision: initialRevision,
-    seq: 0,
-    savedSeq: 0,
-  })
+  const [state, dispatch] = React.useReducer(reduce, initialRevision, (revision) =>
+    initialState(initial, revision)
+  )
 
   /** Only ever the network's opinion. Whether work is unsaved is derived. */
   const [network, setNetwork] = React.useState<SaveState>({ status: "clean" })
@@ -210,6 +227,8 @@ export function useDocument(
     (revision: number) => dispatch({ type: "synced", revision }),
     []
   )
+  const beginRun = React.useCallback(() => dispatch({ type: "run-start" }), [])
+  const endRun = React.useCallback(() => dispatch({ type: "run-end" }), [])
   const undo = React.useCallback(() => dispatch({ type: "undo" }), [])
   const redo = React.useCallback(() => dispatch({ type: "redo" }), [])
 
@@ -218,7 +237,7 @@ export function useDocument(
       setNetwork({ status: "saving" })
 
       try {
-        const response = await fetch(`/api/editor/projects/${projectId}`, {
+        const response = await fetcher(`/api/editor/projects/${projectId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ document, revision }),
@@ -260,7 +279,7 @@ export function useDocument(
         })
       }
     },
-    [projectId]
+    [projectId, fetcher]
   )
 
   /** Try again after the automatic attempts have stopped. */
@@ -290,14 +309,14 @@ export function useDocument(
         : AUTOSAVE_DELAY
 
     const timer = setTimeout(
-      () => void flush(state.document, state.revision, state.seq),
+      () => void flush(state.history.present, state.revision, state.seq),
       delay
     )
 
     return () => clearTimeout(timer)
   }, [
     dirty,
-    state.document,
+    state.history.present,
     state.revision,
     state.seq,
     network,
@@ -334,15 +353,23 @@ export function useDocument(
           ? { status: "dirty" }
           : { status: "clean" }
 
+  const historyIds = React.useMemo(() => idsOf(state.history), [state.history])
+
   return {
-    document: state.document,
+    document: state.history.present,
     apply,
     applyAgentOps,
     syncRevision,
     undo,
     redo,
-    canUndo: state.past.length > 0,
-    canRedo: state.future.length > 0,
+    beginRun,
+    endRun,
+    /** The entry ids on each stack: a run's checkpoint acts only while its entry is on top. */
+    historyIds,
+    /** The history entry the last agent run committed, or null before any did. */
+    runEntry: state.runEntry,
+    canUndo: state.history.past.length > 0,
+    canRedo: state.history.future.length > 0,
     save,
     retry,
   }

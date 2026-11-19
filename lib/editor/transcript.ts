@@ -1,5 +1,6 @@
 import { createIdGenerator } from "ai"
 
+import { FILLERS, normaliseWord } from "./fillers"
 import { mergeRanges, secondsToUs, us, type Us, type UsRange } from "./time"
 
 const newTokenId = createIdGenerator({ prefix: "tk", size: 12 })
@@ -153,24 +154,8 @@ export function detectFillers(
   )
 }
 
-/** Norwegian and English, because the recordings are both. */
-export const DEFAULT_FILLERS = [
-  "um",
-  "uh",
-  "erm",
-  "hmm",
-  "like",
-  "eh",
-  "øh",
-  "æh",
-  "liksom",
-] as const
-
-function normaliseWord(text: string): string {
-  // Deepgram's punctuated form carries commas and full stops, and a trailing
-  // comma is exactly what a filler word tends to have.
-  return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")
-}
+/** Norwegian and English, because the recordings are both (fillers.ts). */
+export const DEFAULT_FILLERS = FILLERS
 
 /**
  * Refine cut boundaries toward the quietest instant nearby.

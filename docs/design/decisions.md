@@ -31,6 +31,7 @@ has not looked at anything (lab README, "When not to lab").
 | **Ideas is a working surface — Table** (2026-11-16) | Ideas is a workspace: two toolbar rows (page, filters with counts), a dense DataList with columns (glyph · idea · source · shape · for · age), and the open idea Marked up in a fixed Panel beside it, worked by key (j k D N L U /). Under ~900px of workspace it folds into one column of rows that open in place | the owner, on the three layouts side by side in /prototypes/workspace-lab: "Jeg liker egentlig table veldig godt". Ideas is a queue worked daily; columns read down as well as across, and the open idea sits beside its row without the list moving. Rejected: Three panes (a third scroll region, no columns; the grouped view covers "what did I say in that call?"), Inline (kept as the narrow fold) | workspace.md, `app/prototypes/workspace-lab/DECISION.md` |
 | **Lineup is a calendar — a working surface** (2026-11-16, moved to /lineup 2026-11-17) | a Mon–Sun week of continuous time (00:00–24:00, 15-minute snap), posts as blocks at their exact minute, a slot's occurrence that nothing fills as a dashed block, the approved posts with no time in a tray over the grid, the open post drawn as its feed beside it; moved by pointer or by keys (Enter picks up, arrows, Enter drops, Esc puts back, U undoes); Quincy's handwritten notes on a control; the now line in ink, no green and no blink; touch and phones get the Feed. No counts on a block, a day or the week | the owner, on the Board in /prototypes/lineup-lab: "make this into a calendar that we also can have all the times between also"; "fjern den grønne blinken". A picked block is the well grey and a 1px ink ring all round, never a side bar: "på calender kan du også fjerne det helt til venstre?" (2026-11-17) | `components/kit/week-calendar.tsx`, `components/lineup/`, `app/prototypes/lineup-lab/DECISION.md` |
 | **Settings is a working surface — Desk** (2026-11-17) | /settings is a workspace in the house frame: a toolbar with the title and one sentence from the account, search on `/`; a filter row (Show: All · Needs you, Hide notes, the tally); every setting, browser and agent as a row of one grouped DataList (Profile · Sign-in · Plan & billing · Agents · Account); the open row in a pane in Drafts' order (a strong sentence, a muted provenance line, the object, the verbs); Quincy's graphite notes on the group lines and beside the pane's object. Billing is the "Plan & billing" section; `/settings/billing` forwards to `/settings?section=plan`. Under 900px of workspace a row opens in a Sheet | the owner, on the directions side by side in /prototypes/settings-lab: "Jeg liker desk", and "Jeg ønsker mer grafitt kanskje slik at det ser mer playful ut". Rejected: Today (the old page, prose to read), Sections (right structure, "feels very flat"), Overview, Ledger, Stage, Window, Annotated, Desk by section (below) | `components/settings/`, "Settings, decided" below |
+| **Cuts at the desk** (2026-11-17) | Quincy's cursor operates the lanes: every press is one op landing on its real target; one run is one undo; the chat margin is real shadcn scoped to the kit; a run asks first only when it would remove more than 30 % of the take or whole spoken sentences | the owner, on 52: "people find it WOW when it looks like the cursor does it in front of them" | "Cuts, decided" below, plans/036, `components/editor/agent-cursor/` |
 | **Cuts, not Studio** | the video editor is **Cuts** in visible copy (route `/cuts`) | "Studio" is the chat page; one word for two pages makes both unclear. The component is still `Studio` in code | `app/prototypes/video/name.ts`, plans/031 |
 | **Pixel friend, smooth from 32** | the mark is icon piece 31; under 32px the pixel drawing, from 32 the vector one (piece 20), same beats | whole pixels are the sharpest drawing at 16 (why 31 won); from 32 there is room for curves, and eased moves read as alive where cut frames read as jumps | mascot.md, `components/mascot/friend.tsx` |
 | **Quincy comes to you** | Quincy writes first, a few lines, and every note ends in the person's choice | an agent that only answers is a tool; one that reaches out reads as staff. Ending on a choice keeps "Quincy drafts, you send" | `components/showcase/demos/quincy-texts.tsx` |
@@ -162,6 +163,51 @@ it), and a config-driven settings schema (every row edits differently).
 The account menu keeps its Billing row, a familiar door, now pointing at
 `/settings?section=plan`; Credits stays its own page for the charge list.
 The billing banner and Stripe's return addresses point at the same place.
+
+## Cuts, decided (2026-11-17)
+
+Decided in the Cuts lab (`/prototypes/lab/cuts`, rounds 1–5). Pieces **52**
+(one cut) and **53** (three cuts) are the reference. The motion timeline is
+`app/prototypes/lab/cuts/round-4/BRIEF.md`; the gate and the audit are
+`round-5/BRIEF.md`. Built by plans/036.
+
+| Decision | Chosen | Lost, and why |
+| --- | --- | --- |
+| Layout | Timeline first: large preview, full lanes, chat as a narrow margin (lab 02) | Chat-first with lanes in a drawer (01), transcript as the timeline (03), one cut on a grey stage (04), phone in the middle (05): each hid the lanes a hand-cutter needs |
+| The run | Ops land on the lanes while the margin counts steps; lanes read-only under the reason (06) | — |
+| Quincy's cursor | An ink arrow with a "Quincy" name tag (21/41/49/52) that operates the desk like a person, compressed | The friend riding along (22/42): softer, but the name says whose hand it is. Numbered presses (23), the tag narrating the op (25): more to read, less to watch |
+| Target tone | Ink by default; the highlighter yellow (24/43/50) is the tuned alternative and stays off | Yellow on every hit reads as alarm on a long run |
+| Receipt | One summary line with the numbers, then prose that names what changed in words only (07, audit 7) | Steps-as-receipt (26): too long after a big run |
+| Undo | One run = one revision chip = one undo, no cursor on undo (09, 28) | Undo running the cursor backwards (27): charming once, slow every time after |
+| Stop | Esc/Stop parks the cursor and keeps what landed; unlanded steps read "skipped" (30) | — |
+| The gate | **Edit without asking unless the change is very large** (owner, round 5). Ask only when a run would remove more than 30 % of the take's length, or remove whole spoken sentences (not fillers or pauses), also on the first run. Never for pauses, fillers, captions, push-ins, looks, fades or reframes | Ask every time (45): kills the cursor. Ask once per project (46): the owner found even that one question too many |
+| First run | The sample opens free (14); the reading of the take ends in what Quincy noticed (31); starters carry the reason they exist (32); after a run starters become next steps and never re-offer a finished request | Questions while uploading (11), copy this pacing (13), each answer is an edit (15) |
+| Self-check | Quincy looks at three frames of its own cut and fixes what it sees (38) | — |
+| Several cuts | Three cuts in the desk, one large preview of the recommended cut, three spines in the lanes panel, three cursors that never move in lockstep, a recommendation in words, never a score (48/51/53) | Three columns (40/47): previews too small to judge |
+| Clips | Filmstrip of frame tiles with the waveform under it, inside one clip (round 5) | Waveform only |
+| The desk | **Floating white objects on the grey recess, 8px apart** (owner, 2026-11-18, plans/036 phase E): top bar and rail on the ground; library, preview, a small side-panel rail, the timeline and the chat as objects lifted by elevation; picked rows are the well grey; one ink fill (Export) | The flat editor with hairline borders between regions: every region read as the same plane |
+| Full screen | **Cuts is full screen; the app sidebar is hidden on /cuts** (owner, 2026-11-17: "hide the sidebar entirely so we get full screen mode"). The way back is the rail's first control (editor) and "Back to Studio" (the list) | The sidebar beside the editor: it takes the width the preview and the lanes need |
+| The chat margin | **Real shadcn** (registry components + the AI Elements patterns copied into `components/ai-elements/`), scoped to the kit by `.cuts-shadcn` | AI Elements anatomy rebuilt on our own kit (round 2): the owner asked for shadcn itself |
+
+**The contract.** A cursor press is an op landing; the cursor never draws
+anything that did not happen. Every op carries a `target`; the lanes carry
+`data-target`; the press and the document change land together.
+
+### The motion numbers (owner: "the defaults feel good")
+
+From `round-4/director.ts` `DEFAULT_TUNE`, locked. Piece 52 ran them at
+pace 1.3 (every duration × 1.3), and the editor uses 52's pace.
+
+```
+glide: 110–220ms (distance / 4, clamped) · press: 90ms · gaps: 140→60ms
+(shrinking through the run) · tone: ink · ring: on · speed: 1×
+easing: cubic-bezier(0.23, 1, 0.32, 1) on the glide (a transition, so a new
+target retargets) · next glide starts press + 80ms
+```
+
+The per-element timeline (lead, support, decoration, what does not move) is
+the table in `round-4/BRIEF.md`. Reduced motion: no cursor, no drag boxes;
+targets change in order 60 ms apart with an opacity-only highlight.
 
 ## The onboarding story
 

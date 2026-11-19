@@ -4,7 +4,9 @@ import { notFound, redirect } from "next/navigation"
 import { Studio, type MediaEntry } from "@/components/editor/studio"
 import { getAsset } from "@/lib/editor/assets"
 import { getProject } from "@/lib/editor/projects"
+import { readTake, strongLineSlot } from "@/lib/editor/reading"
 import { createR2Storage } from "@/lib/editor/storage-r2"
+import { wordsFromDeepgram } from "@/lib/editor/transcript"
 import type { VideoDocument } from "@/lib/editor/types"
 import { constructMetadata } from "@/lib/metadata"
 import { getSession } from "@/lib/session"
@@ -139,10 +141,26 @@ async function resolveMedia(
                   tileHeight: asset.filmstripTileHeight,
                 }
               : null,
+          // The reading of the take, counted here from the transcript the
+          // row already carries: a few numbers cross to the client, never
+          // the provider response (lib/editor/reading.ts).
+          reading: asset.transcript
+            ? readTake(
+                wordsFromDeepgram(asset.transcript),
+                asset.durationUs ?? 0,
+                strongLineOf(asset.transcript)
+              )
+            : null,
         } satisfies MediaEntry,
       ] as const
     })
   )
 
   return Object.fromEntries(entries.filter((entry) => entry !== null))
+}
+
+/** The cached strong line, when one has been chosen (lib/editor/strong-line.ts). */
+function strongLineOf(transcript: unknown): string | null {
+  const slot = strongLineSlot(transcript)
+  return slot?.state === "done" ? slot.line : null
 }
