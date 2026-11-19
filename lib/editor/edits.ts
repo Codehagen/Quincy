@@ -605,6 +605,11 @@ export type PunchInOptions = {
   origin?: { x: number; y: number }
   /** Stay in rather than easing back out. */
   hold?: boolean
+  /**
+   * Already pushed in at the window's start: the continuation of a push that
+   * began on the clip before (a line that crosses a cut). No ramp in.
+   */
+  startIn?: boolean
 }
 
 /**
@@ -668,7 +673,43 @@ export function punchIn(
     originY: origin.y,
   })
 
-  const keys = options.hold
+  const continued = options.startIn
+    ? options.hold
+      ? [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+        ]
+      : [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs - rampUs),
+            value: scale,
+            interpolation: "bezier",
+            easing: RELEASE_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: 1,
+            interpolation: "linear",
+          }),
+        ]
+    : null
+
+  const keys = continued
+    ? continued
+    : options.hold
     ? [
         newKeyframe({
           timeUs: us(startLocalUs),

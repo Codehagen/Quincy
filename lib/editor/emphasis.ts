@@ -1,7 +1,7 @@
 import { punchIn } from "./edits"
 import type { EditOp } from "./ops"
 import { normaliseWord } from "./fillers"
-import { findMainTrack, sceneDurationUs, sourceToTimelineUs } from "./timeline"
+import { clipRate, findMainTrack, sceneDurationUs } from "./timeline"
 import { us, type Us } from "./time"
 import type { Word } from "./transcript"
 import type { Scene, TimelineElement } from "./types"
@@ -119,11 +119,14 @@ function channelsOf(element: TimelineElement) {
  */
 export function emphasisRefusal(
   scene: Scene,
-  elementId: string,
+  elementIds: string | readonly string[],
   window: { startUs: number; endUs: number }
 ): string | null {
+  const replaced = new Set(
+    typeof elementIds === "string" ? [elementIds] : elementIds
+  )
   const others = zoomWindows(scene).filter(
-    (zoom) => !zoom.step && zoom.elementId !== elementId
+    (zoom) => !zoom.step && !replaced.has(zoom.elementId)
   )
 
   const near = others.find(
@@ -146,17 +149,36 @@ export function emphasisRefusal(
   return null
 }
 
+export type LineSegment = { elementId: string; fromUs: Us; toUs: Us }
+
+export type LineWindow = {
+  /** The clip the line starts in. */
+  elementId: string
+  /** The whole stretch, lead and tail included. */
+  fromUs: Us
+  toUs: Us
+  /**
+   * The same stretch, clip by clip. A tightened take splits a line wherever a
+   * pause inside it was shortened, so one line can cross several clips.
+   */
+  segments: LineSegment[]
+}
+
 /**
- * The stretch of the cut a spoken line covers, with room either side, and
- * the clip it starts in. Matches whole words, ignoring case and punctuation;
- * null when the line is not in the cut (cut out, or misquoted).
+ * The stretch of the cut a spoken line covers, with room either side, clip
+ * by clip. Matches whole words, ignoring case and punctuation; null when the
+ * line is not in the cut (cut out, or misquoted).
+ *
+ * Mapped through the clips themselves rather than `sourceToTimelineUs`,
+ * because a word's end is exclusive: a line whose last word ends exactly at
+ * a clip's out-point is whole, and an instant lookup would call it gone.
  */
 export function lineWindow(
   scene: Scene,
   words: Word[],
   mediaId: string,
   line: string
-): { elementId: string; fromUs: Us; toUs: Us } | null {
+): LineWindow | null {
   const spine = findMainTrack(scene)
   const needle = line.split(/\s+/).map(normaliseWord).filter(Boolean)
   if (!spine || needle.length === 0) return null
@@ -165,26 +187,89 @@ export function lineWindow(
   for (let i = 0; i + needle.length <= spoken.length; i++) {
     if (!needle.every((part, k) => spoken[i + k] === part)) continue
 
-    const first = words[i]
-    const last = words[i + needle.length - 1]
-    const start = sourceToTimelineUs(spine, mediaId, first.startUs)
-    const end = sourceToTimelineUs(spine, mediaId, last.endUs)
-    if (start === null || end === null || end <= start) continue
+    const sourceStart = words[i].startUs
+    const sourceEnd = words[i + needle.length - 1].endUs
+    const pieces: LineSegment[] = []
+    for (const element of spine.elements) {
+      if (element.kind !== "video" || element.mediaId !== mediaId) continue
+      const from = Math.max(sourceStart, element.trimStartUs)
+      const to = Math.min(sourceEnd, element.trimEndUs)
+      if (to <= from) continue
+      const rate = clipRate(element)
+      pieces.push({
+        elementId: element.id,
+        fromUs: us(element.startUs + (from - element.trimStartUs) / rate),
+        toUs: us(element.startUs + (to - element.trimStartUs) / rate),
+      })
+    }
+    if (pieces.length === 0) continue
+    pieces.sort((a, b) => a.fromUs - b.fromUs)
 
-    const element = spine.elements.find(
-      (candidate) =>
-        start >= candidate.startUs &&
-        start < candidate.startUs + candidate.durationUs
-    )
-    if (!element) continue
+    // The first word has to have survived; a line that starts mid-word was
+    // cut into, and the push would land on a fragment.
+    const firstClip = spine.elements.find((e) => e.id === pieces[0].elementId)
+    if (
+      !firstClip ||
+      firstClip.kind !== "video" ||
+      firstClip.trimStartUs > sourceStart
+    ) {
+      continue
+    }
+
+    const first = pieces[0]
+    const last = pieces[pieces.length - 1]
+    const lastClip = spine.elements.find((e) => e.id === last.elementId)!
+    const lastEnd = lastClip.startUs + lastClip.durationUs
+    first.fromUs = us(Math.max(firstClip.startUs, first.fromUs - LINE_LEAD_US))
+    last.toUs = us(Math.min(lastEnd, last.toUs + LINE_TAIL_US))
+    // Between the first and the last, a push holds to each cut.
+    for (const piece of pieces.slice(0, -1)) {
+      const clip = spine.elements.find((e) => e.id === piece.elementId)!
+      piece.toUs = us(clip.startUs + clip.durationUs)
+    }
+    for (const piece of pieces.slice(1)) {
+      const clip = spine.elements.find((e) => e.id === piece.elementId)!
+      piece.fromUs = us(clip.startUs)
+    }
 
     return {
-      elementId: element.id,
-      fromUs: us(Math.max(element.startUs, start - LINE_LEAD_US)),
-      toUs: us(end + LINE_TAIL_US),
+      elementId: first.elementId,
+      fromUs: first.fromUs,
+      toUs: last.toUs,
+      segments: pieces,
     }
   }
   return null
+}
+
+/**
+ * One push across a line, however many clips it crosses: in on the first,
+ * held through the middle, released on the last. Refused (with the reason)
+ * when it would be one push too many.
+ */
+export function pushOnLine(
+  scene: Scene,
+  line: LineWindow,
+  scale: number = SUBTLE_SCALE
+): { ops: EditOp[]; refusal: string | null } {
+  const ids = line.segments.map((segment) => segment.elementId)
+  const refusal = emphasisRefusal(scene, ids, {
+    startUs: line.fromUs,
+    endUs: line.toUs,
+  })
+  if (refusal) return { ops: [], refusal }
+
+  const count = line.segments.length
+  const ops = line.segments.flatMap((segment, index) =>
+    punchIn(scene, segment.elementId, {
+      scale,
+      fromUs: segment.fromUs,
+      toUs: segment.toUs,
+      hold: index < count - 1,
+      startIn: index > 0,
+    })
+  )
+  return { ops, refusal: null }
 }
 
 /**
