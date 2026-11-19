@@ -116,7 +116,7 @@ export function StudioTextPanel({
           <input
             className={FIELD}
             aria-label={role === "lower_third" ? "Name" : "Text"}
-            placeholder={role === "lower_third" ? "Name" : role === "end_card" ? "Thanks for watching" : "Title"}
+            placeholder={role === "lower_third" ? "Name" : role === "end_card" ? "Thanks for watching" : role === "hook" ? "Wait until you see this" : "Title"}
             value={content}
             maxLength={MAX_TEXT_LENGTH}
             onChange={(event) => setContent(event.target.value)}

@@ -675,14 +675,20 @@ function TextLayer({ element }: { element: TextElement }) {
   const role = element.role
   const opacity = textOpacity(usForFrame(frame, fps), element.durationUs)
   const lower = role === "lower_third"
+  // A hook sits in the top third, over the background rather than the face.
+  const top = role === "hook"
   const inset = Math.round(Math.min(width, height) * 0.06)
 
   return (
     <AbsoluteFill
       style={{
-        justifyContent: lower ? "flex-end" : "center",
+        justifyContent: lower ? "flex-end" : top ? "flex-start" : "center",
         alignItems: lower ? "flex-start" : "center",
-        padding: lower ? `0 ${inset}px ${Math.round(height * 0.16)}px` : inset,
+        padding: lower
+          ? `0 ${inset}px ${Math.round(height * 0.16)}px`
+          : top
+            ? `${Math.round(height * 0.12)}px ${inset}px 0`
+            : inset,
         pointerEvents: "none",
         opacity,
         transform:

@@ -327,9 +327,10 @@ export type TextElement = ElementBase & {
   /**
    * What the text is for, which decides where it sits and how it enters:
    * a title card over the middle, a name and role low on the left, an end
-   * card. Absent is a plain line in the middle.
+   * card, a hook across the top third in the opening seconds. Absent is a
+   * plain line in the middle.
    */
-  role?: "title" | "lower_third" | "end_card"
+  role?: "title" | "lower_third" | "end_card" | "hook"
   /** A second, smaller line under the first (a lower third's role). */
   subtitle?: string
   style: CaptionStyle

@@ -63,6 +63,30 @@ export const TEXT_PRESETS: Record<TextRole, TextPreset> = {
     durationUs: 3_000_000,
     style: { ...BASE, fontSize: 80, fontWeight: 800 },
   },
+  /**
+   * The opening line on screen (hooks.ts). Across the top third, so it sits
+   * over the background and not the face, and on a box so it reads over
+   * anything in the first frames, where nobody has chosen what is behind it.
+   */
+  hook: {
+    role: "hook",
+    label: "Hook",
+    durationUs: 2_500_000,
+    style: {
+      ...BASE,
+      fontSize: 72,
+      fontWeight: 800,
+      lineHeight: 1.1,
+      background: {
+        enabled: true,
+        color: "rgba(0,0,0,0.78)",
+        cornerRadius: 14,
+        paddingX: 32,
+        paddingY: 18,
+      },
+      shadow: { color: "rgba(0,0,0,0)", blur: 0, offsetX: 0, offsetY: 0 },
+    },
+  },
 }
 
 /** The fade in and out on every text, in microseconds. */
