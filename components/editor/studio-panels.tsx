@@ -420,6 +420,7 @@ export function StudioSettingsPanel({
   onLook,
   speakers,
   onNameSpeaker,
+  onCutSpeaker,
   background,
   onBackground,
   onImportSubtitles,
@@ -433,6 +434,8 @@ export function StudioSettingsPanel({
   onLook: (key: LookPreset["key"]) => void
   speakers: SpeakerRow[]
   onNameSpeaker: (speaker: number, name: string) => void
+  /** Cut everything one speaker says (speakers.ts `cutSpeaker`). */
+  onCutSpeaker?: (speaker: number) => void
   background: string
   onBackground: (color: string) => void
   onImportSubtitles: (file: File) => void
@@ -513,7 +516,14 @@ export function StudioSettingsPanel({
         <Section title="Speakers">
           <ul className="flex flex-col gap-2">
             {speakers.map((row) => (
-              <SpeakerItem key={row.speaker} row={row} onName={onNameSpeaker} disabled={disabled} />
+              <SpeakerItem
+                key={row.speaker}
+                row={row}
+                onName={onNameSpeaker}
+                // Cutting the only voice would cut the whole recording.
+                onCut={speakers.length > 1 ? onCutSpeaker : undefined}
+                disabled={disabled}
+              />
             ))}
           </ul>
         </Section>
@@ -542,16 +552,18 @@ function toHex(color: string): string {
 function SpeakerItem({
   row,
   onName,
+  onCut,
   disabled,
 }: {
   row: SpeakerRow
   onName: (speaker: number, name: string) => void
+  onCut?: (speaker: number) => void
   disabled?: boolean
 }) {
   const [draft, setName] = React.useState<string | null>(null)
   const name = draft ?? row.name
   return (
-    <li>
+    <li className="flex items-center gap-2">
       <input
         className={FIELD}
         aria-label={`Name for ${row.placeholder}`}
@@ -567,6 +579,18 @@ function SpeakerItem({
           if (event.key === "Enter") event.currentTarget.blur()
         }}
       />
+      {onCut ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onCut(row.speaker)}
+          className={CHIP}
+          aria-label={`Cut everything ${row.name || row.placeholder} says`}
+          title="Cut everything this speaker says. Undo brings it back."
+        >
+          Cut out
+        </button>
+      ) : null}
     </li>
   )
 }
@@ -580,10 +604,13 @@ export function StudioInspector({
   onDucking,
   onLayout,
   onOpacity,
+  onDetachSound,
   disabled,
 }: {
   element: TimelineElement
   onSpeed?: (speed: number) => void
+  /** Take the clip's sound onto a lane of its own (detach-sound.ts). */
+  onDetachSound?: () => void
   onVolume?: (volume: number) => void
   onDucking?: (enabled: boolean) => void
   onLayout?: (key: LayoutKey) => void
@@ -596,7 +623,13 @@ export function StudioInspector({
   return (
     <div className="border-b border-kit-hairline">
       <Section title={element.name || "Selected"}>
-        {kind === "video" && onSpeed ? (
+        {kind === "video" && element.frozen ? (
+          <span className="px-1 text-kit-small text-kit-ink-muted">
+            A held frame. Drag its end to hold it longer.
+          </span>
+        ) : null}
+
+        {kind === "video" && !element.frozen && onSpeed ? (
           <div className="flex flex-col gap-1">
             <span className="px-1 text-kit-small text-kit-ink-muted">Speed</span>
             <div className="flex flex-wrap gap-1" role="group" aria-label="Speed">
@@ -616,8 +649,18 @@ export function StudioInspector({
           </div>
         ) : null}
 
-        {(kind === "video" || kind === "audio") && onVolume ? (
+        {(kind === "audio" || (kind === "video" && !element.frozen)) && onVolume ? (
           <VolumeSlider volume={element.volume} muted={element.muted} onCommit={onVolume} disabled={disabled} />
+        ) : null}
+
+        {kind === "video" &&
+        !element.frozen &&
+        !element.muted &&
+        (element.speed ?? 1) === 1 &&
+        onDetachSound ? (
+          <button type="button" disabled={disabled} onClick={onDetachSound} className={CHIP}>
+            Detach the sound
+          </button>
         ) : null}
 
         {kind === "audio" && onDucking ? (

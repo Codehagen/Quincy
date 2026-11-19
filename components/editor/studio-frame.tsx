@@ -102,6 +102,7 @@ export function StudioFrame({
   transport,
   running,
   toolbar,
+  selection,
   toolbarEnd,
   children,
   deskRef,
@@ -136,6 +137,11 @@ export function StudioFrame({
   running: boolean
   /** The timeline's tools: the cuts menu, split, delete, the zoom effect. */
   toolbar?: React.ReactNode
+  /**
+   * What is selected on the lanes and its few settings (an effect's amount),
+   * after the clock. On the left so that appearing moves none of the tools.
+   */
+  selection?: React.ReactNode
   /** The timeline zoom, at the toolbar's right end. */
   toolbarEnd?: React.ReactNode
   /** The lanes. */
@@ -183,7 +189,11 @@ export function StudioFrame({
                 HIT_44
               )}
             >
-              <HugeiconsIcon aria-hidden="true" icon={ArrowLeft01Icon} size={17} />
+              <HugeiconsIcon
+                aria-hidden="true"
+                icon={ArrowLeft01Icon}
+                size={17}
+              />
             </Link>
             <Link
               href="/cuts?all=1"
@@ -196,7 +206,12 @@ export function StudioFrame({
             >
               All cuts
             </Link>
-            <span aria-hidden="true" className="text-kit-small text-kit-ink-disabled">/</span>
+            <span
+              aria-hidden="true"
+              className="text-kit-small text-kit-ink-disabled"
+            >
+              /
+            </span>
             <h1 className="min-w-0">{name}</h1>
           </div>
 
@@ -222,7 +237,10 @@ export function StudioFrame({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <nav aria-label="Editor tools" className="flex w-18 shrink-0 flex-col items-center gap-1 px-1.5 pt-1">
+          <nav
+            aria-label="Editor tools"
+            className="flex w-18 shrink-0 flex-col items-center gap-1 px-1.5 pt-1"
+          >
             {RAIL.map((item) => {
               const open = item.tool !== undefined && item.tool === tool
               return (
@@ -232,10 +250,16 @@ export function StudioFrame({
                   disabled={item.tool === undefined}
                   aria-pressed={item.tool === undefined ? undefined : open}
                   aria-controls={item.tool ? "desk-library" : undefined}
-                  title={item.tool === undefined ? `${item.label}, not built yet` : undefined}
+                  title={
+                    item.tool === undefined
+                      ? `${item.label}, not built yet`
+                      : undefined
+                  }
                   // A second press closes it: a panel you cannot shut makes
                   // the thing you are editing permanently smaller.
-                  onClick={() => item.tool && onToolChange(open ? null : item.tool)}
+                  onClick={() =>
+                    item.tool && onToolChange(open ? null : item.tool)
+                  }
                   className={cn(
                     "flex w-full flex-col items-center gap-1 rounded-kit-control py-2 text-kit-ink-muted",
                     "transition-[background-color,color] duration-150 ease-out",
@@ -243,12 +267,20 @@ export function StudioFrame({
                     // A dimmer token, not opacity: at this size opacity takes
                     // the label from quiet to unreadable.
                     "disabled:cursor-not-allowed disabled:text-kit-ink-disabled",
-                    !open && item.tool !== undefined && "hover:bg-kit-row-hover hover:text-kit-ink",
+                    !open &&
+                      item.tool !== undefined &&
+                      "hover:bg-kit-row-hover hover:text-kit-ink",
                     open && "bg-kit-selected text-kit-ink"
                   )}
                 >
-                  <HugeiconsIcon aria-hidden="true" icon={item.icon} size={18} />
-                  <span className="text-kit-meta leading-none">{item.label}</span>
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    icon={item.icon}
+                    size={18}
+                  />
+                  <span className="text-kit-meta leading-none">
+                    {item.label}
+                  </span>
                 </button>
               )
             })}
@@ -282,7 +314,10 @@ export function StudioFrame({
                     <aside
                       id="desk-library"
                       aria-label={tool === "effects" ? "Effects" : "Media"}
-                      className={cn(OBJECT, "mr-2 h-full w-[260px] overflow-hidden")}
+                      className={cn(
+                        OBJECT,
+                        "mr-2 h-full w-[260px] overflow-hidden"
+                      )}
                     >
                       {panel}
                     </aside>
@@ -303,9 +338,18 @@ export function StudioFrame({
                 <div
                   role="group"
                   aria-label="Side panel"
-                  className={cn(OBJECT, "ml-2 flex flex-col gap-1 self-start p-1.5")}
+                  className={cn(
+                    OBJECT,
+                    "ml-2 flex flex-col gap-1 self-start p-1.5"
+                  )}
                 >
-                  <DeskIconButton icon={Chat01Icon} label="Chat" side="left" pressed={side === "chat"} onClick={() => onSideChange("chat")} />
+                  <DeskIconButton
+                    icon={Chat01Icon}
+                    label="Chat"
+                    side="left"
+                    pressed={side === "chat"}
+                    onClick={() => onSideChange("chat")}
+                  />
                   <DeskIconButton
                     icon={TextAlignLeftIcon}
                     label="Transcript"
@@ -324,12 +368,16 @@ export function StudioFrame({
 
               {/* A size container: the zoom drops its slider when the
                   timeline is narrow (desk-controls.tsx). */}
-              <section aria-label="Timeline" className={cn(OBJECT, "@container shrink-0")}>
+              <section
+                aria-label="Timeline"
+                className={cn(OBJECT, "@container shrink-0")}
+              >
                 {/* The groups never shrink under their content (they would
                     overlap); when the row is too narrow, the tools wrap to a
                     second row, still right-aligned. */}
                 <div className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-0.5">
                   {transport}
+                  {selection}
                   {/* Why the lanes do not answer: in over 120ms when a run
                       starts, out with its fold. Always mounted so it can fade. */}
                   {/* Basis 0: it fills what the row has left and truncates,
@@ -342,9 +390,13 @@ export function StudioFrame({
                     Read-only while Quincy cuts
                   </span>
                   <div className="ml-auto flex flex-none items-center gap-2">
-                    <div className="flex flex-none items-center gap-1">{toolbar}</div>
+                    <div className="flex flex-none items-center gap-1">
+                      {toolbar}
+                    </div>
                     {toolbarEnd ? (
-                      <div className="flex flex-none items-center border-l border-kit-hairline pl-2">{toolbarEnd}</div>
+                      <div className="flex flex-none items-center border-l border-kit-hairline pl-2">
+                        {toolbarEnd}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -356,12 +408,23 @@ export function StudioFrame({
                 unmounting it would drop the stream mid-cut. */}
             <aside
               aria-label="Side panel content"
-              className={cn(OBJECT, "w-[340px] shrink-0 overflow-hidden", side === null && "hidden")}
+              className={cn(
+                OBJECT,
+                "w-[340px] shrink-0 overflow-hidden",
+                side === null && "hidden"
+              )}
             >
               {/* Its own key scope: Space and S belong to the thread here,
                   not the timeline (editor-keys.ts). */}
-              <div data-chat-keys="" className={cn("h-full", side !== "chat" && "hidden")}>{chat}</div>
-              <div className={cn("h-full", side !== "transcript" && "hidden")}>{transcript}</div>
+              <div
+                data-chat-keys=""
+                className={cn("h-full", side !== "chat" && "hidden")}
+              >
+                {chat}
+              </div>
+              <div className={cn("h-full", side !== "transcript" && "hidden")}>
+                {transcript}
+              </div>
             </aside>
           </div>
         </div>

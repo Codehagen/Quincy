@@ -2,10 +2,10 @@
 
 import * as React from "react"
 import {
-  Add01Icon,
+  SearchAddIcon,
   ArrowDown01Icon,
   AspectRatioIcon,
-  Remove01Icon,
+  SearchMinusIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
@@ -126,9 +126,17 @@ export function FrameMenu({
             shape never moves Undo and Redo beside it. */}
         <span className="min-w-16 whitespace-nowrap tabular-nums">
           {current?.label ?? "Custom"}
-          <span className="text-kit-ink-muted"> · {fit === "cover" ? "Fill" : "Fit"}</span>
+          <span className="text-kit-ink-muted">
+            {" "}
+            · {fit === "cover" ? "Fill" : "Fit"}
+          </span>
         </span>
-        <HugeiconsIcon aria-hidden="true" icon={ArrowDown01Icon} size={14} className="text-kit-ink-muted" />
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={ArrowDown01Icon}
+          size={14}
+          className="text-kit-ink-muted"
+        />
       </MenuTrigger>
       <MenuPanel align="center">
         <MenuGroup>
@@ -141,14 +149,20 @@ export function FrameMenu({
             }}
           >
             {shapes.map((s) => (
-              <MenuRadioItem key={s.key} value={s.key}>{`${s.label}  ${s.hint}`}</MenuRadioItem>
+              <MenuRadioItem
+                key={s.key}
+                value={s.key}
+              >{`${s.label}  ${s.hint}`}</MenuRadioItem>
             ))}
           </MenuRadioGroup>
         </MenuGroup>
         <MenuSeparator />
         <MenuGroup>
           <MenuGroupLabel>Picture</MenuGroupLabel>
-          <MenuRadioGroup value={fit} onValueChange={(v: "cover" | "contain") => onFitChange(v)}>
+          <MenuRadioGroup
+            value={fit}
+            onValueChange={(v: "cover" | "contain") => onFitChange(v)}
+          >
             <MenuRadioItem value="contain">Fit, show all of it</MenuRadioItem>
             <MenuRadioItem value="cover">Fill, crop to the frame</MenuRadioItem>
           </MenuRadioGroup>
@@ -186,16 +200,28 @@ export function SceneMenu({
 
   return (
     <Menu>
-      <MenuTrigger aria-label={`Cuts in this project: ${label}`} disabled={disabled}>
+      <MenuTrigger
+        aria-label={`Cuts in this project: ${label}`}
+        disabled={disabled}
+      >
         <span className="max-w-32 truncate">{label}</span>
-        <HugeiconsIcon aria-hidden="true" icon={ArrowDown01Icon} size={14} className="text-kit-ink-muted" />
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={ArrowDown01Icon}
+          size={14}
+          className="text-kit-ink-muted"
+        />
       </MenuTrigger>
       <MenuPanel>
         <MenuRadioGroup
           value={currentId ?? "all"}
-          onValueChange={(id: string) => (id === "all" ? onShowCuts() : onPick(id))}
+          onValueChange={(id: string) =>
+            id === "all" ? onShowCuts() : onPick(id)
+          }
         >
-          {cutsLabel ? <MenuRadioItem value="all">{cutsLabel}</MenuRadioItem> : null}
+          {cutsLabel ? (
+            <MenuRadioItem value="all">{cutsLabel}</MenuRadioItem>
+          ) : null}
           {scenes.map((s) => (
             <MenuRadioItem key={s.id} value={s.id}>
               {name(s)}
@@ -208,11 +234,15 @@ export function SceneMenu({
 }
 
 /**
- * Timeline zoom as a slider between − and +.
+ * Timeline zoom as a slider between two magnifiers.
  *
  * The slider runs on log2 of the zoom, so each equal stretch of track is a
  * doubling: linear, the whole useful range (1× to 4×) would sit in the first
  * tenth of the track.
+ *
+ * Magnifiers rather than − and +, behind a rule: the zoom *effect* has its own
+ * − and + for its amount, and two pairs of bare signs side by side read as
+ * one control that did two unrelated things.
  */
 export function TimelineZoom({
   zoom,
@@ -230,8 +260,18 @@ export function TimelineZoom({
   canZoomOut: boolean
 }) {
   return (
-    <div className="flex items-center gap-1">
-      <DeskIconButton icon={Remove01Icon} label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut} />
+    <div
+      role="group"
+      aria-label="Timeline zoom"
+      className="flex items-center gap-1 border-l border-kit-hairline pl-2"
+    >
+      <DeskIconButton
+        icon={SearchMinusIcon}
+        label="Zoom the timeline out"
+        shortcut={["−"]}
+        onClick={onZoomOut}
+        disabled={!canZoomOut}
+      />
       {/* Dropped when the timeline is narrow (its section is the size
           container): − and + still zoom, and the toolbar keeps its room. */}
       <div className="w-24 @max-3xl:hidden">
@@ -245,7 +285,13 @@ export function TimelineZoom({
           getAriaValueText={(v) => `${(2 ** v).toFixed(1)}×`}
         />
       </div>
-      <DeskIconButton icon={Add01Icon} label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+      <DeskIconButton
+        icon={SearchAddIcon}
+        label="Zoom the timeline in"
+        shortcut={["="]}
+        onClick={onZoomIn}
+        disabled={!canZoomIn}
+      />
     </div>
   )
 }

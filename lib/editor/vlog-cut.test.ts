@@ -186,6 +186,10 @@ describe("restrained zoom", () => {
     expect(
       emphasisRefusal(pushed, first.id, { startUs: s(3), endUs: s(5) })
     ).toBeNull()
+    // One elsewhere on the same clip stays, so it counts.
+    expect(
+      emphasisRefusal(pushed, first.id, { startUs: s(6), endUs: s(8) })
+    ).toMatch(/already a push-in at 0:02/)
   })
 
   it("refuses a push that leaves too much of the cut pushed in", () => {

@@ -276,6 +276,228 @@ export function deleteSpeech(
 }
 
 /**
+ * Remove several elements at once, as one revision: what Delete means with
+ * more than one clip selected. Spine clips ripple, so the cut closes up once
+ * rather than once per clip; anything over the spine comes off its lane and
+ * leaves a gap, as a single delete does. Refuses to empty the spine.
+ */
+export function removeElements(
+  scene: Scene,
+  elementIds: readonly string[]
+): EditOp[] {
+  const ids = new Set(elementIds)
+  if (ids.size === 0) return []
+  const spine = findMainTrack(scene)
+  const ops: EditOp[] = []
+
+  for (const track of scene.tracks) {
+    if (track.isMain) continue
+    for (const element of track.elements) {
+      if (!ids.has(element.id)) continue
+      ops.push({
+        op: "remove_element",
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+      })
+    }
+  }
+
+  if (spine && spine.elements.some((element) => ids.has(element.id))) {
+    const kept = spine.elements.filter((element) => !ids.has(element.id))
+    if (kept.length === 0) return []
+    const remaining = layOut(kept)
+    ops.push(
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining)
+    )
+  }
+
+  if (ops.length === 0) return []
+  return aimed(ops, {
+    action: "cut",
+    kind: "track",
+    trackId: spine?.id ?? scene.tracks[0].id,
+  })
+}
+
+/**
+ * Put a copy of a clip into the spine at an instant, and push what follows
+ * along. A paste or a duplicate on the spine.
+ *
+ * Inside a clip, the clip is split there and the copy goes between the
+ * halves; on a cut, it goes into the cut. The spine stays magnetic: the
+ * result is laid out from 0 with no gaps, as one `replace_elements`, so it is
+ * one revision and one undo.
+ */
+export function insertOnSpine(
+  scene: Scene,
+  clip: VideoElement,
+  atUs: number,
+  author: Author = "user"
+): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
+  const copy = newElement<VideoElement>(
+    { ...clip, id: undefined, startUs: us(0) },
+    author
+  )
+  const out: TimelineElement[] = []
+  let placed = false
+
+  for (const element of spine.elements) {
+    const end = element.startUs + element.durationUs
+    if (!placed && atUs <= element.startUs) {
+      out.push(copy)
+      placed = true
+    }
+    if (
+      !placed &&
+      element.kind === "video" &&
+      atUs > element.startUs &&
+      atUs < end
+    ) {
+      const original = element as VideoElement
+      const offset = atUs - original.startUs
+      const sourceAt = us(
+        Math.round(
+          original.trimStartUs +
+            (offset / original.durationUs) *
+              (original.trimEndUs - original.trimStartUs)
+        )
+      )
+      out.push(
+        newElement<VideoElement>(
+          {
+            ...original,
+            id: undefined,
+            durationUs: us(offset),
+            trimEndUs: sourceAt,
+          },
+          author
+        ),
+        copy,
+        newElement<VideoElement>(
+          {
+            ...original,
+            id: undefined,
+            durationUs: us(original.durationUs - offset),
+            trimStartUs: sourceAt,
+          },
+          author
+        )
+      )
+      placed = true
+      continue
+    }
+    out.push(element)
+  }
+  if (!placed) out.push(copy)
+
+  const remaining = layOut(out)
+
+  return aimed(
+    [
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining),
+    ],
+    { action: "press", kind: "track", trackId: spine.id }
+  )
+}
+
+/**
+ * Cut a stretch of the timeline out of the spine, between an in and an out.
+ *
+ * What I, O and Delete mean: the range is in timeline time, because that is
+ * where the person marked it, and each clip it crosses loses only its own
+ * share. Mapping it to source time per clip, rather than once for the whole
+ * spine, matters when the same footage is on the spine twice: a source range
+ * would cut both copies, and only one was marked.
+ *
+ * Ripples like every spine delete, and refuses to empty the spine for the
+ * reason `deleteSpeech` gives.
+ */
+export function deleteTimelineRange(
+  scene: Scene,
+  fromUs: number,
+  toUs: number
+): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
+  const start = Math.min(fromUs, toUs)
+  const end = Math.max(fromUs, toUs)
+  if (end - start <= 0) return []
+
+  let changed = false
+
+  const cut = spine.elements.flatMap((element): TimelineElement[] => {
+    if (element.kind !== "video") return [element]
+    const clip = element as VideoElement
+    const clipEnd = clip.startUs + clip.durationUs
+    const overlapFrom = Math.max(start, clip.startUs)
+    const overlapTo = Math.min(end, clipEnd)
+    if (overlapTo <= overlapFrom) return [element]
+
+    const rate = clipRate(clip)
+    const source: UsRange = {
+      startUs: us(
+        Math.round(clip.trimStartUs + (overlapFrom - clip.startUs) * rate)
+      ),
+      endUs: us(
+        Math.round(clip.trimStartUs + (overlapTo - clip.startUs) * rate)
+      ),
+    }
+    const pieces = splitBySourceRanges(clip, [source], newElementId)
+    if (pieces.length === 1 && pieces[0] === element) return pieces
+
+    changed = true
+    return pieces.map((piece) => ({
+      ...piece,
+      provenance: stampFields(piece.provenance, "user", [
+        "startUs",
+        "durationUs",
+        "trimStartUs",
+        "trimEndUs",
+      ]),
+    }))
+  })
+
+  if (!changed || cut.length === 0) return []
+
+  const remaining = layOut(cut)
+
+  return aimed(
+    [
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining),
+    ],
+    {
+      action: "cut",
+      kind: "range",
+      trackId: spine.id,
+      spans: [{ startUs: us(start), endUs: us(end) }],
+    }
+  )
+}
+
+/**
  * Trim one edge of a clip.
  *
  * The timeline duration and the source trim move together, because they are two
@@ -304,7 +526,9 @@ export function trimEdge(
   const clip = element as VideoElement
   const delta = Math.round(clampTrimDelta(clip, edge, deltaUs))
   if (delta === 0) return []
-  const sourceDelta = Math.round(delta * clipRate(clip))
+  // A still has no footage to move through: trimming it only changes how long
+  // it holds.
+  const sourceDelta = clip.frozen ? 0 : Math.round(delta * clipRate(clip))
 
   if (edge === "end") {
     return withRipple(scene, trackId, elementId, {
@@ -337,6 +561,9 @@ export function trimEdge(
 /** Roughly a frame at 25fps. A clip shorter than this is a slip, not an edit. */
 export const MINIMUM_CLIP_US = 40_000
 
+/** The longest a still holds. Past this it is a slideshow, not a beat. */
+export const MAX_FREEZE_US = 30_000_000
+
 /**
  * How far this edge can actually move, given where the source runs out.
  *
@@ -350,6 +577,19 @@ export function clampTrimDelta(
   edge: "start" | "end",
   deltaUs: number
 ): number {
+  if (clip.frozen) {
+    const longest = MAX_FREEZE_US - clip.durationUs
+    if (edge === "end")
+      return Math.max(
+        MINIMUM_CLIP_US - clip.durationUs,
+        Math.min(deltaUs, longest)
+      )
+    return Math.max(
+      -longest,
+      Math.min(deltaUs, clip.durationUs - MINIMUM_CLIP_US)
+    )
+  }
+
   // The delta is timeline time; the source moves by `rate` times as much.
   const rate = clipRate(clip)
   if (edge === "end") {
@@ -620,10 +860,12 @@ export type PunchInOptions = {
  * transform is where a person's framing lives, and an agent adding emphasis
  * must not overwrite it. They multiply at render time in `effects.ts`.
  *
- * An existing zoom on the same clip is *replaced*, not stacked. Effects
- * compose, so a second punch-in on a clip that already had one would push to
- * 1.69 and the agent would have no way to know it had — asking twice for a
- * punch-in should look like asking once.
+ * An existing zoom whose window overlaps this one is *replaced*, not
+ * stacked. Effects compose, so a second punch-in over the same words would
+ * push to 1.25 and nobody would know why — asking twice for a punch-in on
+ * the same line should look like asking once. A zoom elsewhere on the clip
+ * stays: outside its window it is back at 1, so the two never multiply, and
+ * dropping it silently threw away an earlier emphasis on a long clip.
  */
 export function punchIn(
   scene: Scene,
@@ -710,47 +952,53 @@ export function punchIn(
   const keys = continued
     ? continued
     : options.hold
-    ? [
-        newKeyframe({
-          timeUs: us(startLocalUs),
-          value: 1,
-          interpolation: "bezier",
-          easing: PUSH_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(startLocalUs + rampUs),
-          value: scale,
-          interpolation: "linear",
-        }),
-      ]
-    : [
-        newKeyframe({
-          timeUs: us(startLocalUs),
-          value: 1,
-          interpolation: "bezier",
-          easing: PUSH_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(startLocalUs + rampUs),
-          value: scale,
-          interpolation: "linear",
-        }),
-        newKeyframe({
-          timeUs: us(endLocalUs - rampUs),
-          value: scale,
-          interpolation: "bezier",
-          easing: RELEASE_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(endLocalUs),
-          value: 1,
-          interpolation: "linear",
-        }),
-      ]
+      ? [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: 1,
+            interpolation: "bezier",
+            easing: PUSH_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(startLocalUs + rampUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+        ]
+      : [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: 1,
+            interpolation: "bezier",
+            easing: PUSH_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(startLocalUs + rampUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs - rampUs),
+            value: scale,
+            interpolation: "bezier",
+            easing: RELEASE_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: 1,
+            interpolation: "linear",
+          }),
+        ]
 
   const without = withoutEffects(
     element,
-    (candidate) => candidate.type === "zoom"
+    (candidate) =>
+      candidate.type === "zoom" &&
+      overlapsWindow(
+        zoomWindowLocal(element, candidate.id),
+        startLocalUs,
+        endLocalUs
+      )
   )
 
   return aimed(
@@ -1406,6 +1654,42 @@ export function fade(
  * animates anything and that every later read has to step over. Nothing would
  * ever look wrong, which is why it would survive.
  */
+/**
+ * The element-local span a zoom's curve covers: its first key to its last.
+ * A zoom with no curve covers the whole clip, so it overlaps everything.
+ */
+function zoomWindowLocal(
+  element: TimelineElement & { animations: Animations },
+  effectId: string
+): { fromUs: number; toUs: number } | null {
+  const keys =
+    element.animations.channels[`effects.${effectId}.params.scale`]?.keys
+  if (!keys || keys.length === 0) return null
+  const times = keys.map((key) => key.timeUs)
+  // A curve holds its end values past its keys (effects.ts `sampleChannel`),
+  // so a push that ends or starts away from 1× acts on the picture to the
+  // clip's edge, and that is the window that counts for overlap.
+  const sorted = [...keys].sort((a, b) => a.timeUs - b.timeUs)
+  const neutral = (value: number) => Math.abs(value - 1) < 1e-6
+  return {
+    fromUs: neutral(sorted[0].value)
+      ? Math.min(...times)
+      : Number.NEGATIVE_INFINITY,
+    toUs: neutral(sorted[sorted.length - 1].value)
+      ? Math.max(...times)
+      : Number.POSITIVE_INFINITY,
+  }
+}
+
+function overlapsWindow(
+  window: { fromUs: number; toUs: number } | null,
+  fromUs: number,
+  toUs: number
+): boolean {
+  if (!window) return true
+  return window.fromUs < toUs && fromUs < window.toUs
+}
+
 function withoutEffects(
   element: TimelineElement & { effects: Effect[]; animations: Animations },
   matches: (effect: Effect) => boolean
@@ -1564,11 +1848,14 @@ export function setSpeed(
   speed: number
 ): EditOp[] {
   const track = scene.tracks.find((candidate) => candidate.id === trackId)
-  const element = track?.elements.find((candidate) => candidate.id === elementId)
+  const element = track?.elements.find(
+    (candidate) => candidate.id === elementId
+  )
   if (!track || !element || element.kind !== "video") return []
-  if (!Number.isFinite(speed)) return []
+  if (element.frozen || !Number.isFinite(speed)) return []
 
-  const rate = Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100
+  const rate =
+    Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100
   if (rate === clipRate(element)) return []
   const span = element.trimEndUs - element.trimStartUs
   const durationUs = us(Math.max(MINIMUM_CLIP_US, Math.round(span / rate)))
@@ -1582,5 +1869,7 @@ export function setSpeed(
   }
   if (findMainTrack(scene)?.id === trackId)
     return withRipple(scene, trackId, elementId, op)
-  return [{ ...op, target: { action: "press", kind: "element", trackId, elementId } }]
+  return [
+    { ...op, target: { action: "press", kind: "element", trackId, elementId } },
+  ]
 }

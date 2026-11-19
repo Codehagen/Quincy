@@ -7,6 +7,8 @@ import {
   Redo02Icon,
   ScissorIcon,
   Undo02Icon,
+  KeyboardIcon,
+  ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 
 import { chapterLines, placeChapters } from "@/lib/editor/chapters"
@@ -20,9 +22,21 @@ import {
 import { effectSpec, stepAmount } from "@/lib/editor/effect-catalogue"
 import { effectChips, type EffectChip } from "@/lib/editor/effect-lane"
 import {
+  copyElement,
+  duplicateElement,
+  pasteElement,
+  type ClipboardItem,
+} from "@/lib/editor/clipboard"
+import { hintFor, keyActionFor } from "@/lib/editor/keymap"
+import { placeMarkers, toggleMarker } from "@/lib/editor/markers"
+import { freezeFrame } from "@/lib/editor/freeze"
+import { setAudioFades } from "@/lib/editor/audio-fades"
+import {
   applyEffect,
   cropSpine,
   deleteAndRipple,
+  deleteTimelineRange,
+  removeElements,
   deleteSpeech,
   mainTrackId,
   moveEffect,
@@ -84,7 +98,11 @@ import {
   type StudioTool,
 } from "./studio-frame"
 import { useStudioTools } from "./use-studio-tools"
-import { correctWords, findWords, replaceWords } from "@/lib/editor/correct-words"
+import {
+  correctWords,
+  findWords,
+  replaceWords,
+} from "@/lib/editor/correct-words"
 import { speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
 import { formatClockTenths, PlayButton, PlayheadClock } from "./studio-parts"
 import { StudioLanes, type TrimDrag } from "./studio-lanes"
@@ -102,6 +120,7 @@ import { editorOwnsKey } from "./editor-keys"
 import { useExport } from "./use-export"
 import { useFrameThrottle } from "./use-frame-throttle"
 import { GAP_CLOSE, useReveal } from "./use-reveal"
+import { ShortcutSheet } from "./shortcut-sheet"
 import { usePlayer, usePlayheadSelector } from "./use-player"
 
 /**
@@ -223,6 +242,36 @@ export function Studio({
   }, [redoDocument, fadeLanes])
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  /**
+   * Clips selected along with `selectedId`: Shift-click or ⌘A. Kept apart so
+   * everything that reads one selected clip (the toolbar, the panels) goes on
+   * reading the first, and only Delete and the lanes need the rest.
+   */
+  const [alsoSelected, setAlsoSelected] = React.useState<string[]>([])
+  // Read through a ref: the lanes memoise their clips, so a callback that
+  // closed over `selectedId` would see the selection from before the first
+  // click and treat a Shift-click as a fresh one.
+  const selectedRef = React.useRef(selectedId)
+  React.useEffect(() => {
+    selectedRef.current = selectedId
+  }, [selectedId])
+  const selectClip = React.useCallback(
+    (elementId: string | null, additive = false) => {
+      const current = selectedRef.current
+      if (!additive || elementId === null || current === null) {
+        setSelectedId(elementId)
+        setAlsoSelected([])
+        return
+      }
+      if (current === elementId) return
+      setAlsoSelected((rest) =>
+        rest.includes(elementId)
+          ? rest.filter((id) => id !== elementId)
+          : [...rest, elementId]
+      )
+    },
+    []
+  )
   /**
    * Where the pointer is over the lane, or null. Kept separate from the
    * playhead on purpose: hover previews an instant, clicking commits to it,
@@ -799,6 +848,12 @@ export function Studio({
    * Two seconds, or whatever is left of the clip, because a punch-in is an
    * emphasis and one that runs a whole minute is a different framing rather
    * than a beat.
+   *
+   * The push starts at 1, so with the playhead parked on its first frame the
+   * press used to change nothing you could see: a small chip appeared on the
+   * lane and the picture stayed as it was. So the new zoom is selected (its
+   * amount and Remove come up) and the playhead moves to the top of the
+   * push, where the preview shows what the press did.
    */
   const addZoom = React.useCallback(() => {
     if (!scene || !clipAtPlayhead) return
@@ -809,12 +864,21 @@ export function Studio({
       atUs + DEFAULT_ZOOM_US
     )
 
-    commit(
-      punchIn(scene, clipAtPlayhead.id, {
-        fromUs: us(Math.round(atUs)),
-        toUs: us(Math.round(endUs)),
-      })
-    )
+    const ops = punchIn(scene, clipAtPlayhead.id, {
+      fromUs: us(Math.round(atUs)),
+      toUs: us(Math.round(endUs)),
+    })
+    if (ops.length === 0) return
+    commit(ops)
+
+    const added = addedZoomId(ops)
+    if (added) {
+      // Only the id is read back: liveEffect finds the chip in the scene the
+      // commit just wrote, so the rest is filled in from the document.
+      setSelectedEffect({ id: `${clipAtPlayhead.id}:${added}` } as EffectChip)
+    }
+    const peakUs = atUs + Math.min(ZOOM_RAMP_US, (endUs - atUs) / 2)
+    player.seekTo(us(Math.round(peakUs)))
   }, [commit, scene, clipAtPlayhead, player])
 
   /**
@@ -1189,6 +1253,11 @@ export function Studio({
     }
 
     if (!trackId || !selectedId) return
+    if (alsoSelected.length > 0) {
+      commit(removeElements(scene, [selectedId, ...alsoSelected]))
+      selectClip(null)
+      return
+    }
     // Something over the cut (b-roll, a picture, text, music) comes off its
     // own lane and leaves a gap; only the spine ripples.
     const over = studioTools.selected
@@ -1207,51 +1276,286 @@ export function Studio({
     }
     commit(deleteAndRipple(scene, trackId, selectedId))
     setSelectedId(null)
-  }, [commit, scene, trackId, selectedId, selectedWords, deleteWords, studioTools.selected])
+  }, [
+    commit,
+    scene,
+    trackId,
+    selectedId,
+    selectedWords,
+    deleteWords,
+    studioTools.selected,
+    alsoSelected,
+    selectClip,
+  ])
+
+  /**
+   * The in and out marks. Not in the document: they are where the person is
+   * pointing, like the playhead, and an undo that moved them would be undoing
+   * something nobody did.
+   */
+  const [marks, setMarks] = React.useState<{
+    inUs: number | null
+    outUs: number | null
+  }>({ inUs: null, outUs: null })
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
+
+  const markerTimes = React.useMemo(
+    () => (scene ? placeMarkers(scene, document.metadata.markers) : []),
+    [scene, document.metadata.markers]
+  )
+
+  /** What ⌘C copied. In the editor, not the system clipboard: a clip is not text. */
+  const clipboard = React.useRef<ClipboardItem | null>(null)
+
+  /** Every place a cut falls on the spine, with the start and the end, and the markers. */
+  const cutPoints = React.useMemo(() => {
+    const spine = scene ? findMainTrack(scene) : null
+    const points = new Set<number>([0, ...markerTimes])
+    for (const element of spine?.elements ?? []) {
+      points.add(element.startUs)
+      points.add(element.startUs + element.durationUs)
+    }
+    return [...points].sort((x, y) => x - y)
+  }, [scene, markerTimes])
+
+  const seekBy = React.useCallback(
+    (deltaUs: number) => {
+      const next = Math.min(
+        durationUs,
+        Math.max(0, player.readPlayhead() + deltaUs)
+      )
+      player.seekTo(us(Math.round(next)))
+    },
+    [player, durationUs]
+  )
+
+  /**
+   * Q and W: the clip under the playhead loses everything before (or after)
+   * the playhead, and the spine closes up. After Q the frame that was under
+   * the playhead is now the clip's first, so the playhead goes there.
+   */
+  const trimToPlayhead = React.useCallback(
+    (edge: "start" | "end") => {
+      if (!scene || !trackId || !clipAtPlayhead) return
+      const at = player.readPlayhead()
+      const clipEnd = clipAtPlayhead.startUs + clipAtPlayhead.durationUs
+      const delta =
+        edge === "start" ? at - clipAtPlayhead.startUs : at - clipEnd
+      if (delta === 0) return
+      commit(trimEdge(scene, trackId, clipAtPlayhead.id, edge, delta))
+      if (edge === "start") player.seekTo(us(clipAtPlayhead.startUs))
+    },
+    [commit, scene, trackId, clipAtPlayhead, player]
+  )
+
+  const cutMarked = React.useCallback(() => {
+    if (!scene || marks.inUs === null || marks.outUs === null) return
+    const ops = deleteTimelineRange(scene, marks.inUs, marks.outUs)
+    if (ops.length === 0) return
+    commit(ops)
+    player.seekTo(us(Math.round(Math.min(marks.inUs, marks.outUs))))
+    setMarks({ inUs: null, outUs: null })
+  }, [commit, scene, marks, player])
 
   /**
    * Keyboard, because this is an editor. Who owns a press (a text field, a
    * focused control, the chat margin, or the editor) is decided in
-   * editor-keys.ts, where it is tested.
+   * editor-keys.ts; what a press means is the table in lib/editor/keymap.ts,
+   * which the shortcut sheet reads too. Both are tested.
    */
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (!editorOwnsKey(target, event)) return
+  const onKey = React.useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!editorOwnsKey(target, event)) return
 
-      if (event.key === " ") {
-        event.preventDefault()
+    const action = keyActionFor(event)
+    if (!action) return
+
+    // Escape is "never mind": it never swallows the press, so a dialog or a
+    // menu still closes on it. Copy and paste with nothing to copy or paste
+    // leave the browser's own to happen.
+    const passive =
+      action === "deselect" ||
+      (action === "copy" && !selectedId) ||
+      (action === "paste" && !clipboard.current)
+    if (passive && action !== "deselect") return
+    if (!passive) event.preventDefault()
+
+    // While Quincy cuts, the document is read-only: the keys that only look
+    // still work, the ones that edit do nothing.
+    const edits =
+      action === "split" ||
+      action === "delete-range" ||
+      action === "trim-start" ||
+      action === "trim-end" ||
+      action === "delete" ||
+      action === "add-zoom" ||
+      action === "freeze" ||
+      action === "add-marker" ||
+      action === "paste" ||
+      action === "duplicate" ||
+      action === "undo" ||
+      action === "redo"
+    if (edits && running) return
+
+    // A locked spine answers no edit by hand: the guard is against a stray
+    // key as much as a stray drag.
+    const spineEdit =
+      action === "split" ||
+      action === "delete-range" ||
+      action === "trim-start" ||
+      action === "trim-end" ||
+      action === "paste" ||
+      action === "duplicate" ||
+      action === "freeze" ||
+      action === "delete"
+    if (spineEdit && scene && findMainTrack(scene)?.locked) return
+
+    const frameUs = 1_000_000 / fps
+    const at = player.readPlayhead()
+
+    switch (action) {
+      case "toggle-play":
         player.toggle()
-      } else if (event.key === "Escape") {
-        // Drops all three. Escape means "never mind" everywhere else in the
-        // app, and both a selected effect and a selected phrase leave a
-        // destructive button sitting in a toolbar.
-        setSelectedEffect(null)
-        setSelectedId(null)
-        setTranscriptSelection(null)
-      } else if (event.key === "<" || event.key === ">") {
-        event.preventDefault()
-        setRate((current) => stepRate(current, event.key === ">" ? 1 : -1))
-      } else if (event.key === "s" && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault()
+        break
+      case "play-forward":
+        // Pressed while playing it speeds up, the way a shuttle does.
+        if (player.playing) setRate((current) => stepRate(current, 1))
+        else player.play()
+        break
+      case "pause":
+        player.pause()
+        setRate(1)
+        break
+      case "back-second":
+        player.pause()
+        seekBy(-1_000_000)
+        break
+      case "frame-back":
+        player.pause()
+        seekBy(-frameUs)
+        break
+      case "frame-forward":
+        player.pause()
+        seekBy(frameUs)
+        break
+      case "second-back":
+        seekBy(-1_000_000)
+        break
+      case "second-forward":
+        seekBy(1_000_000)
+        break
+      case "previous-cut": {
+        // A hair of slack, so pressing ↑ while parked on a cut goes to the one
+        // before it rather than to where it already is.
+        const before = cutPoints.filter((point) => point < at - frameUs / 2)
+        player.seekTo(us(before.at(-1) ?? 0))
+        break
+      }
+      case "next-cut": {
+        const after = cutPoints.find((point) => point > at + frameUs / 2)
+        player.seekTo(us(Math.min(after ?? durationUs, durationUs)))
+        break
+      }
+      case "go-start":
+        player.seekTo(us(0))
+        break
+      case "go-end":
+        player.seekTo(us(durationUs))
+        break
+      case "slower":
+        setRate((current) => stepRate(current, -1))
+        break
+      case "faster":
+        setRate((current) => stepRate(current, 1))
+        break
+      case "split":
         split()
-      } else if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault()
+        break
+      case "mark-in":
+        setMarks((current) => ({ ...current, inUs: at }))
+        break
+      case "mark-out":
+        setMarks((current) => ({ ...current, outUs: at }))
+        break
+      case "clear-marks":
+        setMarks({ inUs: null, outUs: null })
+        break
+      case "delete-range":
+        cutMarked()
+        break
+      case "trim-start":
+        trimToPlayhead("start")
+        break
+      case "trim-end":
+        trimToPlayhead("end")
+        break
+      case "delete":
         remove()
-      } else if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "z"
-      ) {
-        event.preventDefault()
-        if (running) return
-        if (event.shiftKey) redo()
-        else undo()
+        break
+      case "add-zoom":
+        addZoom()
+        break
+      case "freeze":
+        if (scene) {
+          player.pause()
+          commit(freezeFrame(scene, at))
+        }
+        break
+      case "undo":
+        undo()
+        break
+      case "redo":
+        redo()
+        break
+      case "deselect":
+        // Drops everything. Escape means "never mind" everywhere else in the
+        // app, and a selected effect, a selected phrase and a marked range
+        // each leave something destructive one key away.
+        setSelectedEffect(null)
+        selectClip(null)
+        setTranscriptSelection(null)
+        setMarks({ inUs: null, outUs: null })
+        break
+      case "timeline-in":
+        zoom.zoomIn()
+        break
+      case "timeline-out":
+        zoom.zoomOut()
+        break
+      case "timeline-fit":
+        zoom.fit()
+        break
+      case "shortcuts":
+        setShortcutsOpen(true)
+        break
+      case "add-marker":
+        if (scene) commit(toggleMarker(scene, document.metadata, at))
+        break
+      case "copy":
+        if (scene && selectedId)
+          clipboard.current = copyElement(scene, selectedId)
+        break
+      case "paste":
+        if (scene && clipboard.current)
+          commit(pasteElement(scene, clipboard.current, at))
+        break
+      case "duplicate":
+        if (scene && selectedId) commit(duplicateElement(scene, selectedId))
+        break
+      case "select-all": {
+        const spine = scene ? findMainTrack(scene) : null
+        const ids = spine?.elements.map((element) => element.id) ?? []
+        setSelectedId(ids[0] ?? null)
+        setAlsoSelected(ids.slice(1))
+        break
       }
     }
+  })
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [player, split, remove, undo, redo, running])
+  React.useEffect(() => {
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   if (!scene) return null
 
@@ -1292,6 +1596,17 @@ export function Studio({
               side="bottom"
               onClick={redo}
               disabled={running || !canRedo}
+            />
+            <DeskIconButton
+              icon={KeyboardIcon}
+              label="Keyboard shortcuts"
+              shortcut={["?"]}
+              side="bottom"
+              onClick={() => setShortcutsOpen(true)}
+            />
+            <ShortcutSheet
+              open={shortcutsOpen}
+              onOpenChange={setShortcutsOpen}
             />
           </div>
         </>
@@ -1397,7 +1712,7 @@ export function Studio({
           <DeskIconButton
             icon={ScissorIcon}
             label="Split"
-            shortcut={["S"]}
+            shortcut={hintFor("split")}
             onClick={split}
             disabled={running}
           />
@@ -1423,14 +1738,22 @@ export function Studio({
             onClick={remove}
             disabled={running || !selectedId}
           />
-          <EffectControls
-            chip={liveEffect}
-            onAdd={addZoom}
-            onAmount={setAmount}
-            onRemove={dropEffect}
-            disabled={running}
+          <DeskIconButton
+            icon={ZoomInAreaIcon}
+            label="Add a zoom at the playhead"
+            shortcut={hintFor("add-zoom")}
+            onClick={addZoom}
+            disabled={running || !clipAtPlayhead}
           />
         </>
+      }
+      selection={
+        <EffectControls
+          chip={liveEffect}
+          onAmount={setAmount}
+          onRemove={dropEffect}
+          disabled={running}
+        />
       }
       toolbarEnd={
         <TimelineZoom
@@ -1519,7 +1842,9 @@ export function Studio({
           onCorrect={(tokenId, text) =>
             commit(correctWords(scene, [{ tokenId, text }]))
           }
-          onReplace={(find, replace) => commit(replaceWords(scene, find, replace))}
+          onReplace={(find, replace) =>
+            commit(replaceWords(scene, find, replace))
+          }
           countMatches={(find) => findWords(scene, find).length}
           speakerName={
             speakerNumbers(scene).length > 1
@@ -1542,6 +1867,7 @@ export function Studio({
           />
         ) : (
           <StudioLanes
+            marks={marks}
             onAddCaptions={
               asset?.id ? () => void addCaptionsByHand() : undefined
             }
@@ -1552,7 +1878,33 @@ export function Studio({
             onHover={onHover}
             onSeek={player.seekTo}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectClip}
+            alsoSelected={selectedId ? alsoSelected : []}
+            onTrackChange={(laneId, patch) =>
+              commit([
+                {
+                  op: "update_track",
+                  sceneId: scene.id,
+                  trackId: laneId,
+                  patch,
+                },
+              ])
+            }
+            onAudioVolume={(laneId, elementId, volume) =>
+              commit([
+                {
+                  op: "update_element",
+                  sceneId: scene.id,
+                  trackId: laneId,
+                  elementId,
+                  patch: { volume, muted: volume === 0 },
+                },
+              ])
+            }
+            onAudioFades={(laneId, elementId, fades) =>
+              commit(setAudioFades(scene, laneId, elementId, fades))
+            }
+            markerTimes={markerTimes}
             seekIndex={seekIndex}
             filmstrips={filmstrips}
             zoom={zoom.zoom}
@@ -1617,64 +1969,74 @@ const SEGMENT_OFF = "text-kit-ink-muted hover:text-kit-ink"
 /** Two seconds of push, which is an emphasis rather than a new framing. */
 const DEFAULT_ZOOM_US = 2_000_000
 
+/** The push-in ramp punchIn draws by default, so the playhead lands on its top. */
+const ZOOM_RAMP_US = 600_000
+
+/** The id of the zoom a punchIn's ops wrote: the last effect on the patch. */
+function addedZoomId(ops: ReturnType<typeof punchIn>): string | null {
+  const op = ops[0]
+  if (!op || op.op !== "update_element") return null
+  const effects = (op.patch as { effects?: { id: string; type: string }[] })
+    .effects
+  const zoom = effects?.filter((effect) => effect.type === "zoom").at(-1)
+  return zoom?.id ?? null
+}
+
 /**
- * Add a zoom, and change the one that is selected.
+ * The selected effect's name, its amount and Remove.
  *
- * The amount field only appears once something on the lane is selected, because
- * "how far" has no answer otherwise, and a disabled input sitting in the toolbar
- * permanently is chrome that teaches you nothing. Adding is always available:
- * that is the thing you cannot currently do without typing a sentence.
+ * Nothing at all until a chip on the lane is selected, because "how far" has
+ * no answer otherwise. It used to sit among the tools on the right, sized for
+ * its widest state so selecting a chip did not shove Split and Delete
+ * sideways — which left a wide empty well beside "+ Zoom" that read as a
+ * search field. It now stands on the left after the clock, where appearing
+ * moves nothing: the row's spacer takes the room. Adding a zoom is a tool
+ * button like Split.
  *
  * The step, the range and the unit come from the catalogue rather than being
- * one shared 0.05. They were one shared 0.05 when zoom was the only effect you
- * could make, and it does not survive the others: 0.05 of a blur is a
- * twentieth of a pixel, and 0.05 of a hue rotation is a fifth of a degree.
+ * one shared 0.05: 0.05 of a blur is a twentieth of a pixel, and 0.05 of a
+ * hue rotation is a fifth of a degree.
  *
  * A fade is selectable and has no amount — its length is the whole of it — so
- * the field is absent rather than showing a number that edits nothing.
+ * only its name and Remove show.
  */
 function EffectControls({
   chip,
-  onAdd,
   onAmount,
   onRemove,
   disabled,
 }: {
   chip: EffectChip | null
-  onAdd: () => void
   onAmount: (amount: number) => void
   onRemove: () => void
   disabled?: boolean
 }) {
+  if (!chip) return null
+
   // Both halves have to be checked against the chip existing, not just against
   // null: `undefined !== null` is true, so a missing chip read as adjustable.
-  const adjustable =
-    chip !== null && chip.effectId !== null && chip.amount !== null
+  const adjustable = chip.effectId !== null && chip.amount !== null
 
   // A fade's kind is not an effect type, so it has no spec. Guarded on
   // `adjustable` rather than on the kind, because that is the same question.
   const spec = adjustable ? effectSpec(chip.kind as EffectType) : null
+  const name =
+    spec?.label ??
+    (chip.kind === "fade-in"
+      ? "Fade in"
+      : chip.kind === "fade-out"
+        ? "Fade out"
+        : "Effect")
 
   return (
     <div
       role="group"
-      aria-label="Effects"
-      // Sized for its widest state, not its current one. Selecting a chip adds
-      // − ×1.20 + Remove, and in a right-aligned toolbar that pushed Split,
-      // Delete, Undo and Redo 120px to the left — so the button under the
-      // cursor after clicking a chip was not the button that had been there a
-      // moment earlier, and Undo and Redo are one apart.
-      className="flex min-w-[196px] items-center gap-0.5 rounded-md bg-kit-well p-0.5"
+      aria-label={`Selected effect: ${name}`}
+      className="flex flex-none items-center gap-0.5 rounded-md bg-kit-well p-0.5"
     >
-      <button
-        type="button"
-        onClick={onAdd}
-        disabled={disabled}
-        title="Add a zoom at the playhead"
-        className={cn(SEGMENT, SEGMENT_OFF)}
-      >
-        + Zoom
-      </button>
+      <span className="px-2 text-kit-small font-kit-strong text-kit-ink">
+        {name}
+      </span>
 
       {adjustable && spec ? (
         <>
@@ -1705,7 +2067,7 @@ function EffectControls({
         </>
       ) : null}
 
-      {chip?.effectId ? (
+      {chip.effectId ? (
         <button
           type="button"
           onClick={onRemove}

@@ -1,5 +1,12 @@
+import { deleteSpeech } from "./edits"
 import type { EditOp } from "./ops"
-import type { CaptionElement, DocumentMetadata, Scene } from "./types"
+import { us, type UsRange } from "./time"
+import type {
+  CaptionElement,
+  CaptionToken,
+  DocumentMetadata,
+  Scene,
+} from "./types"
 
 /**
  * Who is talking. The transcriber numbers the voices it hears; the person
@@ -48,4 +55,65 @@ export function nameSpeaker(
   if (clean) next[String(speaker)] = clean
   else delete next[String(speaker)]
   return [{ op: "update_metadata", patch: { speakers: next } }]
+}
+
+/**
+ * Cut everything one speaker says, and close up the gaps.
+ *
+ * A turn runs from the speaker's first word to the next word someone else
+ * says, so the pause after a turn goes with it and the cut lands on the
+ * other voice starting, not on a breath of silence. The last turn ends with
+ * its own last word. The ranges are in the recording's own time, so the cut
+ * goes through `deleteSpeech` like a phrase struck in the transcript: one
+ * revision, one undo, and it refuses to empty the cut.
+ */
+export function cutSpeaker(scene: Scene, speaker: number): EditOp[] {
+  const words: { at: number; token: CaptionToken }[] = []
+  for (const track of scene.tracks) {
+    if (track.kind !== "caption") continue
+    for (const element of track.elements as CaptionElement[]) {
+      if (element.kind !== "caption") continue
+      for (const token of element.tokens) {
+        words.push({ at: element.startUs + token.startUs, token })
+      }
+    }
+  }
+  words.sort((a, b) => a.at - b.at)
+
+  const byMedia = new Map<string, UsRange[]>()
+  let open: { mediaId: string; startUs: number; endUs: number } | null = null
+  const close = (endUs: number) => {
+    if (!open) return
+    const ranges = byMedia.get(open.mediaId) ?? []
+    if (endUs > open.startUs)
+      ranges.push({ startUs: us(open.startUs), endUs: us(endUs) })
+    byMedia.set(open.mediaId, ranges)
+    open = null
+  }
+
+  for (const { token } of words) {
+    if (token.speaker === speaker) {
+      if (open && open.mediaId !== token.sourceMediaId) close(open.endUs)
+      if (!open)
+        open = {
+          mediaId: token.sourceMediaId,
+          startUs: token.sourceStartUs,
+          endUs: token.sourceEndUs,
+        }
+      else open.endUs = Math.max(open.endUs, token.sourceEndUs)
+      continue
+    }
+    if (!open) continue
+    // Someone else talks: the turn ends where they start, when that is in
+    // the same recording and after it; otherwise on the turn's last word.
+    close(
+      token.sourceMediaId === open.mediaId && token.sourceStartUs >= open.endUs
+        ? token.sourceStartUs
+        : open.endUs
+    )
+  }
+  if (open) close((open as { endUs: number }).endUs)
+
+  const cuts = [...byMedia].map(([mediaId, ranges]) => ({ mediaId, ranges }))
+  return cuts.length ? deleteSpeech(scene, cuts) : []
 }

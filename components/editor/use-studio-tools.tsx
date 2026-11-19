@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { detachSound } from "@/lib/editor/detach-sound"
 import { setSpeed } from "@/lib/editor/edits"
 import { toEdl, toFcpxml } from "@/lib/editor/interchange"
 import { layoutBox, setBox, type LayoutKey } from "@/lib/editor/layout"
@@ -13,7 +14,7 @@ import {
   type LookPreset,
   restyleCaptions,
 } from "@/lib/editor/presets"
-import { nameSpeaker, speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
+import { cutSpeaker, nameSpeaker, speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
 import { cuesToWords, parseSubtitles, subtitleCues, toSrt, toVtt } from "@/lib/editor/subtitles"
 import { findMainTrack } from "@/lib/editor/timeline"
 import { us } from "@/lib/editor/time"
@@ -214,6 +215,7 @@ export function useStudioTools({
         )
       }}
       onOpacity={(opacity) => patchSelected({ opacity })}
+      onDetachSound={() => commit(detachSound(scene, selected.track.id, selected.element.id))}
     />
   ) : null
 
@@ -395,6 +397,7 @@ export function useStudioTools({
             }}
             speakers={speakers}
             onNameSpeaker={(speaker, name) => commit(nameSpeaker(document.metadata, speaker, name))}
+            onCutSpeaker={(speaker) => commit(cutSpeaker(scene, speaker))}
             background={document.settings.background.color}
             onBackground={(color) =>
               commit([

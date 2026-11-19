@@ -87,6 +87,22 @@ function sanitizeElement(element: TimelineElement): TimelineElement {
     Number.isFinite(sourceUs) ? sourceUs : Infinity
   )
   let trimEndUs = whole(element.trimEndUs, trimStartUs + durationUs)
+  // A still's window is empty by design (types.ts `frozen`); only its start,
+  // the held frame, needs to be in the source.
+  if (element.frozen) {
+    if (
+      trimEndUs === trimStartUs &&
+      startUs === element.startUs &&
+      durationUs === element.durationUs
+    )
+      return element
+    return {
+      ...element,
+      startUs,
+      durationUs,
+      trimEndUs: trimStartUs,
+    } as TimelineElement
+  }
   if (trimEndUs > limit)
     trimEndUs = Number.isFinite(sourceUs) ? sourceUs : trimEndUs
   if (trimEndUs <= trimStartUs) {

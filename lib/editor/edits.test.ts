@@ -4,6 +4,7 @@ import { createScene, DEFAULT_CAPTION_STYLE } from "./document"
 import {
   applyEffect,
   clampTrimDelta,
+  deleteTimelineRange,
   clearZoom,
   cropClip,
   cropSpine,
@@ -22,7 +23,13 @@ import {
   trimEdge,
   trimPreviewDeltaUs,
 } from "./edits"
-import { applyOps, applyToScene, newElement, targetInScene, type EditOp } from "./ops"
+import {
+  applyOps,
+  applyToScene,
+  newElement,
+  targetInScene,
+  type EditOp,
+} from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import {
@@ -93,6 +100,50 @@ function run(base: Scene, ops: ReturnType<typeof splitAt>) {
 
   return findMainTrack(result.snapshot.document.scenes[0])!.elements
 }
+
+describe("deleteTimelineRange", () => {
+  it("cuts a range across a cut and closes the gap", () => {
+    const base = scene()
+    // 5s into clip 0 to 3s into clip 1: 8 seconds out of 30.
+    const elements = run(
+      base,
+      deleteTimelineRange(base, secondsToUs(5), secondsToUs(13))
+    )
+
+    const total = elements.reduce((sum, e) => sum + e.durationUs, 0)
+    expect(total).toBe(secondsToUs(22))
+    // No gap: each clip starts where the last ended.
+    for (let i = 1; i < elements.length; i++) {
+      expect(elements[i].startUs).toBe(
+        elements[i - 1].startUs + elements[i - 1].durationUs
+      )
+    }
+    const first = elements[0] as VideoElement
+    const second = elements[1] as VideoElement
+    expect(first.trimEndUs).toBe(secondsToUs(5))
+    expect(second.trimStartUs).toBe(secondsToUs(13))
+  })
+
+  it("takes a range out of the middle of one clip", () => {
+    const base = scene()
+    const elements = run(
+      base,
+      deleteTimelineRange(base, secondsToUs(22), secondsToUs(24))
+    )
+    expect(elements).toHaveLength(4)
+    expect(elements.reduce((sum, e) => sum + e.durationUs, 0)).toBe(
+      secondsToUs(28)
+    )
+  })
+
+  it("does nothing for an empty range, and never empties the spine", () => {
+    const base = scene()
+    expect(deleteTimelineRange(base, secondsToUs(4), secondsToUs(4))).toEqual(
+      []
+    )
+    expect(deleteTimelineRange(base, 0, secondsToUs(30))).toEqual([])
+  })
+})
 
 describe("splitAt", () => {
   it("cuts a clip into two that together play what one did", () => {
@@ -769,6 +820,68 @@ describe("punchIn", () => {
     expect(Object.keys(element.animations.channels)[0]).toContain(
       element.effects[0].id
     )
+  })
+
+  it("keeps an earlier zoom elsewhere on the same clip", () => {
+    const base = scene()
+    const target = clipAt(base, 0)
+    const start = target.startUs
+
+    const once = applyToScene(
+      base,
+      punchIn(base, target.id, {
+        fromUs: us(start),
+        toUs: us(start + 2_000_000),
+      })
+    )
+    const twice = applyToScene(
+      once,
+      punchIn(once, target.id, {
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    const element = clipAt(twice, 0)
+
+    // Outside its window each is back at 1, so the two never multiply; dropping
+    // the first silently threw away an emphasis the person had made.
+    expect(element.effects.filter((e) => e.type === "zoom")).toHaveLength(2)
+    expect(Object.keys(element.animations.channels)).toHaveLength(2)
+  })
+
+  it("replaces a held push, which stays in to the clip's end, in either order", () => {
+    const base = scene()
+    const target = clipAt(base, 0)
+    const start = target.startUs
+
+    const held = applyToScene(
+      base,
+      punchIn(base, target.id, { scale: 1.3, hold: true })
+    )
+    const after = applyToScene(
+      held,
+      punchIn(held, target.id, {
+        scale: 1.2,
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    // Kept, the two would multiply to 1.56 at six seconds.
+    expect(clipAt(after, 0).effects).toHaveLength(1)
+    expect(clipAt(after, 0).effects[0].params.scale).toBe(1.2)
+
+    const brief = applyToScene(
+      base,
+      punchIn(base, target.id, {
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    const heldAfter = applyToScene(
+      brief,
+      punchIn(brief, target.id, { scale: 1.3, hold: true })
+    )
+    expect(clipAt(heldAfter, 0).effects).toHaveLength(1)
   })
 
   it("stamps the agent on the fields it wrote", () => {
@@ -1758,14 +1871,22 @@ describe("every builder aims its ops", () => {
       "user"
     )
     const element = findMainTrack(zoomed)!.elements[0] as VideoElement
-    return { scene: zoomed, clipId: element.id, effectId: element.effects[0].id }
+    return {
+      scene: zoomed,
+      clipId: element.id,
+      effectId: element.effects[0].id,
+    }
   }
 
   it("splitAt names the clip and the point it cuts at", () => {
     const base = scene()
     const ops = splitAt(base, findMainTrack(base)!.id, secondsToUs(5))
     expectAimed(base, ops)
-    expect(ops[0].target).toMatchObject({ kind: "element", action: "press", atUs: secondsToUs(5) })
+    expect(ops[0].target).toMatchObject({
+      kind: "element",
+      action: "press",
+      atUs: secondsToUs(5),
+    })
   })
 
   it("deleteAndRipple names the clip it cuts", () => {
@@ -1779,7 +1900,10 @@ describe("every builder aims its ops", () => {
   it("deleteSpeech names the stretch of the timeline it removes", () => {
     const base = scene()
     const ops = deleteSpeech(base, [
-      { mediaId: "va-1", ranges: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }] },
+      {
+        mediaId: "va-1",
+        ranges: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }],
+      },
     ])
     expectAimed(base, ops)
     expect(ops[0].target).toMatchObject({
@@ -1806,7 +1930,10 @@ describe("every builder aims its ops", () => {
   it("punchIn drag-selects its window and presses Zoom", () => {
     const base = scene()
     const clip = findMainTrack(base)!.elements[1]
-    const ops = punchIn(base, clip.id, { fromUs: secondsToUs(12), toUs: secondsToUs(15) })
+    const ops = punchIn(base, clip.id, {
+      fromUs: secondsToUs(12),
+      toUs: secondsToUs(15),
+    })
     expectAimed(base, ops)
     expect(ops[0].target).toMatchObject({
       kind: "range",
@@ -1822,9 +1949,6 @@ describe("every builder aims its ops", () => {
     expectAimed(base, moveEffect(base, clipId, effectId, 1_000_000))
     expectAimed(base, removeEffect(base, clipId, effectId))
     expectAimed(base, clearZoom(base, clipId))
-    expectAimed(
-      base,
-      removeEffectsOfType(base, clipId, "zoom")
-    )
+    expectAimed(base, removeEffectsOfType(base, clipId, "zoom"))
   })
 })
