@@ -14,6 +14,12 @@ import {
   storageKeys,
   thumbnailArgs,
   voiceCleanArgs,
+  voiceDenoiseArgs,
+  voiceKeys,
+  filterValue,
+  parseLoudnessMeter,
+  denoiseKeptVoice,
+  DENOISE_MAX_DROP_LU,
 } from "./media"
 import { LANDSCAPE_CANVAS, VERTICAL_CANVAS } from "./document"
 import { secondsToUs } from "./time"
@@ -166,8 +172,106 @@ describe("voiceCleanArgs", () => {
     expect(filter).toMatch(/loudnorm=I=-16:TP=-1\.5:LRA=11$/)
   })
 
-  it("keys the track by its filter version", () => {
-    expect(storageKeys.voice("h")).toBe("derived/voice/v2/h.m4a")
+  it("keys the plain track by its filter version", () => {
+    expect(storageKeys.voicePlain("h")).toBe("derived/voice/v2/h.m4a")
+  })
+})
+
+describe("voiceDenoiseArgs", () => {
+  const args = voiceDenoiseArgs("in", "out", {
+    model: "/m/speech.rnnn",
+    dryMeter: "/w/dry.txt",
+    wetMeter: "/w/wet.txt",
+  })
+  const graph = args[args.indexOf("-filter_complex") + 1]
+
+  it("resamples against the timestamps before anything else", () => {
+    expect(graph.startsWith("[0:a]aresample=async=1:first_pts=0,")).toBe(true)
+  })
+
+  it("runs the model before the spectral filter and loudness", () => {
+    const model = graph.indexOf("arnndn=")
+    expect(model).toBeGreaterThan(graph.indexOf("highpass=f=80"))
+    expect(model).toBeLessThan(graph.indexOf("afftdn="))
+    expect(graph).toMatch(/loudnorm=I=-16:TP=-1\.5:LRA=11\[voice\]$/)
+  })
+
+  it("meters both sides of the model, before loudnorm can hide a drop", () => {
+    expect(graph).toContain("[dry]ebur128=metadata=1")
+    expect(graph).toContain("[wet]ebur128=metadata=1")
+    expect(graph).toContain("file=/w/dry.txt")
+    expect(graph).toContain("file=/w/wet.txt")
+  })
+
+  it("maps only the cleaned branch to the output", () => {
+    expect(args[args.indexOf("-map") + 1]).toBe("[voice]")
+    expect(args.at(-1)).toBe("out")
+  })
+
+  it("encodes the same track as the plain chain", () => {
+    const plain = voiceCleanArgs("in", "out")
+    expect(args.slice(args.indexOf("-map") + 2)).toEqual(
+      plain.slice(plain.indexOf("-af") + 2)
+    )
+  })
+})
+
+describe("filterValue", () => {
+  it("leaves an ordinary path alone", () => {
+    expect(filterValue("/var/task/lib/editor/models/speech.rnnn")).toBe(
+      "/var/task/lib/editor/models/speech.rnnn"
+    )
+  })
+
+  it("escapes for the option parser and then the graph parser", () => {
+    // `:` once for options, then its backslash again for the graph.
+    expect(filterValue("/a:b")).toBe("/a\\\\:b")
+    expect(filterValue("/a,b;[c]")).toBe("/a\\,b\\;\\[c\\]")
+    expect(filterValue("/it's")).toBe("/it\\\\\\'s")
+  })
+})
+
+describe("parseLoudnessMeter", () => {
+  it("reads the last running value, which is the whole track's", () => {
+    const text = [
+      "frame:0    pts:0       pts_time:0",
+      "lavfi.r128.I=-70.000",
+      "frame:1    pts:4800    pts_time:0.1",
+      "lavfi.r128.I=-15.116",
+    ].join("\n")
+    expect(parseLoudnessMeter(text)).toBe(-15.116)
+  })
+
+  it("is null with no reading or a silent one", () => {
+    expect(parseLoudnessMeter("")).toBeNull()
+    expect(parseLoudnessMeter("lavfi.r128.I=-inf")).toBeNull()
+  })
+})
+
+describe("denoiseKeptVoice", () => {
+  it("keeps the model's track when noise came out and the voice stayed", () => {
+    // Measured: a real voice with typing and traffic over it.
+    expect(denoiseKeptVoice(-12.4, -15.1)).toBe(true)
+  })
+
+  it("refuses it when the voice went with the noise", () => {
+    // Measured: a synthetic voice the model did not hear as speech.
+    expect(denoiseKeptVoice(-15.2, -52.1)).toBe(false)
+    expect(denoiseKeptVoice(-20, -20 - DENOISE_MAX_DROP_LU - 0.1)).toBe(false)
+  })
+
+  it("keeps it when there was nothing to measure, refuses it when silenced", () => {
+    expect(denoiseKeptVoice(null, null)).toBe(true)
+    expect(denoiseKeptVoice(-20, null)).toBe(false)
+  })
+})
+
+describe("voiceKeys", () => {
+  it("looks for the model's track first, then the plain one", () => {
+    expect(voiceKeys("h")).toEqual([
+      "derived/voice/v3/h.m4a",
+      "derived/voice/v2/h.m4a",
+    ])
   })
 })
 

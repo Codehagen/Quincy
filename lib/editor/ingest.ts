@@ -2,6 +2,7 @@ import {
   parseProbe,
   planFilmstrip,
   storageKeys,
+  voiceKeys,
   type FilmstripPlan,
   type ProbeResult,
   type ProxyOptions,
@@ -54,8 +55,24 @@ export type Transcoder = {
    * without it the timeline seeks approximately, which is worse but not broken.
    */
   keyframes?(source: MediaSource): Promise<Us[]>
-  /** The voice, cleaned (media.ts `voiceCleanArgs`). Optional like keyframes. */
-  voice?(source: MediaSource): Promise<Uint8Array>
+  /**
+   * The voice, cleaned (media.ts `voiceDenoiseArgs`, or `voiceCleanArgs`
+   * when the speech model could not be used). Optional like keyframes.
+   */
+  voice?(source: MediaSource): Promise<VoiceTrack>
+}
+
+/**
+ * A cleaned voice, and which chain made it. The two are stored under
+ * different keys (`storageKeys.voice`, `storageKeys.voicePlain`), so a track
+ * is always filed as what it is.
+ */
+export type VoiceTrack = {
+  bytes: Uint8Array
+  /** True when the speech model ran and kept the voice. */
+  denoised: boolean
+  /** Why the model was not used, when it was not. Becomes a warning. */
+  note?: string
 }
 
 export type Transcriber = {
@@ -319,13 +336,20 @@ export async function runIngest(
     warnings.push("voice: skipped, left for the Sound button")
   } else if (probe.hasAudio && transcoder.voice) {
     try {
-      const voiceKey = storageKeys.voice(input.contentHash)
-      if (!(await storage.exists(voiceKey))) {
+      const existing = await firstExisting(
+        storage,
+        voiceKeys(input.contentHash)
+      )
+      if (!existing) {
+        const track = await transcoder.voice(input.source)
         await storage.put(
-          voiceKey,
-          await transcoder.voice(input.source),
+          track.denoised
+            ? storageKeys.voice(input.contentHash)
+            : storageKeys.voicePlain(input.contentHash),
+          track.bytes,
           "audio/mp4"
         )
+        if (track.note) warnings.push(`voice: ${track.note}`)
       }
     } catch (error) {
       warnings.push(`voice: ${message(error)}`)
@@ -390,6 +414,20 @@ export function visionHandleIsLive(
   // A minute of headroom, because a handle that expires mid-request is the
   // same failure as one that expired an hour ago.
   return expiresAt.getTime() - now.getTime() > 60_000
+}
+
+/**
+ * The first of these keys that holds an object, or null. In order, so the
+ * caller decides which copy wins when more than one exists.
+ */
+export async function firstExisting(
+  storage: Pick<Storage, "exists">,
+  keys: string[]
+): Promise<string | null> {
+  for (const key of keys) {
+    if (await storage.exists(key)) return key
+  }
+  return null
 }
 
 function message(error: unknown): string {

@@ -6,10 +6,13 @@ import { join } from "node:path"
 import ffmpegPath from "ffmpeg-static"
 import ffprobeStatic from "ffprobe-static"
 
-import type { MediaSource, Transcoder } from "./ingest"
+import type { MediaSource, Transcoder, VoiceTrack } from "./ingest"
 import {
   audioExtractArgs,
+  denoiseKeptVoice,
+  parseLoudnessMeter,
   voiceCleanArgs,
+  voiceDenoiseArgs,
   probeArgs,
   proxyArgs,
   filmstripArgs,
@@ -17,6 +20,7 @@ import {
   type ProxyOptions,
 } from "./media"
 import { us, type Us } from "./time"
+import { voiceModelPath } from "./voice-model"
 
 /**
  * The transcoder, as ffmpeg on the local filesystem.
@@ -227,16 +231,59 @@ export function createFfmpegTranscoder(
       return pcmFromWav(new Uint8Array(await readFile(output)))
     },
 
-    async voice(source) {
+    /**
+     * The speech model first, the plain chain when it cannot be used.
+     *
+     * Three ways to land on the plain chain, each said in `note` so a take
+     * that sounds like it did before the model can be traced: no model file,
+     * the model pass failing (an ffmpeg built without `arnndn`), and the
+     * model taking the voice down with the noise (media.ts
+     * `denoiseKeptVoice`). The last one costs a second pass, which only a
+     * take the model could not hear pays.
+     */
+    async voice(source): Promise<VoiceTrack> {
       const input = await materialise(source, workdir)
       const output = join(workdir, "voice.m4a")
+      const model = await voiceModelPath()
+
+      let note: string | undefined
+      if (!model) {
+        note = "speech model not found, cleaned without it"
+      } else {
+        const dryMeter = join(workdir, "voice-dry.txt")
+        const wetMeter = join(workdir, "voice-wet.txt")
+
+        try {
+          await run(
+            ffmpegBinary(),
+            voiceDenoiseArgs(input, output, { model, dryMeter, wetMeter }),
+            { timeout: TRANSCODE_TIMEOUT, encoding: "buffer" }
+          )
+
+          const [dry, wet] = await Promise.all(
+            [dryMeter, wetMeter].map((path) =>
+              readFile(path, "utf8")
+                .then(parseLoudnessMeter)
+                .catch(() => null)
+            )
+          )
+
+          if (denoiseKeptVoice(dry, wet)) {
+            return { bytes: new Uint8Array(await readFile(output)), denoised: true }
+          }
+
+          note = `speech model lowered the voice from ${dry} to ${wet} LUFS, cleaned without it`
+        } catch (error) {
+          note = `speech model failed (${error instanceof Error ? error.message : String(error)}), cleaned without it`
+        }
+      }
 
       await run(ffmpegBinary(), voiceCleanArgs(input, output), {
         timeout: TRANSCODE_TIMEOUT,
         encoding: "buffer",
       })
 
-      return new Uint8Array(await readFile(output))
+      return { bytes: new Uint8Array(await readFile(output)), denoised: false, note }
     },
 
     async thumbnail(source) {

@@ -265,30 +265,162 @@ export function audioExtractArgs(input: string, output: string): string[] {
  * Every filter is ffmpeg's own, so it costs function time and nothing
  * bought. AAC, mono, 128k: the track plays beside the proxy in
  * the preview and the export, never instead of the picture.
+ *
+ * This is the plain chain, and since the speech model below it is the
+ * fallback: what a take gets when the model file is missing, when the
+ * model run fails, or when the model took the voice down with the noise.
+ * Its output is stored under `storageKeys.voicePlain`.
  */
 export const VOICE_FILTER =
   "aresample=async=1:first_pts=0,highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11"
 
+/** The encode both chains share. Mono AAC that plays beside the proxy. */
+const VOICE_OUTPUT = [
+  "-ac",
+  "1",
+  "-ar",
+  "48000",
+  "-c:a",
+  "aac",
+  "-b:a",
+  "128k",
+  "-movflags",
+  "+faststart",
+] as const
+
 export function voiceCleanArgs(input: string, output: string): string[] {
+  return ["-i", input, "-vn", "-af", VOICE_FILTER, ...VOICE_OUTPUT, "-y", output]
+}
+
+/**
+ * The voice, cleaned with a speech model in front of the spectral filter.
+ *
+ * `afftdn` learns one noise profile and subtracts it, so it handles what holds
+ * still: a fan, hum, the room. It cannot touch noise that comes and goes —
+ * typing, a car passing, dishes — because there is no steady profile to learn.
+ * ffmpeg's `arnndn` is a small recurrent network that decides, band by band
+ * and 10 ms at a time, how much of the signal is speech, and keeps that. It
+ * runs on the CPU in the same pass and costs about a third more time than the
+ * plain chain (measured: a 20-minute take, 22 s plain, 29 s with the model).
+ *
+ * The plain filters stay behind it: the model leaves a little steady hiss,
+ * and `afftdn` is good at exactly that. Loudness last, as before, so the
+ * level is set on what is left.
+ *
+ * **Measured both sides of the model, in the same pass.** A speech model has
+ * one failure that matters here: on audio it does not recognise as speech it
+ * removes the voice along with the noise. A synthetic voice on band-limited
+ * audio went from -15 to -52 LUFS through it, where a real voice with
+ * typing and traffic over it lost 2.7 LU and the noise floor dropped 18 dB
+ * further than the plain chain managed. So the graph splits after the
+ * high-pass: one branch is metered dry, one through the model, and the
+ * transcoder compares the two integrated loudnesses (`denoiseKeptVoice`). A
+ * drop too large to be noise alone means the take is made again on the plain
+ * chain. `loudnorm` would hide the drop, which is why the meter sits before
+ * it.
+ *
+ * The meters write to files because ffmpeg's stderr is dropped on success
+ * (transcoder-ffmpeg.ts), and a file is the one output that survives it.
+ */
+export function voiceDenoiseArgs(
+  input: string,
+  output: string,
+  paths: { model: string; dryMeter: string; wetMeter: string }
+): string[] {
+  const meter = (file: string) =>
+    `ebur128=metadata=1,ametadata=mode=print:key=lavfi.r128.I:file=${filterValue(file)},anullsink`
+
+  const graph = [
+    "[0:a]aresample=async=1:first_pts=0,highpass=f=80,asplit=2[dry][pre]",
+    `[pre]arnndn=m=${filterValue(paths.model)},asplit=2[wet][keep]`,
+    `[dry]${meter(paths.dryMeter)}`,
+    `[wet]${meter(paths.wetMeter)}`,
+    "[keep]afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11[voice]",
+  ].join(";")
+
   return [
     "-i",
     input,
     "-vn",
-    "-af",
-    VOICE_FILTER,
-    "-ac",
-    "1",
-    "-ar",
-    "48000",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "128k",
-    "-movflags",
-    "+faststart",
+    "-filter_complex",
+    graph,
+    "-map",
+    "[voice]",
+    ...VOICE_OUTPUT,
     "-y",
     output,
   ]
+}
+
+/**
+ * A path as a value inside a filter graph.
+ *
+ * Paths reach the graph as text, where `:` separates options, `,` and `;`
+ * separate filters and `[` `]` name pads. A temp dir or a deploy path with any
+ * of those in it would otherwise end the option early and fail the whole pass
+ * with an error about a filter nobody wrote.
+ *
+ * ffmpeg reads the text twice, so it is escaped twice, innermost first: once
+ * for the option parser (`\`, `'`, `:`), then once for the graph parser
+ * (`\`, `'`, `[`, `]`, `,`, `;`). Quoting instead looks right and is not: the
+ * graph parser takes the quotes off and the option parser then splits on the
+ * colon that was inside them.
+ */
+export function filterValue(value: string): string {
+  const option = value.replace(/[\\':]/g, (c) => `\\${c}`)
+  return option.replace(/[\\'[\],;]/g, (c) => `\\${c}`)
+}
+
+/**
+ * The integrated loudness the meter settled on, in LUFS.
+ *
+ * `ametadata=print` writes a line per frame with the running value. The last
+ * one is the whole track's. Null when there is no reading at all — a silent
+ * track never opens the meter's gate — which the caller treats as nothing to
+ * compare, not as a failure.
+ */
+export function parseLoudnessMeter(text: string): number | null {
+  const values = [...text.matchAll(/lavfi\.r128\.I=(-?[\d.]+|-inf)/g)]
+  const last = values.at(-1)?.[1]
+  if (last === undefined || last === "-inf") return null
+  const value = Number(last)
+  return Number.isFinite(value) ? value : null
+}
+
+/**
+ * The most the model may lower a take's loudness before it is believed to
+ * have taken the voice. Integrated loudness is gated on the loud parts, so
+ * on a talking head it is the voice, and removing noise moves it little: the
+ * real voice under typing and traffic lost 2.7 LU. A voice the model did not
+ * recognise lost 37. Twelve sits well clear of both.
+ */
+export const DENOISE_MAX_DROP_LU = 12
+
+/**
+ * Whether the model's pass kept the voice, from the two meter readings.
+ *
+ * A missing dry reading is a take too quiet to meter, where nothing can be
+ * said either way and the model's output is kept. A missing wet reading with
+ * a dry one is the model having silenced it, which is the failure itself.
+ */
+export function denoiseKeptVoice(
+  dryLufs: number | null,
+  wetLufs: number | null
+): boolean {
+  if (dryLufs === null) return true
+  if (wetLufs === null) return false
+  return dryLufs - wetLufs <= DENOISE_MAX_DROP_LU
+}
+
+/**
+ * Where a take's cleaned voice may already be, best first.
+ *
+ * The model's track, then the plain one. A take cleaned before the model has
+ * only the plain one and keeps playing it: a finished cut does not change
+ * sound because the filter did.
+ */
+export function voiceKeys(contentHash: string): string[] {
+  return [storageKeys.voice(contentHash), storageKeys.voicePlain(contentHash)]
 }
 
 export function thumbnailArgs(
@@ -522,11 +654,19 @@ export const storageKeys = {
   /** The sprite sheet the spine tiles across its clips. */
   filmstrip: (contentHash: string) => `derived/strip/v1/${contentHash}.jpg`,
   /**
-   * The cleaned voice (voiceCleanArgs). Content-addressed and versioned like
-   * the proxy, so a change to the filter is a new key and never a surprise
-   * in a cut someone already finished.
+   * The cleaned voice, through the speech model (voiceDenoiseArgs).
+   * Content-addressed and versioned like the proxy, so a change to the filter
+   * is a new key and never a surprise in a cut someone already finished.
    */
-  voice: (contentHash: string) => `derived/voice/v2/${contentHash}.m4a`,
+  voice: (contentHash: string) => `derived/voice/v3/${contentHash}.m4a`,
+  /**
+   * The cleaned voice on the plain chain (voiceCleanArgs). Every take cleaned
+   * before the speech model has one, and a take still gets one when the
+   * model is missing or did not keep the voice. Keyed by what it is, so the
+   * two are never mistaken for each other.
+   */
+  voicePlain: (contentHash: string) =>
+    `derived/voice/v2/${contentHash}.m4a`,
 }
 
 /**
