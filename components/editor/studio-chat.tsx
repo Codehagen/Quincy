@@ -57,6 +57,7 @@ import type { CutsMessage } from "@/lib/editor/stream-parts"
 import type { BeatState, Director } from "./agent-cursor/director"
 import { cutsOf, recommendationOf, type RunRecord } from "./cuts-stream"
 import { CutsTurn } from "./cuts-turn"
+import { StyleAndHooks } from "./style-and-hooks"
 import { removedUs } from "./agent-cursor/timing"
 import { sentenceFor, stepDetail, stepTitle } from "./run-steps"
 import { CheckFrames, type CheckState } from "./self-check/check-frames"
@@ -320,6 +321,12 @@ export function StudioChat({
               disabled={isBusy}
             />
           ) : null}
+          {controls.durationUs > 0 ? (
+            <StyleAndHooks
+              onPick={(text) => send({ text })}
+              disabled={isBusy}
+            />
+          ) : null}
         </div>
       </EmptyContent>
     </Empty>
@@ -426,6 +433,11 @@ export function StudioChat({
                               items={withIcons(nextSteps)}
                               onPick={(text) => send({ text })}
                             />
+                            <div className="mt-2">
+                              <StyleAndHooks
+                                onPick={(text) => send({ text })}
+                              />
+                            </div>
                           </div>
                         ) : null}
                       </MessageScrollerItem>

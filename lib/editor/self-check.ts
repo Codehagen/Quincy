@@ -43,6 +43,8 @@ export const CHECKED_TOOLS: ReadonlySet<string> = new Set([
   "crop",
   "punch_in",
   "apply_look",
+  "apply_edit_style",
+  "apply_hook",
 ])
 
 /** Whether a run that committed these tools earns a look at its frames. */

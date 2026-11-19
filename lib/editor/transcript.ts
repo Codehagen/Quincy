@@ -84,6 +84,39 @@ export type SilenceOptions = {
   /** Leading silence before the first word is dead air, not rhythm. */
   trimHead: boolean
   trimTail: boolean
+  /**
+   * The beat a shortened pause keeps, in total, instead of `paddingUs` on
+   * each side. Absent, the old rule holds: padding either side.
+   *
+   * An edit that closes every pause to the same sliver sounds like a list
+   * being read. A kept beat is split unevenly, more after the word than
+   * before the next (`TAIL_SHARE`), because the end of a word carries its
+   * release and the breath, and the start of the next only needs its attack.
+   */
+  keepUs?: Us
+  /**
+   * The beat kept where a sentence ends (the word before the pause ends in
+   * . ? ! …). Longer than `keepUs`: a full stop is where a listener files
+   * what was said, and taking that beat away is what makes a tight edit feel
+   * rushed. Absent, the same as `keepUs`.
+   */
+  sentenceKeepUs?: Us
+  /**
+   * What stays after the last word when the tail is trimmed. Absent,
+   * `paddingUs`. A cut that ends on the release of its last word feels
+   * clipped; a breath of room lets it land.
+   */
+  endHoldUs?: Us
+}
+
+/** Of a kept beat, the share left after the word; the rest sits before the next. */
+export const TAIL_SHARE = 0.6
+
+const SENTENCE_END = /[.?!…]["”')\]]?$/
+
+/** Whether a word closes a sentence, by its punctuation. */
+export function endsSentence(word: Pick<Word, "text">): boolean {
+  return SENTENCE_END.test(word.text.trim())
 }
 
 /** The shortest pause a tighten may cut; below it the cut is audible clipping. */
@@ -134,22 +167,42 @@ export function detectSilences(
     const gapEnd = words[i + 1].startUs
     if (gapEnd - gapStart <= minSilenceUs) continue
 
-    const start = us(gapStart + paddingUs)
-    const end = us(gapEnd - paddingUs)
+    const [tailUs, leadUs] = beatAround(words[i], options, paddingUs)
+    const start = us(gapStart + tailUs)
+    const end = us(gapEnd - leadUs)
     // Padding can swallow the gap entirely on a borderline pause. Dropping it
     // is right: what is left is shorter than the padding we promised to keep.
     if (end > start) ranges.push({ startUs: start, endUs: end })
   }
 
   const lastWord = words[words.length - 1]
-  if (trimTail && duration - lastWord.endUs > minSilenceUs) {
-    ranges.push({
-      startUs: us(Math.min(duration, lastWord.endUs + paddingUs)),
-      endUs: duration,
-    })
+  const tailFrom = lastWord.endUs + Math.max(0, options.endHoldUs ?? paddingUs)
+  if (
+    trimTail &&
+    duration - lastWord.endUs > minSilenceUs &&
+    tailFrom < duration
+  ) {
+    ranges.push({ startUs: us(tailFrom), endUs: duration })
   }
 
   return mergeRanges(ranges)
+}
+
+/** What a shortened pause keeps after the word and before the next. */
+function beatAround(
+  before: Pick<Word, "text">,
+  options: SilenceOptions,
+  paddingUs: number
+): [number, number] {
+  if (options.keepUs === undefined) return [paddingUs, paddingUs]
+  const keep = Math.max(
+    0,
+    endsSentence(before)
+      ? (options.sentenceKeepUs ?? options.keepUs)
+      : options.keepUs
+  )
+  const tail = Math.round(keep * TAIL_SHARE)
+  return [tail, keep - tail]
 }
 
 /**

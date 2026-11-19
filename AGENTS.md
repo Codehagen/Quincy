@@ -70,7 +70,7 @@ component never mixes both.
 
 **One exception: the Cuts chat margin is shadcn.** The editor's chat margin
 is `components/editor/studio-chat.tsx` and what it renders inside itself:
-`cuts-turn.tsx`, `arrival/arrival.tsx` and `self-check/check-frames.tsx`
+`cuts-turn.tsx`, `style-and-hooks.tsx`, `arrival/arrival.tsx` and `self-check/check-frames.tsx`
 (`use-cuts-stream.ts` is its state and renders nothing). It is built from
 shadcn registry components (`components/ui/` button, message, bubble, trace,
 marker, item, collapsible, separator, checkbox, message-scroller, empty, and

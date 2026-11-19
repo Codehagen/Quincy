@@ -579,11 +579,20 @@ const RELEASE_EASING: [number, number, number, number] = [0.4, 0, 0.2, 1]
 const DEFAULT_RAMP_US = 600_000
 
 /**
- * 1.3. Far enough that the cut to it registers, close enough that a 1080p
- * proxy still has the pixels — a punch past about 1.6 is visibly softer than
- * the frame it interrupted.
+ * 1.12. A closer shot, not a crop: enough that the push registers, small
+ * enough that it reads as the camera leaning in rather than the frame being
+ * cut down. The first default was 1.3, and a talking head at 1.3 for a whole
+ * clip read as a different, worse shot (emphasis.ts has the rest of the
+ * rules a restrained zoom follows).
  */
-const DEFAULT_PUNCH_SCALE = 1.3
+const DEFAULT_PUNCH_SCALE = 1.12
+
+/**
+ * How long a push with no end given lasts: a line, not a clip. A clip of a
+ * tightened talk can run thirty seconds, and a push held that long is a
+ * reframe nobody asked for.
+ */
+const DEFAULT_PUNCH_US = 3_000_000
 
 export type PunchInOptions = {
   scale?: number
@@ -596,6 +605,11 @@ export type PunchInOptions = {
   origin?: { x: number; y: number }
   /** Stay in rather than easing back out. */
   hold?: boolean
+  /**
+   * Already pushed in at the window's start: the continuation of a push that
+   * began on the clip before (a line that crosses a cut). No ramp in.
+   */
+  startIn?: boolean
 }
 
 /**
@@ -631,7 +645,11 @@ export function punchIn(
     element.startUs,
     elementEndUs
   )
-  const toUs = clampToRange(options.toUs ?? elementEndUs, fromUs, elementEndUs)
+  const toUs = clampToRange(
+    options.toUs ?? (options.hold ? elementEndUs : fromUs + DEFAULT_PUNCH_US),
+    fromUs,
+    elementEndUs
+  )
 
   const windowUs = toUs - fromUs
   if (windowUs <= 0) return []
@@ -655,7 +673,43 @@ export function punchIn(
     originY: origin.y,
   })
 
-  const keys = options.hold
+  const continued = options.startIn
+    ? options.hold
+      ? [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+        ]
+      : [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs - rampUs),
+            value: scale,
+            interpolation: "bezier",
+            easing: RELEASE_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: 1,
+            interpolation: "linear",
+          }),
+        ]
+    : null
+
+  const keys = continued
+    ? continued
+    : options.hold
     ? [
         newKeyframe({
           timeUs: us(startLocalUs),

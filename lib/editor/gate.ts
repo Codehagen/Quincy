@@ -66,6 +66,10 @@ export const EXEMPT_TOOLS = new Set([
   "correct_words",
   "style_captions",
   "name_speaker",
+  // Pauses, the caption look, the sound and still framing; never a word.
+  "apply_edit_style",
+  // Silence before the first word, a text and at most one push.
+  "apply_hook",
 ])
 
 /** The tools whose built ops are measured before they land. */

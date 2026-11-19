@@ -627,7 +627,7 @@ function chunk<T>(items: T[], count: number): T[][] {
  * words between them, so a single delta is wrong the moment there is more than
  * one cut.
  */
-function cutSourceRanges(
+export function cutSourceRanges(
   scene: Scene,
   ranges: UsRange[],
   options: { mediaId: string; author: Author }

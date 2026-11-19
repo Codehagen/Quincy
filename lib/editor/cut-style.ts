@@ -1,5 +1,6 @@
 import { DEFAULT_CAPTION_STYLE } from "./document"
 import { EFFECTS } from "./effect-catalogue"
+import { isPace, PACE_SPECS, type Pace } from "./pacing"
 import { findMainTrack } from "./timeline"
 import type { CaptionStyle, EffectType, Scene } from "./types"
 
@@ -23,7 +24,10 @@ export type CutStyle = {
   }
   /** Looks on the whole spine, by type and amount. Zoom is a moment, not a style. */
   looks?: { type: Exclude<EffectType, "zoom">; amount: number }[]
+  /** Exact pause numbers, when the person named them. Wins over `pace`. */
   pauses?: { minSilenceMs: number; paddingMs: number }
+  /** How hard pauses are tightened, by name (pacing.ts). */
+  pace?: Pace
   voice?: "original" | "clean"
 }
 
@@ -32,7 +36,7 @@ export const CUT_STYLE_SLUG = "cuts/style"
 /** What a cut looks like now, as a style worth keeping. */
 export function cutStyleOf(
   scene: Scene,
-  extra: Pick<CutStyle, "pauses"> = {}
+  extra: Pick<CutStyle, "pauses" | "pace"> = {}
 ): CutStyle {
   const style: CutStyle = { ...extra }
   const caption = scene.tracks
@@ -124,6 +128,10 @@ export function validCutStyle(value: unknown): CutStyle | null {
     if (!(paddingMs >= 0 && paddingMs <= 500)) return null
     out.pauses = { minSilenceMs, paddingMs }
   }
+  if (style.pace !== undefined) {
+    if (!isPace(style.pace)) return null
+    out.pace = style.pace
+  }
   if (style.voice) {
     if (style.voice !== "clean" && style.voice !== "original") return null
     out.voice = style.voice
@@ -152,6 +160,11 @@ export function describeCutStyle(style: CutStyle): string[] {
   if (style.pauses) {
     lines.push(
       `Pauses longer than ${style.pauses.minSilenceMs} ms are tightened, leaving ${style.pauses.paddingMs} ms either side.`
+    )
+  }
+  if (style.pace && !style.pauses) {
+    lines.push(
+      `Pauses tightened at a ${PACE_SPECS[style.pace].label.toLowerCase()} pace.`
     )
   }
   if (style.voice === "clean")
