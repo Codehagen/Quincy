@@ -4,7 +4,15 @@ import { createScene } from "./document"
 import { applyOps, applyToScene, newElement, targetInScene } from "./ops"
 import { findMainTrack, sceneDurationUs } from "./timeline"
 import { secondsToUs, us } from "./time"
-import { addCaptions, MAX_CUT_STEPS, removeSilences, removeSilenceSteps } from "./tools"
+import {
+  addCaptions,
+  cleanUpSteps,
+  cutGapAround,
+  MAX_CUT_STEPS,
+  removeSilences,
+  removeSilenceSteps,
+  restoreSpeech,
+} from "./tools"
 import type { Word } from "./transcript"
 import {
   UNLOCKED,
@@ -307,7 +315,11 @@ describe("targets (plans/036)", () => {
     const base = scene()
     const ops = addCaptions(base, WORDS, { mediaId: "va-1", author: "agent" })
     for (const op of ops) {
-      expect(op.target).toEqual({ action: "press", kind: "control", control: "captions" })
+      expect(op.target).toEqual({
+        action: "press",
+        kind: "control",
+        control: "captions",
+      })
     }
   })
 
@@ -345,15 +357,27 @@ describe("targets (plans/036)", () => {
 
     expect(sceneDurationUs(stepped)).toBe(sceneDurationUs(batch))
     const windows = (s: Scene) =>
-      (findMainTrack(s)!.elements as VideoElement[]).map((clip) => [clip.trimStartUs, clip.trimEndUs])
+      (findMainTrack(s)!.elements as VideoElement[]).map((clip) => [
+        clip.trimStartUs,
+        clip.trimEndUs,
+      ])
     expect(windows(stepped)).toEqual(windows(batch))
   })
 
   it("keeps the captions in step with the spine at every step", () => {
     const base = scene()
-    let current = apply(base, addCaptions(base, WORDS, { mediaId: "va-1", author: "agent" }))
+    let current = apply(
+      base,
+      addCaptions(base, WORDS, { mediaId: "va-1", author: "agent" })
+    )
     for (const step of removeSilenceSteps(current, WORDS, options)) {
-      expect(step.some((op) => op.op === "replace_elements" && op.trackId !== findMainTrack(current)!.id)).toBe(true)
+      expect(
+        step.some(
+          (op) =>
+            op.op === "replace_elements" &&
+            op.trackId !== findMainTrack(current)!.id
+        )
+      ).toBe(true)
       current = applyToScene(current, step, "agent")
     }
     expect(captionsOf(current)[0].startUs).toBe(secondsToUs(0.12))
@@ -369,7 +393,153 @@ describe("targets (plans/036)", () => {
     }))
     const steps = removeSilenceSteps(scene(), many, options)
     expect(steps.length).toBeLessThanOrEqual(MAX_CUT_STEPS)
-    const multi = steps.find((step) => step[0].target?.kind === "range" && step[0].target.spans.length > 1)
+    const multi = steps.find(
+      (step) =>
+        step[0].target?.kind === "range" && step[0].target.spans.length > 1
+    )
     expect(multi).toBeDefined()
+  })
+})
+
+describe("cleanUpSteps", () => {
+  const STUMBLE: Word[] = [
+    ["we", 1, 1.3],
+    ["we", 1.4, 1.7],
+    ["shipped", 1.8, 2.3],
+    ["it.", 2.4, 2.7],
+  ].map(([text, start, end]) => ({
+    text: text as string,
+    startUs: secondsToUs(start as number),
+    endUs: secondsToUs(end as number),
+    confidence: 0.99,
+  }))
+
+  it("cuts the first copy of a repeat and names it", () => {
+    const base = scene()
+    const plan = cleanUpSteps(base, STUMBLE, {
+      mediaId: "va-1",
+      author: "agent",
+      sourceDurationUs: secondsToUs(60),
+    })
+    expect(plan.removed.map((item) => item.kind)).toEqual(["repetition"])
+    const after = plan.steps.reduce(
+      (current, ops) => applyToScene(current, ops, "agent"),
+      base
+    )
+    expect(sceneDurationUs(after)).toBeLessThan(sceneDurationUs(base))
+    for (const ops of plan.steps) {
+      for (const op of ops) expect(op.target).toBeDefined()
+    }
+  })
+
+  it("finds nothing in clean speech", () => {
+    const plan = cleanUpSteps(scene(), WORDS, {
+      mediaId: "va-1",
+      author: "agent",
+      sourceDurationUs: secondsToUs(60),
+    })
+    expect(plan.steps).toEqual([])
+  })
+})
+
+describe("restoreSpeech", () => {
+  it("brings a cut pause back and the cut is whole again", () => {
+    const base = scene()
+    const cut = removeSilences(base, WORDS, {
+      mediaId: "va-1",
+      author: "agent",
+      sourceDurationUs: secondsToUs(60),
+    })
+    const tightened = applyToScene(base, cut, "agent")
+    const lost = sceneDurationUs(base) - sceneDurationUs(tightened)
+    expect(lost).toBeGreaterThan(0)
+
+    // The middle pause, at 8 s of the recording.
+    const ops = restoreSpeech(tightened, {
+      mediaId: "va-1",
+      atUs: secondsToUs(8),
+      sourceDurationUs: secondsToUs(60),
+    })
+    const restored = applyToScene(tightened, ops, "user")
+    expect(sceneDurationUs(restored)).toBeGreaterThan(
+      sceneDurationUs(tightened)
+    )
+    const spine = findMainTrack(restored)!
+    expect(
+      spine.elements.some(
+        (clip) =>
+          clip.kind === "video" &&
+          clip.trimStartUs <= secondsToUs(8) &&
+          clip.trimEndUs > secondsToUs(8)
+      )
+    ).toBe(true)
+    expect(targetInScene(restored, ops[0].target!)).toBe(true)
+  })
+
+  it("does nothing where the recording still plays", () => {
+    expect(
+      restoreSpeech(scene(), {
+        mediaId: "va-1",
+        atUs: secondsToUs(3),
+        sourceDurationUs: secondsToUs(60),
+      })
+    ).toEqual([])
+  })
+
+  it("rebuilds the captions so the restored words are on them", () => {
+    const base = scene()
+    const captioned = applyToScene(
+      base,
+      addCaptions(base, WORDS, { mediaId: "va-1", author: "user" }),
+      "user"
+    )
+    const deleted = applyToScene(
+      captioned,
+      removeSilences(captioned, WORDS.slice(0, 2), {
+        mediaId: "va-1",
+        author: "user",
+        sourceDurationUs: secondsToUs(60),
+        silence: {
+          minSilenceUs: us(350_000),
+          paddingUs: us(0),
+          trimHead: false,
+          trimTail: true,
+        },
+      }),
+      "user"
+    )
+    const words = (s: Scene) =>
+      s.tracks.filter((t) => t.kind === "caption").flatMap((t) => t.elements)
+        .length
+    expect(words(deleted)).toBe(2)
+    const back = applyToScene(
+      deleted,
+      restoreSpeech(deleted, {
+        mediaId: "va-1",
+        atUs: secondsToUs(11.2),
+        sourceDurationUs: secondsToUs(60),
+        words: WORDS,
+      }),
+      "user"
+    )
+    expect(words(back)).toBe(4)
+  })
+})
+
+describe("cutGapAround", () => {
+  it("spans from the piece before to the piece after", () => {
+    const pieces = [
+      { trimStartUs: us(0), trimEndUs: us(10) },
+      { trimStartUs: us(20), trimEndUs: us(30) },
+    ] as VideoElement[]
+    expect(cutGapAround(pieces, us(15), us(40))).toEqual({
+      startUs: 10,
+      endUs: 20,
+    })
+    expect(cutGapAround(pieces, us(35), us(40))).toEqual({
+      startUs: 30,
+      endUs: 40,
+    })
+    expect(cutGapAround(pieces, us(5), us(40))).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import { createIdGenerator } from "ai"
 import { newElement } from "./ops"
 import { createProvenance } from "./provenance"
 import { us, type Us } from "./time"
+import { CAPTION_RULES } from "./transcript"
 import {
   UNLOCKED,
   type Author,
@@ -165,7 +166,10 @@ export function createScene(options: {
 export function currentScene(
   document: Pick<VideoDocument, "scenes" | "currentSceneId">
 ): Scene | undefined {
-  return document.scenes.find((scene) => scene.id === document.currentSceneId) ?? document.scenes[0]
+  return (
+    document.scenes.find((scene) => scene.id === document.currentSceneId) ??
+    document.scenes[0]
+  )
 }
 
 export function createDocument(options: {
@@ -192,6 +196,7 @@ export function createDocument(options: {
       fps: options.fps ?? 30,
       canvas: options.canvas ?? VERTICAL_CANVAS,
       background: { type: "color", color: "#000000" },
+      rules: { captions: CAPTION_RULES },
     },
     scenes: [scene],
     currentSceneId: scene.id,
@@ -291,4 +296,11 @@ export function createSnapshot(document: VideoDocument): ProjectSnapshot {
 /** Provenance for something the ops layer is not creating for you. */
 export function authored(author: Author) {
   return createProvenance(author)
+}
+
+/** The caption rules a project was made with (transcript.ts `CAPTION_RULES`). */
+export function captionRules(
+  document: Pick<VideoDocument, "settings">
+): number {
+  return document.settings.rules?.captions ?? 1
 }

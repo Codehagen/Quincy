@@ -1,6 +1,12 @@
 import { createIdGenerator } from "ai"
 
-import { FILLERS, isKnownFiller, normaliseWord, SOUND_FILLERS } from "./fillers"
+import {
+  FILLERS,
+  isKnownFiller,
+  isSoundFiller,
+  normaliseWord,
+  SOUND_FILLERS,
+} from "./fillers"
 import { mergeRanges, secondsToUs, us, type Us, type UsRange } from "./time"
 
 const newTokenId = createIdGenerator({ prefix: "tk", size: 12 })
@@ -220,8 +226,10 @@ export function fillerCuts(
     ...SOUND_FILLERS,
     ...(options.include ?? []).filter(isKnownFiller).map(normaliseWord),
   ])
-  const isCut = (word: Word) => wanted.has(normaliseWord(word.text))
-  const isAnyFiller = (word: Word) => isKnownFiller(word.text)
+  const isCut = (word: Word) =>
+    isSoundFiller(word.text) || wanted.has(normaliseWord(word.text))
+  const isAnyFiller = (word: Word) =>
+    isKnownFiller(word.text) || isSoundFiller(word.text)
   const padding = Math.max(0, options.paddingUs ?? FILLER_PADDING_US)
   const pause = options.pause ?? DEFAULT_SILENCE
   const minPauseUs = Math.max(MIN_SILENCE_US, pause.minSilenceUs)
@@ -240,37 +248,12 @@ export function fillerCuts(
     )
     if (overlapsSpeech) return
 
-    const before = words[index - 1]
-    const after = words[index + 1]
-
-    // The left edge: padding, held to the middle of the gap, or the pause
-    // swallowed up to its own padding when the gap is a pause.
-    const leftEdge = before ? before.endUs : 0
-    const leftGap = word.startUs - leftEdge
-    let startUs: number
-    if (leftGap > minPauseUs) {
-      startUs = before ? leftEdge + pausePadding : 0
-    } else {
-      const limit = before ? leftEdge + Math.max(0, leftGap) / 2 : 0
-      startUs = Math.max(word.startUs - padding, limit)
-    }
-
-    const rightEdge = after ? after.startUs : durationUs
-    const rightGap = rightEdge - word.endUs
-    let endUs: number
-    if (rightGap > minPauseUs) {
-      endUs = after ? rightEdge - pausePadding : durationUs
-    } else {
-      const limit = after ? rightEdge - Math.max(0, rightGap) / 2 : durationUs
-      endUs = Math.min(word.endUs + padding, limit)
-    }
-
-    startUs = Math.min(startUs, word.startUs)
-    endUs = Math.max(endUs, word.endUs)
-    cuts.push({
-      range: { startUs: us(Math.round(startUs)), endUs: us(Math.round(endUs)) },
-      fillers: [word],
+    const range = paddedCut(words, index, index, durationUs, {
+      paddingUs: padding,
+      minPauseUs,
+      pausePaddingUs: pausePadding,
     })
+    cuts.push({ range, fillers: [word] })
   })
 
   // Touching cuts become one: both padded to the same midpoint, they meet.
@@ -288,6 +271,56 @@ export function fillerCuts(
     }
   }
   return merged
+}
+
+/**
+ * The source range that cuts `words[first..last]` cleanly.
+ *
+ * The span of those words plus padding, the padding held to the middle of the
+ * gap on either side so it never reaches a neighbour. A gap long enough to be
+ * a pause goes with the cut, up to where `remove_silences` would cut it (its
+ * padding kept next to the neighbour): cutting the words and leaving the
+ * pauses either side would join two pauses into a longer one.
+ *
+ * Shared by the filler cut and the clean-up of repeats and false starts,
+ * which differ in which words they pick and not in how a cut is placed.
+ */
+export function paddedCut(
+  words: Word[],
+  first: number,
+  last: number,
+  durationUs: Us,
+  options: { paddingUs: number; minPauseUs: number; pausePaddingUs: number }
+): UsRange {
+  const { paddingUs, minPauseUs, pausePaddingUs } = options
+  const head = words[first]
+  const tail = words[last]
+  const before = words[first - 1]
+  const after = words[last + 1]
+
+  const leftEdge = before ? before.endUs : 0
+  const leftGap = head.startUs - leftEdge
+  let startUs: number
+  if (leftGap > minPauseUs) {
+    startUs = before ? leftEdge + pausePaddingUs : 0
+  } else {
+    const limit = before ? leftEdge + Math.max(0, leftGap) / 2 : 0
+    startUs = Math.max(head.startUs - paddingUs, limit)
+  }
+
+  const rightEdge = after ? after.startUs : durationUs
+  const rightGap = rightEdge - tail.endUs
+  let endUs: number
+  if (rightGap > minPauseUs) {
+    endUs = after ? rightEdge - pausePaddingUs : durationUs
+  } else {
+    const limit = after ? rightEdge - Math.max(0, rightGap) / 2 : durationUs
+    endUs = Math.min(tail.endUs + paddingUs, limit)
+  }
+
+  startUs = Math.min(startUs, head.startUs)
+  endUs = Math.max(endUs, tail.endUs)
+  return { startUs: us(Math.round(startUs)), endUs: us(Math.round(endUs)) }
 }
 
 /**
@@ -355,6 +388,9 @@ function quietestNear(instant: Us, peaks: AudioPeaks, windowUs: Us): Us {
  * the one worth having. Grouping is also broken at a long pause regardless of
  * count, so a segment never spans a sentence boundary — a caption that holds
  * two words either side of a two second gap reads as a mistake.
+ *
+ * This is the first rule set (`CAPTION_RULES` 1). Projects made before the
+ * second keep it, so reopening an old cut never re-breaks its captions.
  */
 export function groupIntoSegments(
   words: Word[],
@@ -383,6 +419,157 @@ export function groupIntoSegments(
   return segments
 }
 
+/**
+ * The longest a single word is held on screen.
+ *
+ * Transcribers sometimes stretch a sentence's last word across the silence
+ * after it — a "done." that runs four seconds — and a caption built from that
+ * timing sits on screen over nothing. No spoken word comes near this.
+ */
+export const MAX_CAPTION_WORD_US = us(2_500_000)
+
+/**
+ * Words a caption should not end on when more follow: articles, short
+ * connectors and prepositions, English and Norwegian. "We shipped the" over
+ * "new editor" reads as broken; "We shipped" over "the new editor" does not.
+ */
+const WEAK_WORDS: ReadonlySet<string> = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "but",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "for",
+  "with",
+  "from",
+  "by",
+  "as",
+  "if",
+  "so",
+  "that",
+  "my",
+  "our",
+  "your",
+  "og",
+  "i",
+  "på",
+  "en",
+  "et",
+  "ei",
+  "av",
+  "til",
+  "med",
+  "som",
+  "å",
+  "men",
+  "eller",
+  "om",
+  "fra",
+  "for",
+  "ved",
+  "hvis",
+  "så",
+  "den",
+  "det",
+  "de",
+  "min",
+  "vår",
+  "din",
+])
+
+function isWeak(word: Word): boolean {
+  const text = normaliseWord(word.text)
+  // Characters, not bytes: "å" is one letter.
+  return [...text].length <= 1 || WEAK_WORDS.has(text)
+}
+
+/**
+ * The caption rules a project was made with.
+ *
+ * 2 (current): filler sounds are left off the captions (the person said "um";
+ * the screen does not need to), a word is held at most `MAX_CAPTION_WORD_US`,
+ * and a phrase-at-a-time caption breaks where it reads well rather than at a
+ * fixed count. 1: the fixed count, every word shown. Stored on the document
+ * (`settings.rules.captions`) so an old project keeps the captions it had.
+ */
+export const CAPTION_RULES = 2
+
+/**
+ * Group words into caption segments the way they read.
+ *
+ * Aims for `target` words, may run to `target + 2` rather than end on a weak
+ * word, and folds a trailing fragment of one or two words into the segment
+ * before it when that fragment starts weak. Breaks at a long pause and after
+ * a sentence's last word whatever the count. With `target` 1 it is the
+ * word-by-word look, with the same filler and hold rules.
+ */
+export function groupReadable(
+  words: Word[],
+  target: number,
+  options: { hideFillers?: boolean; maxGapUs?: Us } = {}
+): Word[][] {
+  const maxGapUs = options.maxGapUs ?? us(600_000)
+  const shown =
+    (options.hideFillers ?? true)
+      ? words.filter((word) => !isSoundFiller(word.text))
+      : words
+  const held = shown.map((word) =>
+    word.endUs - word.startUs > MAX_CAPTION_WORD_US
+      ? { ...word, endUs: us(word.startUs + MAX_CAPTION_WORD_US) }
+      : word
+  )
+  if (held.length === 0) return []
+
+  const size = Math.max(1, Math.round(target))
+  if (size === 1) return held.map((word) => [word])
+
+  const max = size + 2
+  const segments: Word[][] = []
+  let current: Word[] = []
+
+  held.forEach((word, index) => {
+    const previous = current.at(-1)
+    const gapped = previous && word.startUs - previous.endUs > maxGapUs
+    if (gapped) {
+      segments.push(current)
+      current = []
+    }
+    current.push(word)
+
+    const next = held[index + 1]
+    const sentenceEnds = /[.!?]$/.test(word.text.trim())
+    const full = current.length >= size
+    const mayEnd = !isWeak(word) || current.length >= max
+    if (next && (sentenceEnds || (full && mayEnd))) {
+      segments.push(current)
+      current = []
+    }
+  })
+  if (current.length > 0) segments.push(current)
+
+  // A tail of one or two words that opens weak joins the segment before it.
+  const last = segments.at(-1)
+  const before = segments.at(-2)
+  if (
+    last &&
+    before &&
+    last.length < 3 &&
+    isWeak(last[0]) &&
+    !/[.!?]$/.test(before.at(-1)!.text.trim()) &&
+    last[0].startUs - before.at(-1)!.endUs <= maxGapUs
+  ) {
+    segments.splice(-2, 2, [...before, ...last])
+  }
+
+  return segments
+}
+
 export type CaptionTokenSeed = {
   id: string
   text: string
@@ -408,9 +595,18 @@ export function buildCaptionSeeds(
     mediaId: string
     elementId: string
     wordsPerSegment?: number
+    /** `CAPTION_RULES` the project was made with. Absent is the first set. */
+    rules?: number
+    /** Rules 2 and on: show filler sounds anyway. */
+    showFillers?: boolean
   }
 ): { tokens: CaptionTokenSeed[]; startUs: Us; endUs: Us }[] {
-  const segments = groupIntoSegments(words, options.wordsPerSegment ?? 1)
+  const segments =
+    (options.rules ?? 1) >= 2
+      ? groupReadable(words, options.wordsPerSegment ?? 1, {
+          hideFillers: !options.showFillers,
+        })
+      : groupIntoSegments(words, options.wordsPerSegment ?? 1)
 
   return segments.map((segment) => {
     const startUs = segment[0].startUs

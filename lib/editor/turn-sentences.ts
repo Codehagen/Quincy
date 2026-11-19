@@ -21,6 +21,31 @@ export const EDITOR_TOOL_SENTENCES = {
     done: "Removed the fillers",
     failed: "Could not remove the fillers.",
   },
+  clean_up_speech: {
+    running: "Cleaning up the speech",
+    done: "Cleaned up the speech",
+    failed: "Could not clean up the speech.",
+  },
+  clean_sound: {
+    running: "Cleaning up the sound",
+    done: "Switched the sound",
+    failed: "Could not switch the sound.",
+  },
+  read_transcript: {
+    running: "Reading what was said",
+    done: "Read what was said",
+    failed: "Could not read the transcript.",
+  },
+  set_chapters: {
+    running: "Setting the chapters",
+    done: "Set the chapters",
+    failed: "Could not set the chapters.",
+  },
+  save_cut_style: {
+    running: "Saving your cut style",
+    done: "Saved your cut style",
+    failed: "Could not save the cut style.",
+  },
   add_captions: {
     running: "Adding captions",
     done: "Added captions",

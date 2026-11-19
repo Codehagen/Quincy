@@ -17,9 +17,17 @@ import {
   detectSilences,
   DEFAULT_SILENCE,
   fillerCuts,
+  type AudioPeaks,
   type SilenceOptions,
   type Word,
 } from "./transcript"
+import {
+  cleanUpCuts,
+  DEFAULT_CLEAN_UP,
+  type Disfluency,
+  type DisfluencyKind,
+} from "./disfluency"
+import { refineCuts } from "./refine-cuts"
 import type {
   Author,
   CaptionElement,
@@ -81,6 +89,10 @@ export function addCaptions(
     style?: CaptionStyle
     /** 1 is the word-by-word look. Higher reads as a phrase at a time. */
     wordsPerSegment?: number
+    /** The project's caption rules (document.ts `captionRules`). */
+    rules?: number
+    /** Show filler sounds on the captions (rules 2 hide them). */
+    showFillers?: boolean
   }
 ): EditOp[] {
   const spine = findMainTrack(scene)
@@ -97,6 +109,8 @@ export function addCaptions(
     mediaId: options.mediaId,
     elementId: anchor.id,
     wordsPerSegment: options.wordsPerSegment ?? style.wordsPerSegment,
+    rules: options.rules,
+    showFillers: options.showFillers,
   })
 
   const built = seeds.map((seed) =>
@@ -212,6 +226,8 @@ export function removeSilenceSteps(
     author: Author
     sourceDurationUs: Us
     silence?: SilenceOptions
+    /** The take's audio energy: cut edges move to the quietest instant near them. */
+    peaks?: AudioPeaks | null
   }
 ): EditOp[][] {
   const silences = detectSilences(
@@ -221,7 +237,7 @@ export function removeSilenceSteps(
   )
   if (silences.length === 0) return []
 
-  return cutSteps(scene, silences, options)
+  return cutSteps(scene, refineCuts(silences, words, options.peaks), options)
 }
 
 /**
@@ -278,6 +294,7 @@ export function removeFillerSteps(
     author: Author
     sourceDurationUs: Us
     include?: readonly string[]
+    peaks?: AudioPeaks | null
   }
 ): { steps: EditOp[][]; removed: Word[] } {
   const spine = findMainTrack(scene)
@@ -297,13 +314,266 @@ export function removeFillerSteps(
 
   const steps = cutSteps(
     scene,
-    cuts.map((cut) => cut.range),
+    refineCuts(
+      cuts.map((cut) => cut.range),
+      words,
+      options.peaks
+    ),
     options
   )
   return {
     steps,
-    removed: steps.length === 0 ? [] : cuts.flatMap((cut) => cut.fillers.filter(plays)),
+    removed:
+      steps.length === 0
+        ? []
+        : cuts.flatMap((cut) => cut.fillers.filter(plays)),
   }
+}
+
+/**
+ * Clean the speech up: repeats, false starts, and (when asked) set-off filler
+ * phrases, with the hesitations among them. In steps, captions with them, the
+ * same way the fillers go.
+ *
+ * Only what still plays: a stumble inside a stretch already cut is not in
+ * the cut, and the receipt names only what this run took.
+ */
+export function cleanUpSteps(
+  scene: Scene,
+  words: Word[],
+  options: {
+    mediaId: string
+    author: Author
+    sourceDurationUs: Us
+    kinds?: readonly DisfluencyKind[]
+    peaks?: AudioPeaks | null
+  }
+): { steps: EditOp[][]; removed: Disfluency[] } {
+  const spine = findMainTrack(scene)
+  if (!spine) return { steps: [], removed: [] }
+
+  const plays = (item: Disfluency) =>
+    words
+      .slice(item.from, item.to + 1)
+      .some(
+        (word) =>
+          sourceToTimelineUs(
+            spine,
+            options.mediaId,
+            us(Math.round((word.startUs + word.endUs) / 2))
+          ) !== null
+      )
+
+  const cuts = cleanUpCuts(
+    words,
+    options.sourceDurationUs,
+    options.kinds ?? DEFAULT_CLEAN_UP
+  ).filter((cut) => cut.found.some(plays))
+  if (cuts.length === 0) return { steps: [], removed: [] }
+
+  const steps = cutSteps(
+    scene,
+    refineCuts(
+      cuts.map((cut) => cut.range),
+      words,
+      options.peaks
+    ),
+    options
+  )
+  return {
+    steps,
+    removed:
+      steps.length === 0 ? [] : cuts.flatMap((cut) => cut.found.filter(plays)),
+  }
+}
+
+/**
+ * Bring a cut stretch of the recording back, and the words in it.
+ *
+ * The other half of editing by transcript: a word that was cut stays on the
+ * page, struck through, and one click restores the stretch it sits in — the
+ * whole gap between the two pieces that still play either side of it, since
+ * that is the one thing that was taken out. The piece before the gap grows
+ * back over it (or, at the take's head, the piece after), so the stretch
+ * plays where it was in the recording and no new clip appears.
+ *
+ * Captions, when the cut has them, are rebuilt from the transcript in the
+ * style they already have: the restored words had no caption tokens left to
+ * remap, because a cut drops them.
+ */
+export function restoreSpeech(
+  scene: Scene,
+  options: {
+    mediaId: string
+    /** Any source instant inside the stretch to bring back. */
+    atUs: Us
+    sourceDurationUs: Us
+    words?: Word[] | null
+    rules?: number
+    author?: Author
+  }
+): EditOp[] {
+  const author = options.author ?? "user"
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
+  const pieces = spine.elements.filter(
+    (element): element is VideoElement =>
+      element.kind === "video" && element.mediaId === options.mediaId
+  )
+  if (pieces.length === 0) return []
+  if (sourceToTimelineUs(spine, options.mediaId, options.atUs) !== null)
+    return []
+
+  const gap = cutGapAround(pieces, options.atUs, options.sourceDurationUs)
+  if (!gap) return []
+
+  // Where it goes on the spine: after the piece that ends where the gap
+  // starts, or before the one that starts where it ends.
+  const previous = pieces
+    .filter((piece) => piece.trimEndUs <= gap.startUs)
+    .sort((a, b) => b.trimEndUs - a.trimEndUs)[0]
+  const following = pieces
+    .filter((piece) => piece.trimStartUs >= gap.endUs)
+    .sort((a, b) => a.trimStartUs - b.trimStartUs)[0]
+  if (!previous && !following) return []
+
+  // The piece before the gap grows at its end, which moves nothing on it.
+  // With no piece before (the gap is the take's head), the piece after grows
+  // at its head, and its curves move with it so they stay on their frames.
+  const fields = ["startUs", "durationUs", "trimStartUs", "trimEndUs"]
+  const grown: VideoElement = previous
+    ? {
+        ...previous,
+        trimEndUs: gap.endUs,
+        durationUs: us(previous.durationUs + (gap.endUs - gap.startUs)),
+        provenance: stampFields(previous.provenance, author, fields),
+      }
+    : {
+        ...following!,
+        trimStartUs: gap.startUs,
+        durationUs: us(following!.durationUs + (gap.endUs - gap.startUs)),
+        animations: shiftAnimations(following!, gap.endUs - gap.startUs),
+        provenance: stampFields(following!.provenance, author, fields),
+      }
+  const replaced = previous ?? following!
+  const joined = spine.elements.map((element) =>
+    element === replaced ? grown : element
+  )
+
+  const laid = layOut(joined)
+  const after: Track = { ...spine, elements: laid }
+  const ops: EditOp[] = [
+    {
+      op: "replace_elements",
+      sceneId: scene.id,
+      trackId: spine.id,
+      elements: laid,
+    },
+  ]
+
+  for (const track of scene.tracks) {
+    if (track.kind !== "caption" || track.elements.length === 0) continue
+    const captions = track.elements.filter(
+      (element): element is CaptionElement => element.kind === "caption"
+    )
+    const style = captions[0]?.style ?? DEFAULT_CAPTION_STYLE
+    if (options.words && options.words.length > 0) {
+      const anchor = laid.find(
+        (element): element is VideoElement =>
+          element.kind === "video" && element.mediaId === options.mediaId
+      )!
+      const seeds = buildCaptionSeeds(options.words, {
+        mediaId: options.mediaId,
+        elementId: anchor.id,
+        wordsPerSegment: style.wordsPerSegment,
+        rules: options.rules,
+      })
+      const others = captions.filter(
+        (caption) => caption.tokens[0]?.sourceMediaId !== options.mediaId
+      )
+      const rebuilt = seeds.map((seed) =>
+        newElement<CaptionElement>(
+          {
+            kind: "caption",
+            name: seed.tokens.map((token) => token.text).join(" "),
+            startUs: seed.startUs,
+            durationUs: us(seed.endUs - seed.startUs),
+            tokens: seed.tokens,
+            style,
+            transform: captions[0]?.transform ?? CAPTION_TRANSFORM,
+          },
+          author
+        )
+      )
+      ops.push({
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: track.id,
+        elements: remapCaptions([...others, ...rebuilt], after),
+      })
+    } else {
+      ops.push({
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: track.id,
+        elements: remapCaptions(captions, after),
+      })
+    }
+  }
+
+  const landed =
+    sourceToTimelineUs(after, options.mediaId, gap.startUs) ?? us(0)
+  return aimed(ops, {
+    action: "press",
+    kind: "range",
+    trackId: spine.id,
+    spans: [{ startUs: landed, endUs: us(landed + (gap.endUs - gap.startUs)) }],
+  })
+}
+
+/**
+ * The stretch of the recording that was cut around a source instant: from
+ * the end of the piece that plays before it to the start of the piece that
+ * plays after it (or the recording's own ends). Null when it plays.
+ */
+export function cutGapAround(
+  pieces: VideoElement[],
+  atUs: Us,
+  sourceDurationUs: Us
+): UsRange | null {
+  if (
+    pieces.some((piece) => atUs >= piece.trimStartUs && atUs < piece.trimEndUs)
+  ) {
+    return null
+  }
+  const startUs = pieces
+    .map((piece) => piece.trimEndUs)
+    .filter((end) => end <= atUs)
+    .reduce<number>((best, end) => Math.max(best, end), 0)
+  const endUs = pieces
+    .map((piece) => piece.trimStartUs)
+    .filter((start) => start > atUs)
+    .reduce<number>((best, start) => Math.min(best, start), sourceDurationUs)
+  return endUs > startUs ? { startUs: us(startUs), endUs: us(endUs) } : null
+}
+
+/** Keyframes on a clip that grew `byUs` at its head, moved to stay on their frames. */
+function shiftAnimations(
+  element: VideoElement,
+  byUs: number
+): VideoElement["animations"] {
+  const channels: VideoElement["animations"]["channels"] = {}
+  for (const [path, channel] of Object.entries(element.animations.channels)) {
+    channels[path] = {
+      ...channel,
+      keys: channel.keys.map((key) => ({
+        ...key,
+        timeUs: us(key.timeUs + byUs),
+      })),
+    }
+  }
+  return { channels }
 }
 
 /** Split a list into at most `count` runs of neighbours, as even as it goes. */

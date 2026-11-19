@@ -1,7 +1,12 @@
 import { tool, type Tool } from "ai"
 import { z } from "zod"
 
-import { currentScene, LANDSCAPE_CANVAS, SQUARE_CANVAS, VERTICAL_CANVAS } from "./document"
+import {
+  currentScene,
+  LANDSCAPE_CANVAS,
+  SQUARE_CANVAS,
+  VERTICAL_CANVAS,
+} from "./document"
 import { effectSpec } from "./effect-catalogue"
 import {
   applyEffect,
@@ -17,11 +22,25 @@ import {
   splitAt,
 } from "./edits"
 import { aimed, applyOps, applyToScene, type EditOp } from "./ops"
-import { findMainTrack, sceneDurationUs } from "./timeline"
+import { findMainTrack, sceneDurationUs, sourceToTimelineUs } from "./timeline"
 import { secondsToUs, us } from "./time"
 import { fillerReceipt, WORD_FILLERS } from "./fillers"
-import { addCaptions, removeFillerSteps, removeSilenceSteps } from "./tools"
-import { DEFAULT_SILENCE, type Word } from "./transcript"
+import { chapterLines, chaptersFor, placeChapters } from "./chapters"
+import {
+  captionStyleFor,
+  cutStyleOf,
+  describeCutStyle,
+  type CutStyle,
+} from "./cut-style"
+import { cleanUpReceipt, type DisfluencyKind } from "./disfluency"
+import { captionRules } from "./document"
+import {
+  addCaptions,
+  cleanUpSteps,
+  removeFillerSteps,
+  removeSilenceSteps,
+} from "./tools"
+import { DEFAULT_SILENCE, type AudioPeaks, type Word } from "./transcript"
 import type {
   ProjectSnapshot,
   Scene,
@@ -63,6 +82,15 @@ export type AgentContext = {
   commit: (ops: EditOp[], meta?: CommitMeta) => void
   /** The transcript, fetched once per run and only if something asks. */
   words: () => Promise<Word[] | null>
+  /**
+   * The take's audio energy (the waveform's peaks), so cut edges can move to
+   * the quietest instant near them. Optional: without it the edges stand.
+   */
+  peaks?: () => Promise<AudioPeaks | null>
+  /** The person's saved cut style, read once when the run starts. */
+  cutStyle?: CutStyle | null
+  /** Keep a style as the person's own (the Brain's `cut_style` page). */
+  saveCutStyle?: (style: CutStyle) => Promise<void>
 }
 
 /**
@@ -89,11 +117,21 @@ export function scopedTo(context: AgentContext, sceneId: string): AgentContext {
   return {
     snapshot: () => {
       const shared = context.snapshot()
-      return { ...shared, document: { ...shared.document, currentSceneId: sceneId } }
+      return {
+        ...shared,
+        document: { ...shared.document, currentSceneId: sceneId },
+      }
     },
     commit: (ops, meta) =>
-      context.commit(ops, { toolName: meta?.toolName ?? "edit", ...meta, sceneId }),
+      context.commit(ops, {
+        toolName: meta?.toolName ?? "edit",
+        ...meta,
+        sceneId,
+      }),
     words: context.words,
+    peaks: context.peaks,
+    cutStyle: context.cutStyle,
+    saveCutStyle: context.saveCutStyle,
   }
 }
 
@@ -108,7 +146,8 @@ const CANVASES = {
 
 export function editorTools(context: AgentContext): Record<string, Tool> {
   /** The scene under the cursor, which is what every tool operates on. */
-  const onScreen = (): Scene | undefined => currentScene(context.snapshot().document)
+  const onScreen = (): Scene | undefined =>
+    currentScene(context.snapshot().document)
 
   /**
    * Run a tool body against the current scene and report the result.
@@ -143,7 +182,8 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
     build: (
       scene: Scene,
       words: Word[],
-      mediaId: string
+      mediaId: string,
+      peaks: AudioPeaks | null
     ) => EditOp[] | EditOp[][],
     describe: (scene: Scene, before: Scene) => string,
     nothing: string
@@ -152,6 +192,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
     if (!words) {
       return "This recording has not been transcribed, so there are no words to work from."
     }
+    const peaks = (await context.peaks?.().catch(() => null)) ?? null
 
     const scene = onScreen()
     const mediaId = spineMedia(scene)
@@ -159,7 +200,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     return run(
       meta,
-      (current) => build(current, words, mediaId),
+      (current) => build(current, words, mediaId, peaks),
       describe,
       nothing
     )
@@ -188,25 +229,31 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       execute: async ({ minSilenceMs, paddingMs }, options?: CallOptions) =>
         withWords(
           { toolCallId: options?.toolCallId, toolName: "remove_silences" },
-          (scene, words, mediaId) => {
+          (scene, words, mediaId, peaks) => {
             const source = spineClip(scene, mediaId)
             if (!source) return []
+
+            // Unasked, the person's own style decides how hard to tighten.
+            const style = context.cutStyle?.pauses
+            const minMs = minSilenceMs ?? style?.minSilenceMs
+            const padMs = paddingMs ?? style?.paddingMs
 
             // In steps, one pause per press, so the cursor can cut each one.
             return removeSilenceSteps(scene, words, {
               mediaId,
               author: "agent",
               sourceDurationUs: source.sourceDurationUs,
+              peaks,
               silence: {
                 ...DEFAULT_SILENCE,
                 minSilenceUs:
-                  minSilenceMs === undefined
+                  minMs === undefined
                     ? DEFAULT_SILENCE.minSilenceUs
-                    : us(Math.round(minSilenceMs * 1000)),
+                    : us(Math.round(minMs * 1000)),
                 paddingUs:
-                  paddingMs === undefined
+                  padMs === undefined
                     ? DEFAULT_SILENCE.paddingUs
-                    : us(Math.round(paddingMs * 1000)),
+                    : us(Math.round(padMs * 1000)),
               },
             })
           },
@@ -258,7 +305,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
         let removed: string[] = []
         return withWords(
           { toolCallId: options?.toolCallId, toolName: "remove_fillers" },
-          (scene, words, mediaId) => {
+          (scene, words, mediaId, peaks) => {
             const source = spineClip(scene, mediaId)
             if (!source) return []
 
@@ -267,6 +314,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
               author: "agent",
               sourceDurationUs: source.sourceDurationUs,
               include: alsoCut,
+              peaks,
             })
             removed = plan.removed.map((word) => word.text)
             return plan.steps
@@ -274,7 +322,10 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           (scene, before) => {
             // The first line is the receipt the margin shows (fillers.ts
             // `fillerReceiptOf`); the rest is for the model.
-            const savedUs = Math.max(0, sceneDurationUs(before) - sceneDurationUs(scene))
+            const savedUs = Math.max(
+              0,
+              sceneDurationUs(before) - sceneDurationUs(scene)
+            )
             return `${fillerReceipt(removed, savedUs)}\n${describeScene(scene)}`
           },
           alsoCut && alsoCut.length > 0
@@ -294,17 +345,31 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           .min(1)
           .optional()
           .describe(
-            "1 gives the word-at-a-time look and is the default. Higher reads as a phrase at a time."
+            "1 gives the word-at-a-time look and is the default. Higher reads as a phrase at a time: about that many words, broken where it reads well."
+          ),
+        showFillers: z
+          .boolean()
+          .optional()
+          .describe(
+            "Filler sounds (um, øh) are left off the captions. true shows them, only when the person asks for every sound."
           ),
       }),
-      execute: async ({ wordsPerSegment }, options?: CallOptions) =>
+      execute: async (
+        { wordsPerSegment, showFillers },
+        options?: CallOptions
+      ) =>
         withWords(
           { toolCallId: options?.toolCallId, toolName: "add_captions" },
           (scene, words, mediaId) =>
             addCaptions(scene, words, {
               mediaId,
               author: "agent",
+              // The person's caption look when they have saved one.
+              style: captionStyleFor(context.cutStyle),
               wordsPerSegment,
+              rules: captionRules(context.snapshot().document),
+              showFillers:
+                showFillers ?? context.cutStyle?.captions?.showFillers,
             }),
           (scene) => `Captions on. ${describeScene(scene)}`,
           "There are no words in the transcript to caption."
@@ -684,6 +749,173 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
         ),
     }),
 
+    clean_up_speech: tool({
+      description:
+        "Cut where the speech trips over itself and close the gaps, captions with it: repeated words ('we we', 'I think I think'), false starts ('we should, um, we need to'), and the hesitations among them. Use for 'clean up my speech', 'remove the stumbles', 'fjern gjentakelsene'. Filler phrases set off by commas or pauses ('it was, like, huge', 'liksom', 'altså', 'you know') are real words much of the time, so they go only when the person names them: pass phrases: true. Doubles people mean ('very very', 'nei nei') stay.",
+      inputSchema: z.object({
+        only: z
+          .array(z.enum(["repetition", "false_start", "hesitation"]))
+          .optional()
+          .describe(
+            "Narrow the clean-up to these kinds, when the person asked for one of them."
+          ),
+        phrases: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also cut set-off filler phrases (like, liksom, altså, you know), only when named."
+          ),
+      }),
+      execute: async ({ only, phrases }, options?: CallOptions) => {
+        let removed: Parameters<typeof cleanUpReceipt>[0] = []
+        const kinds: DisfluencyKind[] = [
+          ...(only ?? ["hesitation", "repetition", "false_start"]),
+          ...(phrases ? (["discourse"] as const) : []),
+        ]
+        return withWords(
+          { toolCallId: options?.toolCallId, toolName: "clean_up_speech" },
+          (scene, words, mediaId, peaks) => {
+            const source = spineClip(scene, mediaId)
+            if (!source) return []
+            const plan = cleanUpSteps(scene, words, {
+              mediaId,
+              author: "agent",
+              sourceDurationUs: source.sourceDurationUs,
+              kinds,
+              peaks,
+            })
+            removed = plan.removed
+            return plan.steps
+          },
+          (scene, before) => {
+            const savedUs = Math.max(
+              0,
+              sceneDurationUs(before) - sceneDurationUs(scene)
+            )
+            const listed = removed
+              .slice(0, 12)
+              .map((item) => `${item.kind.replace("_", " ")}: "${item.phrase}"`)
+              .join("; ")
+            return `${cleanUpReceipt(removed, savedUs)}\nWhat went: ${listed}.\n${describeScene(scene)}`
+          },
+          "Nothing in this take trips over itself the way you asked about. Nothing was changed."
+        )
+      },
+    }),
+
+    read_transcript: tool({
+      description:
+        "Read what is said in the cut as it stands, as timed lines (m:ss from the start of the cut). Use before setting chapters, or when the person asks about something they said.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const words = await context.words()
+        const scene = onScreen()
+        if (!words || !scene) return "This recording has not been transcribed."
+        const spine = findMainTrack(scene)
+        const mediaId = spineMedia(scene)
+        if (!spine || !mediaId)
+          return "This project has no footage on its spine."
+        const lines = timedLines(words, (sourceUs) =>
+          sourceToTimelineUs(spine, mediaId, sourceUs)
+        )
+        const text = lines.join("\n")
+        return text.length > TRANSCRIPT_CHARS
+          ? `${text.slice(0, TRANSCRIPT_CHARS)}\n[the rest is cut off here]`
+          : text || "Nothing is said in the cut as it stands."
+      },
+    }),
+
+    set_chapters: tool({
+      description:
+        "Give a longer cut chapters: a short title per part and the moment it starts, in seconds from the start of the cut. Read the transcript first. The first chapter starts at 0. Use for 'add chapters', 'split it into parts', 'kapitler'. An empty list clears them.",
+      inputSchema: z.object({
+        chapters: z
+          .array(
+            z.object({
+              title: z
+                .string()
+                .describe("A few words, in the language of the take."),
+              atSeconds: z.number().min(0),
+            })
+          )
+          .describe("In order. At least 5 seconds apart."),
+      }),
+      execute: async ({ chapters }, options?: CallOptions) => {
+        const scene = onScreen()
+        if (!scene) return "This project has no scene."
+        const verdict = chaptersFor(
+          scene,
+          chapters.map((chapter) => ({
+            title: chapter.title,
+            atUs: Math.round(chapter.atSeconds * 1_000_000),
+          }))
+        )
+        if (!verdict.ok) return `${verdict.error} Nothing was changed.`
+        context.commit([{ op: "set_chapters", chapters: verdict.chapters }], {
+          toolCallId: options?.toolCallId,
+          toolName: "set_chapters",
+        })
+        return verdict.chapters.length === 0
+          ? "Chapters cleared."
+          : `Chapters set:\n${chapterLines(placeChapters(scene, verdict.chapters))}`
+      },
+    }),
+
+    clean_sound: tool({
+      description:
+        "Switch the cut between the cleaned-up sound (background noise down, low rumble off, loudness evened out) and the recording as it was. Use for 'clean up the sound', 'remove the noise', 'make the audio better', 'bedre lyd'.",
+      inputSchema: z.object({
+        clean: z
+          .boolean()
+          .describe("true for the cleaned-up sound, false for the original."),
+      }),
+      execute: async ({ clean }, options?: CallOptions) =>
+        run(
+          { toolCallId: options?.toolCallId, toolName: "clean_sound" },
+          (scene) => setVoice(scene, clean ? "clean" : "original"),
+          () =>
+            clean
+              ? "The cut now plays the cleaned-up sound. If this take was uploaded before cleaned sound existed, it plays the original until the cleaned track is made (the Sound button in the editor makes it)."
+              : "The cut now plays the sound as it was recorded.",
+          clean
+            ? "The cut already plays the cleaned-up sound."
+            : "The cut already plays the original sound."
+        ),
+    }),
+
+    save_cut_style: tool({
+      description:
+        "Keep how this cut looks as the person's own style: the caption look, the looks on the picture, which sound plays, and (when given) how hard pauses are tightened. Quincy uses it on every cut after. Only when the person asks: 'make this my style', 'remember this look', 'bruk dette som standard'.",
+      inputSchema: z.object({
+        minSilenceMs: z.number().min(250).max(3000).optional(),
+        paddingMs: z.number().min(0).max(500).optional(),
+      }),
+      execute: async ({ minSilenceMs, paddingMs }) => {
+        const scene = onScreen()
+        if (!scene) return "This project has no scene."
+        if (!context.saveCutStyle) return "Styles cannot be saved from here."
+        const pauses =
+          minSilenceMs !== undefined || paddingMs !== undefined
+            ? {
+                pauses: {
+                  minSilenceMs:
+                    minSilenceMs ?? DEFAULT_SILENCE.minSilenceUs / 1000,
+                  paddingMs: paddingMs ?? DEFAULT_SILENCE.paddingUs / 1000,
+                },
+              }
+            : context.cutStyle?.pauses
+              ? { pauses: context.cutStyle.pauses }
+              : {}
+        const style = cutStyleOf(scene, pauses)
+        const lines = describeCutStyle(style)
+        if (lines.length === 0) {
+          return "This cut has no captions, looks or sound choice yet, so there is nothing to keep as a style."
+        }
+        await context.saveCutStyle(style)
+        return `Saved as your cut style:\n${lines.join("\n")}`
+      },
+    }),
+
     describe_timeline: tool({
       description:
         "Read the cut as it stands: length, frame, clips and captions. Use before an edit that depends on where things are, and after one you want to check.",
@@ -772,6 +1004,64 @@ export function dryRun(
     return deleteClipSteps(scene, clipNumbersOf(parsed.data))
   }
   return null
+}
+
+/** How much of the transcript one read returns, in characters. */
+const TRANSCRIPT_CHARS = 12_000
+
+/**
+ * The words that still play, as lines of about a sentence, each led by where
+ * it starts in the cut ("0:42 so the fix was…"). A line breaks at a sentence
+ * end, a pause, or 16 words.
+ */
+export function timedLines(
+  words: Word[],
+  place: (sourceUs: Word["startUs"]) => number | null
+): string[] {
+  const lines: string[] = []
+  let current: string[] = []
+  let startUs = 0
+  let lastEnd = -Infinity
+  for (const word of words) {
+    const at = place(word.startUs)
+    if (at === null) continue
+    if (
+      current.length > 0 &&
+      (current.length >= 16 || at - lastEnd > 700_000)
+    ) {
+      lines.push(`${clock(startUs)} ${current.join(" ")}`)
+      current = []
+    }
+    if (current.length === 0) startUs = at
+    current.push(word.text)
+    lastEnd = at + (word.endUs - word.startUs)
+    if (/[.!?]$/.test(word.text.trim())) {
+      lines.push(`${clock(startUs)} ${current.join(" ")}`)
+      current = []
+    }
+  }
+  if (current.length > 0) lines.push(`${clock(startUs)} ${current.join(" ")}`)
+  return lines
+}
+
+/** Every spine clip set to play one sound or the other. */
+export function setVoice(scene: Scene, voice: "original" | "clean"): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+  const ops: EditOp[] = spine.elements.flatMap((element) =>
+    element.kind === "video" && (element.voice ?? "original") !== voice
+      ? [
+          {
+            op: "update_element" as const,
+            sceneId: scene.id,
+            trackId: spine.id,
+            elementId: element.id,
+            patch: { voice },
+          },
+        ]
+      : []
+  )
+  return aimed(ops, { action: "press", kind: "track", trackId: spine.id })
 }
 
 /** A builder's result as steps: one batch is one step. */
@@ -900,6 +1190,10 @@ export function createRun(options: {
   onCommit: (ops: EditOp[], meta?: CommitMeta) => void
   /** Called at most once, and only if a tool asks for the transcript. */
   loadWords: () => Promise<Word[] | null>
+  /** Called at most once, and only if a cut asks for the waveform. */
+  loadPeaks?: () => Promise<AudioPeaks | null>
+  cutStyle?: CutStyle | null
+  saveCutStyle?: (style: CutStyle) => Promise<void>
 }): AgentContext & { touched: () => boolean } {
   let snapshot = options.initial
   let changed = false
@@ -907,6 +1201,7 @@ export function createRun(options: {
   // Memoised on the promise, not the result, so two tools in one step do not
   // both start the fetch. The transcript is the largest thing the run reads.
   let words: Promise<Word[] | null> | null = null
+  let peaks: Promise<AudioPeaks | null> | null = null
 
   return {
     snapshot: () => snapshot,
@@ -921,5 +1216,11 @@ export function createRun(options: {
       options.onCommit(ops, meta)
     },
     words: () => (words ??= options.loadWords()),
+    peaks: () =>
+      (peaks ??= options.loadPeaks
+        ? options.loadPeaks().catch(() => null)
+        : Promise.resolve(null)),
+    cutStyle: options.cutStyle ?? null,
+    saveCutStyle: options.saveCutStyle,
   }
 }

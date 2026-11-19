@@ -10,6 +10,7 @@ import { isLedgerSlug, renderLedgerSection } from "./memory-ledger"
 // so this import cannot become a second cycle. See the note at the top of it.
 import { storyGapThemes } from "./story-gaps"
 import { renderHabits, type Habits } from "./voice-habits"
+import { validCutStyle } from "./editor/cut-style"
 import {
   brainEvent,
   brainPage,
@@ -152,6 +153,10 @@ function assertValid(
     if (!Array.isArray(policy.windows) || policy.windows.length === 0) {
       throw new BrainInvariantError("policy needs at least one posting window")
     }
+  }
+
+  if (kind === "cut_style" && !validCutStyle(data)) {
+    throw new BrainInvariantError("cut_style data is not a cut style")
   }
 
   if (kind === "story") {

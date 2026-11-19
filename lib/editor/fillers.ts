@@ -61,7 +61,43 @@ export const WORD_FILLERS = FILLERS.filter((word) => !SOUND_SET.has(word))
 
 /** Whether a spoken word, as transcribed, is a filler the cut takes unasked. */
 export function isSoundFiller(text: string): boolean {
-  return SOUND_SET.has(normaliseWord(text))
+  return soundFillerForm(text) !== null
+}
+
+/**
+ * Sounds a transcriber spells drawn out: "ummm", "øhhh", "hmmmm", "mmm".
+ * Squeezed to one letter per run, they land on one of these. Only a word that
+ * was actually drawn out (it got shorter when squeezed) is matched this way,
+ * so "er" ("is" in Norwegian) never becomes a filler by squeezing "err".
+ */
+const DRAWN_OUT: ReadonlySet<string> = new Set([
+  "um",
+  "uh",
+  "uhm",
+  "hm",
+  "m",
+  "mh",
+  "erm",
+  "ehm",
+  "eh",
+  "øh",
+  "øhm",
+  "æh",
+  "æhm",
+])
+
+/**
+ * The listed sound a spoken word is, drawn out or not: "Ummm," is "um" and
+ * "øhhh" is "øh". Null for anything that is not a filler sound. Receipts
+ * count by this form, so "um" and "ummm" are one line, not two.
+ */
+export function soundFillerForm(text: string): string | null {
+  const word = normaliseWord(text)
+  if (SOUND_SET.has(word)) return word
+  const squeezed = word.replace(/(\p{L})\1+/gu, "$1")
+  if (squeezed.length === word.length || !DRAWN_OUT.has(squeezed)) return null
+  if (squeezed === "m" || squeezed === "mh" || squeezed === "hm") return "hmm"
+  return squeezed
 }
 
 /** Whether a word, normalised, is on the counting lists at all. */
@@ -89,10 +125,13 @@ export function isFiller(text: string): boolean {
  * so the same cut always reads the same. `savedUs` is what the cut got
  * shorter by, pauses that went with a filler included.
  */
-export function fillerReceipt(removed: readonly string[], savedUs: number): string {
+export function fillerReceipt(
+  removed: readonly string[],
+  savedUs: number
+): string {
   const counts = new Map<string, number>()
   for (const text of removed) {
-    const word = normaliseWord(text)
+    const word = soundFillerForm(text) ?? normaliseWord(text)
     counts.set(word, (counts.get(word) ?? 0) + 1)
   }
   const named = [...counts]

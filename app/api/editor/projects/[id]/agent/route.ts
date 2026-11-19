@@ -45,7 +45,10 @@ import {
   type VideoProjectRow,
 } from "@/lib/editor/projects"
 import { findMainTrack } from "@/lib/editor/timeline"
-import { wordsFromDeepgram } from "@/lib/editor/transcript"
+import { wordsFromDeepgram, type AudioPeaks } from "@/lib/editor/transcript"
+import { describeCutStyle, type CutStyle } from "@/lib/editor/cut-style"
+import { getCutStyle, saveCutStyle } from "@/lib/editor/cut-style-store"
+import { createR2Storage } from "@/lib/editor/storage-r2"
 import type { Scene, VideoElement } from "@/lib/editor/types"
 import { cooldownDecision } from "@/lib/cooldown"
 import {
@@ -115,6 +118,10 @@ Rules that matter:
 - To remove several clips, name them all in one delete_clip call.
 - "Tighten" means the pauses (remove_silences). Filler sounds (um, uh, øh) go with remove_fillers when the person asks for them; "liksom" and "altså" stay unless they name those words.
 - A large cut (more than 30% of the take, or whole spoken sentences) waits for the person's answer. When they say no, do not try it again; say you left it as it was and offer a smaller cut.
+- Stumbles (repeated words, false starts) go with clean_up_speech when the person asks to clean up their speech. Filler phrases like "liksom", "altså" or "you know" go only when they name them.
+- "Clean up the sound" or "remove the noise" is clean_sound.
+- Chapters: read_transcript first, then set_chapters with short titles in the take's language.
+- "Make this my style" is save_cut_style. When the person has a saved cut style it is below; use it for anything they did not specify.
 - No preamble, no restating the request, no "great question".`
 
 export async function POST(
@@ -241,7 +248,9 @@ export async function POST(
   if (!continuing) {
     const cooldown = replay
       ? cooldownDecision(
-          replayStarted.has(userId) ? new Date(replayStarted.get(userId)!) : null,
+          replayStarted.has(userId)
+            ? new Date(replayStarted.get(userId)!)
+            : null,
           AGENT_COOLDOWN_MS
         )
       : await spendCooldown(userId, AGENT_TAG, AGENT_COOLDOWN_MS)
@@ -286,12 +295,22 @@ export async function POST(
       replayStarted.set(userId, Date.now())
       if (continuing && answerTag) replayContinued.add(`${userId}|${answerTag}`)
     } else {
-      const attempt = { userId, model: EDITOR_AGENT_ATTEMPT, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+      const attempt = {
+        userId,
+        model: EDITOR_AGENT_ATTEMPT,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+      }
       await recordUsage({ ...attempt, conversationId: AGENT_TAG })
       if (continuing && answerTag) {
         await recordUsage({ ...attempt, conversationId: answerTag })
       }
     }
+
+    // The person's saved cut style (the Brain's `cut_style` page). A read
+    // that fails is a run without it, not a run that does not start.
+    const cutStyle = await getCutStyle(userId).catch(() => null)
 
     return startRun({
       id,
@@ -302,6 +321,7 @@ export async function POST(
       messages,
       records,
       approvalSecret,
+      cutStyle,
       signal: request.signal,
     })
   } catch (cause) {
@@ -321,6 +341,7 @@ function startRun({
   messages,
   records,
   approvalSecret,
+  cutStyle,
   signal,
 }: {
   id: string
@@ -331,6 +352,7 @@ function startRun({
   messages: CutsMessage[]
   records: Map<string, GateRecord>
   approvalSecret: string
+  cutStyle: CutStyle | null
   /** The request's, so Stop ends the model call and not only the stream. */
   signal: AbortSignal
 }): Response {
@@ -362,6 +384,23 @@ function startRun({
 
       const asset = await getAsset(clip.mediaId, userId)
       return asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
+    },
+    loadPeaks: async () => {
+      const clip = scene && findMainTrack(scene)?.elements.find(isVideo)
+      if (!clip) return null
+      const asset = await getAsset(clip.mediaId, userId)
+      if (!asset?.seekIndexKey) return null
+      // The waveform the timeline draws: read, never computed again.
+      const response = await fetch(
+        await createR2Storage().url(asset.seekIndexKey)
+      )
+      if (!response.ok) return null
+      const index = (await response.json()) as AudioPeaks
+      return Array.isArray(index.values) ? index : null
+    },
+    cutStyle,
+    saveCutStyle: async (style) => {
+      await saveCutStyle(userId, style)
     },
   })
 
@@ -433,9 +472,15 @@ function startRun({
         model: replay
           ? (await import("@/lib/editor/replay-model")).replayModel(scene)
           : MODEL,
-        system: scene
-          ? `${SYSTEM}\n\nThe cut as it stands: ${describeScene(scene)}`
-          : SYSTEM,
+        system: [
+          SYSTEM,
+          scene ? `The cut as it stands: ${describeScene(scene)}` : null,
+          cutStyle && describeCutStyle(cutStyle).length > 0
+            ? `The person's cut style:\n${describeCutStyle(cutStyle).join("\n")}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         messages: await convertToModelMessages(messages),
         tools: editorTools(run),
         stopWhen: isStepCount(MAX_STEPS),

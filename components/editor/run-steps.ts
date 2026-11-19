@@ -12,10 +12,19 @@ import { removedUs } from "./agent-cursor/timing"
 export function stepTitle(beat: BeatState): string {
   const target = beat.target
   if (beat.toolName === "remove_silences" && target?.kind === "range") {
-    return target.spans.length > 1 ? `Cut ${target.spans.length} pauses` : "Cut a pause"
+    return target.spans.length > 1
+      ? `Cut ${target.spans.length} pauses`
+      : "Cut a pause"
   }
   if (beat.toolName === "remove_fillers" && target?.kind === "range") {
-    return target.spans.length > 1 ? `Cut ${target.spans.length} fillers` : "Cut a filler"
+    return target.spans.length > 1
+      ? `Cut ${target.spans.length} fillers`
+      : "Cut a filler"
+  }
+  if (beat.toolName === "clean_up_speech" && target?.kind === "range") {
+    return target.spans.length > 1
+      ? `Cut ${target.spans.length} stumbles`
+      : "Cut a stumble"
   }
   if (beat.toolName === "delete_clip") return "Cut a line"
   // The self-check's fix (lib/editor/self-check.ts): not a tool the model calls.
@@ -30,7 +39,8 @@ export function stepDetail(beat: BeatState): string | undefined {
 }
 
 export function sentenceFor(tool: string, mood: "done" | "running"): string {
-  const words = (EDITOR_TOOL_SENTENCES as Record<string, { done: string; running: string }>)[tool]
+  const words = (
+    EDITOR_TOOL_SENTENCES as Record<string, { done: string; running: string }>
+  )[tool]
   return words ? words[mood] : tool.replaceAll("_", " ")
 }
-
