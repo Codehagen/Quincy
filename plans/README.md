@@ -436,3 +436,9 @@ Considered and rejected:
   the drop is 0 and the track is kept.
 - **The model Deepgram reports after a language retry.** The field is not
   read anywhere.
+
+## Vlog pacing and hooks (2026-11-19)
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| [052](052-a-cold-open-that-repeats-the-strong-line.md) | A cold open that repeats the strong line | P2 | M | hook templates | TODO |
