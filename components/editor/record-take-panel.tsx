@@ -42,8 +42,22 @@ export function RecordTakePanel({
   const recorderRef = React.useRef<MediaRecorder | null>(null)
   const chunksRef = React.useRef<Blob[]>([])
   const prompterRef = React.useRef<HTMLDivElement | null>(null)
+  const quietSinceRef = React.useRef<number | null>(null)
 
-  const [phase, setPhase] = React.useState<Phase>("asking")
+  // Only ever rendered after a press, in the browser, so this reads the
+  // browser on first render rather than in an effect.
+  const [phase, setPhase] = React.useState<Phase>(() =>
+    typeof navigator !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function" &&
+    typeof MediaRecorder !== "undefined"
+      ? "asking"
+      : "unsupported"
+  )
+  /** Read by the meter's frame loop, which outlives any one render. */
+  const recordingRef = React.useRef(false)
+  React.useEffect(() => {
+    recordingRef.current = phase === "recording"
+  }, [phase])
   const [level, setLevel] = React.useState(0)
   const [silent, setSilent] = React.useState(false)
   const [elapsedMs, setElapsedMs] = React.useState(0)
@@ -77,7 +91,6 @@ export function RecordTakePanel({
       !navigator.mediaDevices?.getUserMedia ||
       typeof MediaRecorder === "undefined"
     ) {
-      setPhase("unsupported")
       return
     }
 
@@ -106,6 +119,16 @@ export function RecordTakePanel({
           analyser.getByteTimeDomainData(samples)
           const next = Math.round(levelOf(samples) * 50) / 50
           setLevel((prev) => (prev === next ? prev : next))
+          // The silence warning, judged here at the meter's rate: quiet the
+          // whole time for longer than the warning allows, while recording.
+          const now = performance.now()
+          if (!recordingRef.current || next > SILENT_LEVEL) {
+            quietSinceRef.current = null
+          } else {
+            quietSinceRef.current ??= now
+          }
+          const quiet = silentTooLong(quietSinceRef.current, now)
+          setSilent((prev) => (prev === quiet ? prev : quiet))
           frame = requestAnimationFrame(tick)
         }
         tick()
@@ -124,7 +147,6 @@ export function RecordTakePanel({
   }, [])
 
   // While recording: the clock, the silence warning and the prompter scroll.
-  const quietSinceRef = React.useRef<number | null>(null)
   React.useEffect(() => {
     if (phase !== "recording") return
     const started = performance.now()
@@ -143,18 +165,6 @@ export function RecordTakePanel({
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [phase, pace, fontPx])
-
-  React.useEffect(() => {
-    if (phase !== "recording") {
-      quietSinceRef.current = null
-      setSilent(false)
-      return
-    }
-    const now = performance.now()
-    if (level > SILENT_LEVEL) quietSinceRef.current = null
-    else quietSinceRef.current ??= now
-    setSilent(silentTooLong(quietSinceRef.current, now))
-  }, [level, phase])
 
   const start = React.useCallback(() => {
     const stream = streamRef.current
@@ -257,7 +267,7 @@ export function RecordTakePanel({
         </div>
       </div>
 
-      {silent ? (
+      {silent && phase === "recording" ? (
         <Text variant="small" role="alert">
           The microphone is not hearing anything. Check that the right one is
           selected.
