@@ -1,12 +1,6 @@
-import {
-  emphasisRefusal,
-  lineWindow,
-  SUBTLE_SCALE,
-  zoomWindows,
-} from "./emphasis"
-import { punchIn } from "./edits"
+import { lineWindow, pushOnLine, SUBTLE_SCALE } from "./emphasis"
 import { applyToScene, type EditOp } from "./ops"
-import { findMainTrack, sourceToTimelineUs } from "./timeline"
+import { findMainTrack, trackEndUs } from "./timeline"
 import { us } from "./time"
 import { addText } from "./titles"
 import { cutSourceRanges } from "./tools"
@@ -223,6 +217,9 @@ const HOOK_MIN_US = 1_800_000
 const HOOK_MAX_US = 3_500_000
 const HOOK_DEFAULT_US = 2_500_000
 
+/** The shortest text `addText` makes; a cut shorter than this gets no hook. */
+const MIN_TEXT_US = 500_000
+
 export type HookResult = {
   steps: EditOp[][]
   /** What happened beyond the obvious, for the agent's answer. */
@@ -268,24 +265,34 @@ export function hookSteps(
     )
   }
 
-  // 2. The hook on screen, for as long as the spoken line, within reason.
+  // 2. One hook per cut: a new template replaces the last one's text.
+  land(removeHooks(current))
+
+  // 3. The hook on screen, for as long as the spoken line, within reason,
+  // and never past the footage: it is an overlay, not a title card.
   const spoken = options.line
     ? lineWindow(current, words, mediaId, options.line)
     : null
-  const shown = spoken
+  const footageUs = spineEndUs(current)
+  const wanted = spoken
     ? Math.min(HOOK_MAX_US, Math.max(HOOK_MIN_US, spoken.toUs))
     : HOOK_DEFAULT_US
-  land(
-    addText(current, {
-      role: "hook",
-      content: options.text.slice(0, MAX_HOOK_LENGTH),
-      atUs: 0,
-      durationUs: shown,
-      author,
-    })
-  )
+  const shown = Math.min(wanted, footageUs)
+  if (shown >= MIN_TEXT_US) {
+    land(
+      addText(current, {
+        role: "hook",
+        content: options.text.slice(0, MAX_HOOK_LENGTH),
+        atUs: 0,
+        durationUs: shown,
+        author,
+      })
+    )
+  } else {
+    notes.push("The cut is too short to hold a hook on screen.")
+  }
 
-  // 3. One push, only where the shape wants it and the cut has room.
+  // 4. One push, only where the shape wants it and the cut has room.
   if (template.push && options.allowPush !== false) {
     if (!options.line) {
       notes.push("No spoken line was given, so there is no push-in.")
@@ -294,17 +301,7 @@ export function hookSteps(
         `"${options.line}" is not in the cut as spoken, so there is no push-in.`
       )
     } else {
-      const ops = punchIn(current, spoken.elementId, {
-        scale: SUBTLE_SCALE,
-        fromUs: spoken.fromUs,
-        toUs: spoken.toUs,
-      })
-      const window = zoomWindows(applyToScene(current, ops, author)).find(
-        (zoom) => zoom.elementId === spoken.elementId
-      )
-      const refusal = window
-        ? emphasisRefusal(current, spoken.elementId, window)
-        : null
+      const { ops, refusal } = pushOnLine(current, spoken, SUBTLE_SCALE)
       if (refusal) notes.push(`No push-in: ${refusal}`)
       else if (land(ops)) notes.push("One subtle push-in on the spoken hook.")
     }
@@ -316,6 +313,10 @@ export function hookSteps(
 /**
  * The silence before the first word still in the cut, as a source range on
  * the first clip, or null when the cut already opens on speech.
+ *
+ * The opening word is the first one still sounding in the clip, which may
+ * have started before the clip's in-point: a clip trimmed into a word opens
+ * on speech, and there is nothing to cut.
  */
 function leadInRange(
   scene: Scene,
@@ -328,13 +329,32 @@ function leadInRange(
     return null
   }
   const opening = words.find(
-    (word) => sourceToTimelineUs(spine, mediaId, word.startUs) !== null
+    (word) => word.endUs > first.trimStartUs && word.startUs < first.trimEndUs
   )
-  if (!opening) return null
-  const at = sourceToTimelineUs(spine, mediaId, opening.startUs)
-  if (at === null || at - first.startUs <= MAX_LEAD_IN_US) return null
+  if (!opening || opening.startUs <= first.trimStartUs) return null
+  if (opening.startUs - first.trimStartUs <= MAX_LEAD_IN_US) return null
 
   const end = opening.startUs - LEAD_IN_KEEP_US
   if (end <= first.trimStartUs) return null
   return { startUs: us(first.trimStartUs), endUs: us(end) }
+}
+
+/** Every hook text in the scene, removed. Titles and names stay. */
+function removeHooks(scene: Scene): EditOp[] {
+  return scene.tracks.flatMap((track) =>
+    track.elements
+      .filter((element) => element.kind === "text" && element.role === "hook")
+      .map((element) => ({
+        op: "remove_element" as const,
+        sceneId: scene.id,
+        trackId: track.id,
+        elementId: element.id,
+      }))
+  )
+}
+
+/** Where the footage ends: the spine, not the overlays on it. */
+function spineEndUs(scene: Scene): number {
+  const spine = findMainTrack(scene)
+  return spine ? trackEndUs(spine) : 0
 }
