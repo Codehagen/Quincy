@@ -6,7 +6,7 @@ import { referencedMediaIds } from "./placement"
 import { readTake, strongLineSlot } from "./reading"
 import { firstExisting, type Storage } from "./ingest"
 import { createR2Storage } from "./storage-r2"
-import { wordsFromDeepgram } from "./transcript"
+import { wordsFromTranscript } from "./transcript"
 import type { VideoDocument } from "./types"
 
 /**
@@ -74,7 +74,7 @@ export async function mediaEntryFor(
     reading:
       asset.transcript && kind === "video"
         ? readTake(
-            wordsFromDeepgram(asset.transcript),
+            wordsFromTranscript(asset.transcript),
             asset.durationUs ?? 0,
             strongLineOf(asset.transcript)
           )

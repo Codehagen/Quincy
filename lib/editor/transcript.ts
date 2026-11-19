@@ -7,6 +7,10 @@ import {
   normaliseWord,
   SOUND_FILLERS,
 } from "./fillers"
+import {
+  isStoredTranscript,
+  type SpokenWord,
+} from "@/lib/transcription/speech-to-text"
 import { mergeRanges, secondsToUs, us, type Us, type UsRange } from "./time"
 
 const newTokenId = createIdGenerator({ prefix: "tk", size: 12 })
@@ -20,16 +24,8 @@ const newTokenId = createIdGenerator({ prefix: "tk", size: 12 })
  * prompt is sent, the expensive work already happened during upload.
  */
 
-/** Provider-shaped word. Deepgram returns seconds; we convert at the door. */
-export type TranscriptWord = {
-  word: string
-  /** Deepgram's cleaned-up form. Falls back to `word` when absent. */
-  punctuated_word?: string
-  start: number
-  end: number
-  confidence?: number
-  speaker?: number
-}
+/** Provider-shaped word, in seconds. We convert at the door. */
+export type TranscriptWord = SpokenWord
 
 export type Word = {
   text: string
@@ -40,24 +36,30 @@ export type Word = {
 }
 
 /**
- * Pull the word list out of a Deepgram response.
+ * Pull the word list out of a stored transcript.
  *
- * Words live under the first alternative of the first channel. Reading them
- * here rather than at each call site means the provider's shape is known in one
- * place, which is the whole reason the raw response is stored verbatim.
+ * Two shapes are stored on video_asset.transcript, and this is the one place
+ * that knows both. Deepgram's own response is kept verbatim, words under the
+ * first alternative of the first channel; every transcript made before the
+ * transcription port is that shape. Any other provider stores the neutral
+ * one (lib/transcription/speech-to-text.ts `storedTranscript`), its words at
+ * the top. Reading them here rather than at each call site is what lets the
+ * provider change without anything downstream noticing.
  */
-export function wordsFromDeepgram(response: unknown): Word[] {
-  const alternative = (
-    response as {
-      results?: {
-        channels?: { alternatives?: { words?: TranscriptWord[] }[] }[]
-      }
-    }
-  )?.results?.channels?.[0]?.alternatives?.[0]
+export function wordsFromTranscript(stored: unknown): Word[] {
+  const words = isStoredTranscript(stored)
+    ? stored.words
+    : (
+        stored as {
+          results?: {
+            channels?: { alternatives?: { words?: TranscriptWord[] }[] }[]
+          }
+        }
+      )?.results?.channels?.[0]?.alternatives?.[0]?.words
 
-  if (!alternative?.words) return []
+  if (!words) return []
 
-  return alternative.words.map((word) => ({
+  return words.map((word) => ({
     text: word.punctuated_word ?? word.word,
     startUs: secondsToUs(word.start),
     endUs: secondsToUs(word.end),

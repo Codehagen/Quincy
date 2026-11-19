@@ -7,7 +7,7 @@ import { videoAsset } from "../schema-app"
 import { recordUsage } from "../usage"
 import { spokenSentences } from "./gate"
 import { STRONG_LINE_KEY, strongLineSlot, type StrongLineSlot } from "./reading"
-import { wordsFromDeepgram } from "./transcript"
+import { wordsFromTranscript } from "./transcript"
 
 /**
  * The strong line of a take (plans/036, phase C, step 2): one cheap model
@@ -45,7 +45,7 @@ const MIN_SENTENCES = 2
 export function candidateSentences(transcript: unknown): string[] {
   const sentences: string[] = []
   let words = 0
-  for (const sentence of spokenSentences(wordsFromDeepgram(transcript))) {
+  for (const sentence of spokenSentences(wordsFromTranscript(transcript))) {
     if (sentences.length >= MAX_SENTENCES || words + sentence.length > MAX_WORDS) break
     words += sentence.length
     sentences.push(sentence.map((w) => w.text.trim()).join(" "))

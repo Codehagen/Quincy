@@ -1,5 +1,5 @@
 import { getAsset } from "@/lib/editor/assets"
-import { wordsFromDeepgram } from "@/lib/editor/transcript"
+import { wordsFromTranscript } from "@/lib/editor/transcript"
 import { getSession } from "@/lib/session"
 
 /**
@@ -11,7 +11,7 @@ import { getSession } from "@/lib/session"
  * ever asking. It is fetched when someone wants captions or a tightening pass,
  * which is a click, not a page load.
  *
- * Normalised here rather than in the browser. `wordsFromDeepgram` is the only
+ * Normalised here rather than in the browser. `wordsFromTranscript` is the only
  * thing that knows the provider's shape, and keeping it server-side means
  * swapping transcription providers never touches a component.
  */
@@ -44,6 +44,6 @@ export async function GET(
 
   return Response.json({
     provider: asset.transcriptProvider,
-    words: wordsFromDeepgram(asset.transcript),
+    words: wordsFromTranscript(asset.transcript),
   })
 }
