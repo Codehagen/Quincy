@@ -64,6 +64,14 @@ import { getSession } from "@/lib/session"
 /** Seconds. The platform ceiling on all plans; nothing gains from asking for less. */
 export const maxDuration = 300
 
+/**
+ * How long into an ingest the cleaned voice may still start. Half of
+ * `maxDuration`: the voice pass on a 20-minute take fits in the rest, with
+ * room for `completeIngest` after it. Past this the step is skipped rather
+ * than risking the whole upload for something the Sound button can make.
+ */
+const VOICE_BUDGET_MS = 150_000
+
 // ffmpeg needs a real filesystem, which only the Node.js runtime has — and
 // Node.js is the default, so this route no longer says so: cacheComponents
 // rejects the `runtime` segment config outright.
@@ -125,9 +133,14 @@ export async function POST(
     )
   }
 
-  const today = dailyVerdict({ usedSeconds: await transcribedSecondsToday(userId) })
+  const today = dailyVerdict({
+    usedSeconds: await transcribedSecondsToday(userId),
+  })
   if (!today.ok) {
-    return Response.json({ error: today.error, state: "ceiling" }, { status: 429 })
+    return Response.json(
+      { error: today.error, state: "ceiling" },
+      { status: 429 }
+    )
   }
 
   // The attempt row, before the claim. A press that then loses the claim to
@@ -148,6 +161,7 @@ export async function POST(
   const passes = meteredTranscriber.maxPasses ?? 1
 
   try {
+    const startedAt = Date.now()
     const result = await withWorkspace(async (workdir) => {
       const source = join(workdir, "original")
       await downloadObject(asset.storageKey, source)
@@ -165,6 +179,7 @@ export async function POST(
           storage: createR2Storage(),
           transcoder: createFfmpegTranscoder({ workdir }),
           transcriber: meteredTranscriber,
+          voiceDeadline: () => Date.now() - startedAt > VOICE_BUDGET_MS,
           peaksFromPcm,
           admit: async (probe) => {
             const seconds = probe.durationUs / 1_000_000

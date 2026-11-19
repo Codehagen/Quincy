@@ -59,6 +59,41 @@ function ports(overrides: Partial<IngestPorts> = {}): IngestPorts {
   }
 }
 
+describe("runIngest, the cleaned voice", () => {
+  const withVoice = (voiceDeadline: () => boolean) => {
+    const base = ports()
+    const voice = vi.fn().mockResolvedValue(new Uint8Array([6]))
+    return {
+      voice,
+      ports: {
+        ...base,
+        transcoder: { ...base.transcoder, voice },
+        voiceDeadline,
+      },
+    }
+  }
+
+  it("skips the voice once the deadline has passed, and says so", async () => {
+    const { voice, ports: p } = withVoice(() => true)
+    const result = await runIngest(input, p)
+    expect(voice).not.toHaveBeenCalled()
+    expect(result.warnings.some((w) => w.startsWith("voice: skipped"))).toBe(
+      true
+    )
+  })
+
+  it("cleans the voice while there is time", async () => {
+    const { voice, ports: p } = withVoice(() => false)
+    const result = await runIngest(input, p)
+    expect(voice).toHaveBeenCalledOnce()
+    const keys = (p.storage.put as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string
+    )
+    expect(keys.some((key) => key.startsWith("derived/voice/"))).toBe(true)
+    expect(result.warnings).toEqual([])
+  })
+})
+
 describe("runIngest", () => {
   it("produces everything the editor needs to open the asset", async () => {
     const result = await runIngest(input, ports())

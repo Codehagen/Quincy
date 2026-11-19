@@ -57,6 +57,7 @@ export function StudioTranscript({
   onCleanUp,
   chapters = [],
   chapterText = null,
+  transcriptMissing = false,
 }: {
   lines: TranscriptLine[]
   /** Which words the selection currently covers. Derived by Studio, not here. */
@@ -80,6 +81,8 @@ export function StudioTranscript({
   chapters?: PlacedChapter[]
   /** The chapters as "0:00 Intro" lines, to paste into a description. */
   chapterText?: string | null
+  /** The recording's transcript did not load, so cut words cannot be shown. */
+  transcriptMissing?: boolean
 }) {
   /**
    * Which word the drag started on, in a ref rather than in state.
@@ -211,6 +214,13 @@ export function StudioTranscript({
           </div>
         ) : null}
       </div>
+
+      {transcriptMissing && lines.length > 0 ? (
+        <p className="border-b border-kit-hairline px-4 py-1.5 text-kit-small text-kit-ink-muted">
+          Cut words cannot be shown: the recording&apos;s transcript did not
+          load.
+        </p>
+      ) : null}
 
       {reviewing && review.length > 0 && onCleanUp ? (
         <CleanUpReview

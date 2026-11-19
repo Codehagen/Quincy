@@ -941,8 +941,24 @@ export function Studio({
   }, [scene])
   const [sourceTranscript, setSourceTranscript] = React.useState<{
     mediaId: string
-    words: Word[]
+    /** Null when the fetch failed: kept, so the panel does not ask again. */
+    words: Word[] | null
   } | null>(null)
+
+  /**
+   * One line the studio says when a press could not do what it promised: a
+   * cooldown, a paywall, a stretch that cannot go back. In ink, not red (a
+   * limit is not a failure), and gone after a few seconds.
+   */
+  const [notice, setNotice] = React.useState<{
+    text: string
+    plans?: boolean
+  } | null>(null)
+  React.useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   React.useEffect(() => {
     if (side !== "transcript" || !mainMediaId) return
@@ -953,11 +969,16 @@ export function Studio({
         const response = await (harness?.fetch ?? fetch)(
           `/api/editor/assets/${mainMediaId}/transcript`
         )
-        if (!response.ok || !live) return
+        if (!live) return
+        if (!response.ok) {
+          setSourceTranscript({ mediaId: mainMediaId, words: null })
+          return
+        }
         const { words: fetched } = (await response.json()) as { words: Word[] }
         if (live) setSourceTranscript({ mediaId: mainMediaId, words: fetched })
       } catch {
-        // Offline: the panel still reads the captions.
+        // Offline: the panel still reads the captions, and says what it lacks.
+        if (live) setSourceTranscript({ mediaId: mainMediaId, words: null })
       }
     })()
     return () => {
@@ -969,6 +990,8 @@ export function Studio({
     sourceTranscript && sourceTranscript.mediaId === mainMediaId
       ? sourceTranscript.words
       : null
+  const sourceTranscriptFailed =
+    sourceTranscript?.mediaId === mainMediaId && sourceTranscript.words === null
   const sourceDurationUs = mainMediaId
     ? (media[mainMediaId]?.durationUs ?? null)
     : null
@@ -993,15 +1016,18 @@ export function Studio({
   const restoreCut = React.useCallback(
     (cut: CutAway) => {
       if (!scene || !sourceDurationUs) return
-      commit(
-        restoreSpeech(scene, {
-          mediaId: cut.mediaId,
-          atUs: cut.sourceUs,
-          sourceDurationUs: us(sourceDurationUs),
-          words: sourceWords,
-          rules: captionRules(document),
-        })
-      )
+      const ops = restoreSpeech(scene, {
+        mediaId: cut.mediaId,
+        atUs: cut.sourceUs,
+        sourceDurationUs: us(sourceDurationUs),
+        words: sourceWords,
+        rules: captionRules(document),
+      })
+      if (ops.length === 0) {
+        setNotice({ text: "That stretch could not be put back here." })
+        return
+      }
+      commit(ops)
     },
     [commit, scene, sourceDurationUs, sourceWords, document]
   )
@@ -1011,8 +1037,15 @@ export function Studio({
     (items: ReviewItem[]) => {
       if (!scene || !mainMediaId || !sourceWords || !sourceDurationUs) return
       const ranges = reviewCuts(items, sourceWords, us(sourceDurationUs))
-      if (ranges.length === 0) return
-      commit(deleteSpeech(scene, [{ mediaId: mainMediaId, ranges }]))
+      const ops =
+        ranges.length > 0
+          ? deleteSpeech(scene, [{ mediaId: mainMediaId, ranges }])
+          : []
+      if (ops.length === 0) {
+        setNotice({ text: "Nothing left to remove." })
+        return
+      }
+      commit(ops)
     },
     [commit, scene, mainMediaId, sourceWords, sourceDurationUs]
   )
@@ -1050,10 +1083,20 @@ export function Studio({
           `/api/editor/assets/${mainMediaId}/voice`,
           { method: "POST" }
         )
-        if (!response.ok) return
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string
+          } | null
+          setNotice({
+            text: body?.error ?? "The sound could not be cleaned right now.",
+            plans: response.status === 402,
+          })
+          return
+        }
         const { url } = (await response.json()) as { url: string }
         setVoiceUrls((prev) => ({ ...prev, [mainMediaId]: url }))
       } catch {
+        setNotice({ text: "The sound could not be cleaned right now." })
         return
       } finally {
         setVoicePending(false)
@@ -1254,6 +1297,25 @@ export function Studio({
           >
             {rateLabel(rate)}
           </button>
+          {notice ? (
+            <span
+              role="status"
+              className="truncate text-kit-small text-kit-ink"
+            >
+              {notice.text}
+              {notice.plans ? (
+                <>
+                  {" "}
+                  <a
+                    href="/settings?section=plan"
+                    className="underline decoration-kit-link-line underline-offset-4 hover:decoration-kit-ink"
+                  >
+                    See plans
+                  </a>
+                </>
+              ) : null}
+            </span>
+          ) : null}
           {/* One line, fixed-width digits: the clock never wraps or jitters. */}
           <span className="text-kit-small whitespace-nowrap text-kit-ink tabular-nums">
             <PlayheadClock player={player} />
@@ -1393,6 +1455,7 @@ export function Studio({
           review={review}
           onCleanUp={cleanUp}
           chapters={placedChapters}
+          transcriptMissing={sourceTranscriptFailed}
           chapterText={
             placedChapters.length > 0 ? chapterLines(placedChapters) : null
           }

@@ -257,12 +257,17 @@ export function audioExtractArgs(input: string, output: string): string[] {
  * taken down, and the level brought to -16 LUFS, which is where speech sits
  * on a phone and a laptop without anyone reaching for the volume.
  *
+ * The resampler leads, as it does on the proxy: it fills gaps and corrects
+ * drift against the timestamps and starts the track at source time 0, so the
+ * voice stays on the lips the proxy shows. Without it a phone take with an
+ * audio offset plays its cleaned voice a beat early or late.
+ *
  * Every filter is ffmpeg's own, so it costs function time and nothing
  * bought. AAC, mono, 128k: the track plays beside the proxy in
  * the preview and the export, never instead of the picture.
  */
 export const VOICE_FILTER =
-  "highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11"
+  "aresample=async=1:first_pts=0,highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11"
 
 export function voiceCleanArgs(input: string, output: string): string[] {
   return [
@@ -505,7 +510,7 @@ export const storageKeys = {
    * the proxy, so a change to the filter is a new key and never a surprise
    * in a cut someone already finished.
    */
-  voice: (contentHash: string) => `derived/voice/v1/${contentHash}.m4a`,
+  voice: (contentHash: string) => `derived/voice/v2/${contentHash}.m4a`,
 }
 
 /**

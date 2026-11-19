@@ -50,8 +50,8 @@ ingested at all.
 
 ## The cleaned voice
 
-With audio, ingest also writes `derived/voice/v1/<hash>.m4a`: the take's sound
-through `highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11`
+With audio, ingest also writes `derived/voice/v2/<hash>.m4a`: the take's sound
+through `aresample=async=1:first_pts=0,highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11`
 (`lib/editor/media.ts`, `voiceCleanArgs`). It is ffmpeg only, so nothing is
 bought. A cut plays it when its spine clips say `voice: "clean"`; the
 composition mutes the clip and plays the track over the same window, and

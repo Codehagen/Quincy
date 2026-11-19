@@ -145,6 +145,12 @@ export type IngestPorts = {
    * behind `admit`, for containers whose probe reported no duration.
    */
   admitTranscription?: (audioSeconds: number) => Promise<string | null>
+  /**
+   * True once there is no longer time to clean the voice. Ingest shares one
+   * function's deadline with the steps that matter, and the cleaned voice is
+   * not one of them: the studio's Sound button can make it later.
+   */
+  voiceDeadline?: () => boolean
 }
 
 export type IngestStep =
@@ -309,7 +315,9 @@ export async function runIngest(
    * Non-fatal like the filmstrip: a take without it plays its own sound, and
    * the studio can still ask for it later.
    */
-  if (probe.hasAudio && transcoder.voice) {
+  if (probe.hasAudio && transcoder.voice && ports.voiceDeadline?.()) {
+    warnings.push("voice: skipped, left for the Sound button")
+  } else if (probe.hasAudio && transcoder.voice) {
     try {
       const voiceKey = storageKeys.voice(input.contentHash)
       if (!(await storage.exists(voiceKey))) {
