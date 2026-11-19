@@ -10,6 +10,8 @@ import {
   type UploadProgress,
 } from "@/lib/editor/upload-client"
 
+import { RecordTakePanel } from "./record-take-panel"
+
 /**
  * Drop a recording here and end up in the editor.
  *
@@ -46,6 +48,7 @@ export function UploadDrop({
   // The paywall is a refusal with somewhere to go, unlike the others.
   const [paywalled, setPaywalled] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
+  const [recording, setRecording] = React.useState(false)
 
   const busy = progress !== null && progress.phase !== "done"
 
@@ -76,6 +79,20 @@ export function UploadDrop({
     },
     [onFileChosen, router]
   )
+
+  if (recording && !busy) {
+    return (
+      <div className="rounded-kit-chip border border-kit-hairline p-kit-pad">
+        <RecordTakePanel
+          onCancel={() => setRecording(false)}
+          onDone={(file) => {
+            setRecording(false)
+            void start(file)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div
@@ -140,9 +157,17 @@ export function UploadDrop({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
+              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
             >
               choose a file
+            </button>
+            , or{" "}
+            <button
+              type="button"
+              onClick={() => setRecording(true)}
+              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
+            >
+              record a take
             </button>
           </Text>
           <Text variant="small" tone="muted">
