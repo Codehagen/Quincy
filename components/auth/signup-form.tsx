@@ -15,6 +15,7 @@ import { useValidatedField } from "@/hooks/use-validated-field"
 import { AuthField } from "@/components/auth/auth-field"
 import { GoogleButton } from "@/components/auth/google-button"
 import { ResendVerification } from "@/components/auth/resend-verification"
+import { LegalNote } from "@/components/auth/legal-note"
 import {
   Address,
   AuthActions,
@@ -181,6 +182,7 @@ export function SignupForm({
           <AuthNote>
             Already verified? <TextLink href="/login">Log in</TextLink>
           </AuthNote>
+          <LegalNote />
         </div>
       </div>
     )
@@ -259,7 +261,9 @@ export function SignupForm({
               disabled={isSubmitting}
               readOnly={Boolean(invitedEmail)}
               description={
-                invitedEmail ? "The address your invite was sent to." : undefined
+                invitedEmail
+                  ? "The address your invite was sent to."
+                  : undefined
               }
             />
             <AuthField
@@ -295,6 +299,7 @@ export function SignupForm({
       <AuthNote>
         Already have an account? <TextLink href="/login">Log in</TextLink>
       </AuthNote>
+      <LegalNote agree />
     </div>
   )
 }

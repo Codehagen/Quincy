@@ -1,4 +1,5 @@
 import { Markdown } from "@/components/ui/markdown"
+import { COMPANY, COMPANY_ADDRESS } from "@/lib/company"
 import { constructMetadata } from "@/lib/metadata"
 
 /**
@@ -12,10 +13,12 @@ import { constructMetadata } from "@/lib/metadata"
  * preserve.** A privacy policy that overstates what an app collects is a lie
  * that costs trust; one that understates it is a lie that costs more than that.
  * The connected-accounts section in particular says only what the granted
- * scopes actually permit — Quincy cannot read anyone's LinkedIn posts or
+ * scopes actually permit. Quincy cannot read anyone's LinkedIn posts or
  * engagement, because `r_member_social` and `r_member_postAnalytics` are not in
- * the scope list (lib/channels.ts). If that scope list changes, this page
- * changes in the same commit.
+ * the scope list (lib/channels.ts). Instagram's grants are
+ * `INSTAGRAM_CONFIG_PERMISSIONS` in lib/instagram.ts: the code does not send
+ * a scope list, the Facebook Login for Business configuration does. If either
+ * list changes, this page changes in the same commit.
  *
  * The company facts — entity, organisation number, address, contact address,
  * retention window — are stated outright rather than left as placeholders,
@@ -34,7 +37,7 @@ export const metadata = constructMetadata({
   canonicalUrl: "/privacy",
 })
 
-const LAST_REVISED = "10 August 2026"
+const LAST_REVISED = "19 November 2026"
 
 const POLICY = `# Privacy Policy
 
@@ -46,12 +49,12 @@ behalf.
 
 This policy explains what personal data Quincy collects, why, who it is shared
 with, and what you can ask us to do about it. It covers the Quincy website and
-application (the "Service"), operated by **Codebase AS**, a company registered
-in Norway with organisation number **919 415 754**, business address
-**Dronningens gate 18, 8006 Bodø, Norway** ("Quincy", "we", "us"). We are the
+application (the "Service"), operated by **${COMPANY.name}**, a company registered
+in Norway with organisation number **${COMPANY.org}**, business address
+**${COMPANY_ADDRESS}** ("Quincy", "we", "us"). We are the
 data controller for the personal data described here.
 
-Questions, or a request about your data: **christer@hirequincy.com**.
+Questions, or a request about your data: **${COMPANY.email}**.
 
 ## 1. What we collect
 
@@ -148,28 +151,58 @@ Services**. Disconnecting inside Quincy deletes the stored tokens outright.
 
 ### X
 
-Connecting X grants the scopes \`tweet.read\`, \`tweet.write\`, \`users.read\`
-and \`offline.access\`. In practice:
+Connecting X grants the scopes \`tweet.read\`, \`tweet.write\`, \`users.read\`,
+\`bookmark.read\` and \`offline.access\`. In practice:
 
 - **We receive** your X account ID, name, handle, and profile picture.
 - **We can** publish posts on your behalf. \`offline.access\` lets us refresh
   the connection without sending you back through the consent screen every two
   hours.
-- \`tweet.read\` and \`users.read\` are required by X in order to post at all.
-  We use them to confirm which account you connected and to read back posts
-  Quincy itself published, so it can report how they performed. We do not read
-  your timeline or other people's posts.
+- \`tweet.read\` and \`users.read\` let us confirm which account you connected,
+  read your own posts when you import them, and read back posts Quincy itself
+  published, so it can report how they performed.
+- \`bookmark.read\` lets us read posts you have bookmarked, when you import
+  them. Those are stored as other people's writing and are not used to learn
+  your voice.
+- We do not read other people's timelines.
 
 You can revoke access at any time from X under **Settings → Security and
 account access → Apps and sessions → Connected apps**, or by disconnecting
 inside Quincy.
 
+### Instagram
+
+Connecting Instagram uses **Facebook Login for Business**. The login
+configuration grants \`instagram_basic\`, \`instagram_content_publish\` and
+\`instagram_manage_insights\`. Quincy does not send that list itself. The
+Meta app configuration is the list. In practice:
+
+- **We receive** the Instagram professional account you select in the Meta
+  dialog: its account id, username, name, and profile picture. We also store
+  the Facebook app-scoped user id of the person who signed in, which is the
+  id Meta sends if you later ask Facebook to delete this data.
+- **We can** publish a post you have approved (an image of the draft, plus
+  the caption) to that account, and read insights for posts Quincy published:
+  views, reach, likes, comments, shares, and saves.
+- **We do not** read your Instagram inbox, your stories, or a feed of other
+  people's posts. We do not sell this data.
+
+You can disconnect inside Quincy at **Connectors → Instagram → Manage
+connection**, which deletes the stored tokens. You can also remove Quincy
+under **Settings and activity → Apps and websites** on Facebook and on
+Instagram. How to do each of those, and what a request from Meta deletes,
+is on the [data deletion](/data-deletion) page.
+
 ### How the credentials are held
 
-Access and refresh tokens are **encrypted at rest** in our database. They are
+Access and refresh tokens, including Instagram tokens, are **encrypted at
+rest** in our database (the same encryption used for sign-in tokens). They
+are decrypted only on the server, when Quincy calls the platform. They are
 never sent to your browser and never exposed to the model. Disconnecting a
-channel deletes the row that holds them, and — where the platform provides an
-endpoint for it — tells the platform to revoke the token as well.
+channel deletes the row that holds them, and, where the platform provides an
+endpoint for it, tells the platform to revoke the token as well. For
+Instagram that revoke is best-effort: if Meta does not accept it, the local
+row is still deleted.
 
 ## 5. Who we share it with
 
@@ -183,7 +216,10 @@ process it on our instructions, under contract, to run the Service:
 | Anthropic | Language model, via Vercel AI Gateway | US |
 | Resend | Transactional email | US |
 | Google | Sign-in, only if you use it | US |
-| X, LinkedIn | Publishing, only for channels you connect | US |
+| Stripe | A customer record when you sign up, and the payment if you subscribe. We store the subscription status, not the card number | US |
+| X, LinkedIn | Publishing, and the reads described in section 4, only for channels you connect | US |
+| Meta | Instagram profile, publishing, and insights, only if you connect Instagram | US |
+| Cloudflare R2 | Media files you upload in the editor | Cloudflare |
 
 We may also disclose personal data where we are legally required to, to
 establish or defend legal claims, or to a successor entity as part of a
@@ -199,7 +235,10 @@ must retain something longer to meet a legal obligation. Backups roll off on
 their own schedule.
 
 Disconnecting a channel deletes its stored credentials immediately, without
-waiting for account deletion.
+waiting for account deletion. A data-deletion request from Meta does the
+same for Instagram, and also deletes the insight readings we stored from
+that connection. It does not delete the rest of your Quincy account. The
+steps are on the [data deletion](/data-deletion) page.
 
 ## 7. Your rights
 
@@ -213,7 +252,8 @@ Under the GDPR you can ask us to:
 - **withdraw consent** where our use rests on consent, without affecting what
   came before
 
-Write to **christer@hirequincy.com** and we will respond within one month. We
+Write to **${COMPANY.email}** and we will respond within one month. To ask
+for deletion you can also follow the [data deletion](/data-deletion) page. We
 may need to verify who you are first. If you are unhappy with how we have
 handled your data you can complain to your local supervisory authority — in
 Norway, **Datatilsynet** (datatilsynet.no).
@@ -250,9 +290,9 @@ relying on you to notice.
 
 ## 12. Contact
 
-**Codebase AS**
-Dronningens gate 18, 8006 Bodø, Norway
-christer@hirequincy.com
+**${COMPANY.name}**
+${COMPANY_ADDRESS}
+${COMPANY.email}
 `
 
 export default function PrivacyPage() {

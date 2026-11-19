@@ -305,6 +305,13 @@ export type InstagramProfile = {
   handle: string | null
   displayName: string | null
   avatarUrl: string | null
+  /**
+   * App-scoped Facebook user id from `GET /me`. This is the id Meta puts
+   * in a data-deletion `signed_request`, and it is not `externalId`. Null
+   * when that call fails: connect still proceeds, and the callback cannot
+   * find the row until a later connect stores one.
+   */
+  metaUserId: string | null
 }
 
 async function graphGet(
@@ -371,6 +378,31 @@ export async function fetchInstagramProfile(
     handle: username ? `@${username.replace(/^@/, "")}` : null,
     displayName: name ?? username ?? null,
     avatarUrl: picture,
+    metaUserId: await readMetaUserId(accessToken, fetchImpl, env),
+  }
+}
+
+/**
+ * The person who signed in, not the Instagram account they shared.
+ *
+ * A failed lookup does not fail the connect. Publishing needs the
+ * professional account id; the deletion callback needs this one, and a
+ * missing value means that later request finds no row rather than that
+ * the connection itself is refused.
+ */
+async function readMetaUserId(
+  accessToken: string,
+  fetchImpl: FetchLike,
+  env: Record<string, string | undefined>
+): Promise<string | null> {
+  try {
+    const me = await graphGet("/me?fields=id", accessToken, fetchImpl, env)
+    const id = me.json?.id
+    const asString =
+      typeof id === "string" ? id : typeof id === "number" ? String(id) : ""
+    return me.ok && /^\d{1,32}$/.test(asString) ? asString : null
+  } catch {
+    return null
   }
 }
 

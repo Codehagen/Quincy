@@ -575,8 +575,23 @@ export const channelConnection = pgTable(
      * The platform's own id for the account. X: `data.id` from `/2/users/me`.
      * LinkedIn: `sub` from `/v2/userinfo`, which is also what the author URN
      * `urn:li:person:{sub}` is built from.
+     * Instagram: the professional account id from
+     * `GET /me/assigned_instagram_accounts`, which is what publishing posts as.
      */
     externalId: text("external_id").notNull(),
+    /**
+     * Facebook app-scoped user id, Instagram connections only.
+     *
+     * Meta's data-deletion callback sends this (`signed_request.user_id`),
+     * not the Instagram account id in `external_id`. It comes from `GET /me`
+     * on the user token at connect. Null on X and LinkedIn, and on Instagram
+     * rows connected before the column existed: those are removed by
+     * disconnecting in Quincy, or by the account-deletion email, until the
+     * person reconnects. Apply `scripts/meta-user-id.sql` before deploying
+     * code that selects this column. A `select()` of the table names every
+     * column, so shipping the code first fails every channel read.
+     */
+    metaUserId: text("meta_user_id"),
     /**
      * For the line above a draft that says who this goes out as. LinkedIn's
      * OIDC profile has no handle, so this is null there — a connection you
