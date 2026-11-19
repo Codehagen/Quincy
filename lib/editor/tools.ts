@@ -3,7 +3,9 @@ import { createIdGenerator } from "ai"
 import { DEFAULT_CAPTION_STYLE } from "./document"
 import { aimed, applyToScene, newElement, type EditOp } from "./ops"
 import { stampFields } from "./provenance"
+import { keepCorrections } from "./correct-words"
 import {
+  clipRate,
   findMainTrack,
   layOut,
   remapCaptions,
@@ -146,7 +148,8 @@ export function addCaptions(
   const captions = captionTrack(scene)
   const placed = remapCaptions(built, spine)
 
-  return aimed(
+  // Rebuilding the lane keeps the words the person already corrected.
+  return keepCorrections(scene, aimed(
     [
       ...(captions.op ? [captions.op] : []),
       {
@@ -159,7 +162,7 @@ export function addCaptions(
     // The desk's "+ Captions from the transcript" control, which is what a
     // person would press for the same edit.
     { action: "press", kind: "control", control: "captions" }
-  )
+  ))
 }
 
 /**
@@ -457,18 +460,22 @@ export function restoreSpeech(
   // With no piece before (the gap is the take's head), the piece after grows
   // at its head, and its curves move with it so they stay on their frames.
   const fields = ["startUs", "durationUs", "trimStartUs", "trimEndUs"]
+  // The gap is source time; on a clip at another speed it plays for
+  // source ÷ rate on the timeline.
+  const piece = previous ?? following!
+  const gapUs = Math.round((gap.endUs - gap.startUs) / clipRate(piece))
   const grown: VideoElement = previous
     ? {
         ...previous,
         trimEndUs: gap.endUs,
-        durationUs: us(previous.durationUs + (gap.endUs - gap.startUs)),
+        durationUs: us(previous.durationUs + gapUs),
         provenance: stampFields(previous.provenance, author, fields),
       }
     : {
         ...following!,
         trimStartUs: gap.startUs,
-        durationUs: us(following!.durationUs + (gap.endUs - gap.startUs)),
-        animations: shiftAnimations(following!, gap.endUs - gap.startUs),
+        durationUs: us(following!.durationUs + gapUs),
+        animations: shiftAnimations(following!, gapUs),
         provenance: stampFields(following!.provenance, author, fields),
       }
   const replaced = previous ?? following!
@@ -540,12 +547,16 @@ export function restoreSpeech(
 
   const landed =
     sourceToTimelineUs(after, options.mediaId, gap.startUs) ?? us(0)
-  return aimed(ops, {
-    action: "press",
-    kind: "range",
-    trackId: spine.id,
-    spans: [{ startUs: landed, endUs: us(landed + (gap.endUs - gap.startUs)) }],
-  })
+  // A rebuild from the transcript keeps the words the person corrected.
+  return keepCorrections(
+    scene,
+    aimed(ops, {
+      action: "press",
+      kind: "range",
+      trackId: spine.id,
+      spans: [{ startUs: landed, endUs: us(landed + gapUs) }],
+    })
+  )
 }
 
 /**

@@ -166,6 +166,7 @@ export async function uploadToLibrary(
       sizeBytes,
       hash,
       ...(durationSeconds !== null ? { durationSeconds } : {}),
+      purpose: options.purpose ?? "take",
     },
     "requesting",
     signal

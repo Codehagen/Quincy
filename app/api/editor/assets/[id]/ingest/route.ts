@@ -21,7 +21,8 @@ import {
   transcribedSecondsToday,
 } from "@/lib/editor/ingest-meter"
 import { peaksFromPcm } from "@/lib/editor/media"
-import { createR2Storage, downloadObject } from "@/lib/editor/storage-r2"
+import { imageProblem } from "@/lib/editor/image-check"
+import { createR2Storage, downloadObject, readObjectHead } from "@/lib/editor/storage-r2"
 import {
   createFfmpegTranscoder,
   withWorkspace,
@@ -111,6 +112,12 @@ export async function POST(
         { status: 400 }
       )
     }
+    // The bytes, not the browser's word for them: an image never reaches
+    // ffmpeg, so this is the only place anything checks what was stored.
+    const problem = imageProblem(await readObjectHead(asset.storageKey), asset.mimeType)
+    if (problem) {
+      return Response.json({ error: problem.error }, { status: problem.status })
+    }
     const done = await completeImage(id, userId, options.image)
     return Response.json({
       assetId: id,
@@ -158,9 +165,11 @@ export async function POST(
     )
   }
 
-  const today = dailyVerdict({
-    usedSeconds: await transcribedSecondsToday(userId),
-  })
+  // The daily allowance is transcription; music buys none, so it is not
+  // refused for it. The cooldown above still holds.
+  const today = options.transcribe
+    ? dailyVerdict({ usedSeconds: await transcribedSecondsToday(userId) })
+    : ({ ok: true } as const)
   if (!today.ok) {
     return Response.json(
       { error: today.error, state: "ceiling" },

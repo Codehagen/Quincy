@@ -41,7 +41,12 @@ function reelName(filename: string): string {
 function overlayClips(scene: Scene): VideoElement[] {
   const spine = findMainTrack(scene)
   return scene.tracks
-    .filter((track) => track.kind === "video" && track.id !== spine?.id && !track.hidden)
+    .filter(
+      (track) =>
+        (track.kind === "video" || track.kind === "broll") &&
+        track.id !== spine?.id &&
+        !track.hidden
+    )
     .flatMap((track) => track.elements)
     .filter((element): element is VideoElement => element.kind === "video")
     .sort((a, b) => a.startUs - b.startUs)

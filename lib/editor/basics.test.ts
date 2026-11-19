@@ -26,6 +26,9 @@ import type {
   VideoElement,
 } from "./types"
 import { exportSize } from "../../components/editor/use-export"
+import { captionWords } from "./correct-words"
+import { imageProblem, sniffImage } from "./image-check"
+import { addCaptions, restoreSpeech } from "./tools"
 
 const TRANSFORM = { position: { x: 0, y: 0 }, scaleX: 1, scaleY: 1, rotate: 0 }
 
@@ -407,5 +410,98 @@ describe("export size", () => {
     expect(exportSize({ width: 1080, height: 1920 }, 720)).toEqual({ width: 720, height: 1280 })
     expect(exportSize({ width: 1920, height: 1080 }, 2160)).toEqual({ width: 3840, height: 2160 })
     expect(exportSize({ width: 1920, height: 1080 }, "source")).toEqual({ width: 1920, height: 1080 })
+  })
+})
+
+describe("review fixes", () => {
+  it("appends a take at the end of the spine, not after an overlay that runs past it", () => {
+    const base = scene()
+    const withStill = apply(
+      base,
+      placeMedia(base, { id: "i", filename: "i.png", kind: "image", durationUs: null }, {
+        as: "overlay",
+        atUs: secondsToUs(28),
+        author: "user",
+      })
+    )
+    const after = apply(
+      withStill,
+      placeMedia(withStill, { id: "take2", filename: "t.mp4", kind: "video", durationUs: secondsToUs(5) }, {
+        as: "spine",
+        author: "user",
+      })
+    )
+    const spine = findMainTrack(after)!
+    expect(spine.elements.at(-1)!.startUs).toBe(secondsToUs(30))
+  })
+
+  it("lists b-roll in the edit lists", () => {
+    const base = scene({ captions: false })
+    const placed = apply(
+      base,
+      placeMedia(base, { id: "br", filename: "broll.mp4", kind: "video", durationUs: secondsToUs(5) }, {
+        as: "overlay",
+        atUs: secondsToUs(3),
+        author: "user",
+      })
+    )
+    const media = { "va-1": { filename: "talk.mp4" }, br: { filename: "broll.mp4" } }
+    expect(toEdl(placed, { title: "T", fps: 25, media })).toContain("* FROM CLIP NAME: broll.mp4")
+    expect(
+      toFcpxml(placed, { title: "T", fps: 25, width: 1920, height: 1080, media }).match(/<asset-clip /g)
+    ).toHaveLength(4)
+  })
+
+  it("restores speech on a 2x clip at half its source length", () => {
+    const base = createScene({})
+    const main = findMainTrack(base)!
+    // One 2x clip playing 0-10s of the recording, then one playing 14-20s:
+    // 10-14s was cut.
+    main.elements = [
+      clip(0, { trimStartUs: us(0), trimEndUs: secondsToUs(10), durationUs: secondsToUs(5), speed: 2 }),
+      clip(1, { startUs: secondsToUs(5), trimStartUs: secondsToUs(14), trimEndUs: secondsToUs(20), durationUs: secondsToUs(6) }),
+    ]
+    const ops = restoreSpeech(base, { mediaId: "va-1", atUs: secondsToUs(12), sourceDurationUs: secondsToUs(60) })
+    const after = apply(base, ops)
+    const spine = findMainTrack(after)!
+    expect(spine.elements[0].durationUs).toBe(secondsToUs(7))
+    expect(spine.elements[1].startUs).toBe(secondsToUs(7))
+  })
+
+  it("keeps corrected words when the captions are rebuilt from the transcript", () => {
+    const base = scene()
+    const corrected = apply(base, correctWords(base, [{ tokenId: "t3", text: "Quincy" }]))
+    const words = Array.from({ length: 30 }, (_, i) => ({
+      text: `word${i}`,
+      startUs: secondsToUs(i),
+      endUs: secondsToUs(i + 0.5),
+      confidence: 1,
+    }))
+    const rebuilt = apply(corrected, addCaptions(corrected, words, { mediaId: "va-1", author: "user" }))
+    const texts = rebuilt.tracks
+      .filter((t) => t.kind === "caption")
+      .flatMap((t) => t.elements as CaptionElement[])
+      .flatMap((c) => c.tokens.map((token) => token.text))
+    expect(texts).toContain("Quincy")
+    expect(texts).not.toContain("word3")
+  })
+
+  it("regroups from the words the captions hold, so imported text survives", () => {
+    const base = scene()
+    const words = captionWords(base, "va-1")
+    expect(words).toHaveLength(30)
+    expect(words[4].text).toBe("quinsy,")
+    expect(words[4].startUs).toBe(secondsToUs(4))
+  })
+
+  it("checks a stored picture's bytes and size", () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    expect(sniffImage(png)).toBe("image/png")
+    expect(sniffImage(new TextEncoder().encode("<html><script>"))).toBeNull()
+    expect(imageProblem({ sizeBytes: 1000, head: png }, "image/png")).toBeNull()
+    expect(imageProblem(null, "image/png")?.status).toBe(409)
+    expect(imageProblem({ sizeBytes: 30 * 1024 * 1024, head: png }, "image/png")?.status).toBe(413)
+    expect(imageProblem({ sizeBytes: 1000, head: png }, "image/jpeg")?.status).toBe(415)
+    expect(imageProblem({ sizeBytes: 1000, head: new TextEncoder().encode("GIF89a") }, "image/gif")).toBeNull()
   })
 })

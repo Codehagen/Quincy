@@ -1,4 +1,5 @@
 import type { EditOp } from "./ops"
+import type { Word } from "./transcript"
 import type { CaptionElement, CaptionToken, Scene } from "./types"
 
 /**
@@ -140,4 +141,23 @@ export function keepCorrections(scene: Scene, ops: EditOp[]): EditOp[] {
       }),
     }
   })
+}
+
+/**
+ * The words the captions say now, in recording time, for regrouping them
+ * without going back to the transcript: corrections and captions brought in
+ * from a subtitle file stay as they are.
+ */
+export function captionWords(scene: Scene, mediaId: string): Word[] {
+  return captionsOf(scene)
+    .flatMap((caption) => caption.tokens)
+    .filter((token) => token.sourceMediaId === mediaId)
+    .sort((a, b) => a.sourceStartUs - b.sourceStartUs)
+    .map((token) => ({
+      text: token.text,
+      startUs: token.sourceStartUs,
+      endUs: token.sourceEndUs,
+      confidence: 1,
+      ...(token.speaker !== undefined ? { speaker: token.speaker } : {}),
+    }))
 }

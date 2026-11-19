@@ -216,7 +216,12 @@ export function placeMedia(
     preferTrackId?: string
   }
 ): EditOp[] {
-  const cutUs = sceneDurationUs(scene)
+  // The cut is the spine: overlays may run past its end, and a take appended
+  // after them would leave a hole in the picture.
+  const main = findMainTrack(scene)
+  const cutUs = main
+    ? us(main.elements.reduce((end, element) => Math.max(end, element.startUs + element.durationUs), 0))
+    : sceneDurationUs(scene)
   const sourceUs = media.durationUs ?? 0
   const atUs = us(Math.max(0, Math.round(options.atUs ?? 0)))
 

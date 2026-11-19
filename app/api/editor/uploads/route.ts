@@ -1,4 +1,5 @@
 import { findOrCreateAsset } from "@/lib/editor/assets"
+import { MAX_IMAGE_BYTES as IMAGE_LIMIT } from "@/lib/editor/image-check"
 import {
   cooldownMessage,
   dailyVerdict,
@@ -48,7 +49,7 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
  */
 const ACCEPTED = /^(video|audio)\/|^image\/(png|jpeg|webp|gif)$/
 /** Bytes. A still bigger than this is a print file, not something to put on a cut. */
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_IMAGE_BYTES = IMAGE_LIMIT
 
 type UploadRequest = {
   filename?: unknown
@@ -61,6 +62,8 @@ type UploadRequest = {
    * before the upload. The probe on the ingest route is the real check.
    */
   durationSeconds?: unknown
+  /** "music" or a picture buys no transcription, so the daily allowance does not apply. */
+  purpose?: unknown
 }
 
 export async function POST(request: Request) {
@@ -145,7 +148,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const today = dailyVerdict({ usedSeconds })
+  const transcribes = body.purpose !== "music" && !mimeType.startsWith("image/")
+  const today = transcribes ? dailyVerdict({ usedSeconds }) : ({ ok: true } as const)
   if (!today.ok) {
     return Response.json({ error: today.error, state: "ceiling" }, { status: 429 })
   }

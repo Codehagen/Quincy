@@ -1627,10 +1627,14 @@ function Clip({
         }}
         onPointerUp={(event) => {
           const drag = moving.current
-          moving.current = null
-          if (!drag?.travelled) return
-          swallow.current = true
+          if (!drag?.travelled) {
+            moving.current = null
+            return
+          }
+          // Read before the drag is cleared: targetFor measures from it.
           const startUs = targetFor(event.clientX, event.shiftKey)
+          moving.current = null
+          swallow.current = true
           setMoveTo(null)
           // The lane under the pointer, when it moved to another of its kind.
           const under = document

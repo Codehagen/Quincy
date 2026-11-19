@@ -2,8 +2,7 @@
 
 import * as React from "react"
 
-import { keepCorrections } from "@/lib/editor/correct-words"
-import { captionRules } from "@/lib/editor/document"
+import { captionWords, keepCorrections } from "@/lib/editor/correct-words"
 import { setSpeed } from "@/lib/editor/edits"
 import { toEdl, toFcpxml } from "@/lib/editor/interchange"
 import { layoutBox, setBox, type LayoutKey } from "@/lib/editor/layout"
@@ -259,7 +258,7 @@ export function useStudioTools({
   const [importNote, setImportNote] = React.useState<string | null>(null)
 
   const onCaptionPreset = React.useCallback(
-    async (key: CaptionPreset["key"]) => {
+    (key: CaptionPreset["key"]) => {
       setCaptionPreset(key)
       const preset = CAPTION_PRESETS.find((candidate) => candidate.key === key)
       const clip = spine?.elements.find((element): element is VideoElement => element.kind === "video")
@@ -272,18 +271,17 @@ export function useStudioTools({
         first?.kind === "caption" &&
         first.style.wordsPerSegment !== preset.style.wordsPerSegment
       if (regroup && clip && first?.kind === "caption") {
-        // Grouping comes from the transcript; rebuilding keeps the words
-        // bound to the recording, with the preset's style on every segment.
-        const response = await fetcher(`/api/editor/assets/${clip.mediaId}/transcript`).catch(() => null)
-        if (response?.ok) {
-          const { words } = (await response.json()) as { words: Parameters<typeof addCaptions>[1] }
+        // Regrouped from the words the captions hold now, not the
+        // transcript, so a correction or an imported subtitle file survives.
+        const words = captionWords(scene, clip.mediaId)
+        if (words.length > 0) {
           commit(
             keepCorrections(
               scene,
               addCaptions(scene, words, {
                 mediaId: clip.mediaId,
                 author: "user",
-                rules: captionRules(document),
+                rules: 1,
                 style: { ...first.style, ...preset.style },
               })
             )
@@ -293,7 +291,7 @@ export function useStudioTools({
       }
       commit(applyCaptionPreset(scene, key))
     },
-    [commit, scene, spine, fetcher, document]
+    [commit, scene, spine]
   )
 
   const onImportSubtitles = React.useCallback(
@@ -398,7 +396,7 @@ export function useStudioTools({
           <StudioSettingsPanel
             hasCaptions={hasCaptions}
             captionPreset={captionPreset}
-            onCaptionPreset={(key) => void onCaptionPreset(key)}
+            onCaptionPreset={onCaptionPreset}
             look={look}
             onLook={(key) => {
               setLook(key)
