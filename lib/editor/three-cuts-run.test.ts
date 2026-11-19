@@ -7,6 +7,7 @@ import { replayModel } from "./replay-model"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import { UNLOCKED, type VideoDocument, type VideoElement } from "./types"
+import { isAttemptOnly } from "../usage-attempts"
 
 /**
  * The three-cuts run's guards and its stream, with the database, the asset
@@ -17,9 +18,13 @@ import { UNLOCKED, type VideoDocument, type VideoElement } from "./types"
  */
 
 const mocks = vi.hoisted(() => ({
-  rows: [] as { conversationId: string; model: string }[],
+  rows: [] as { conversationId: string; model: string; inputTokens?: number }[],
   spent: 0,
   lastStart: null as Date | null,
+  userLastStart: null as Date | null,
+  unlocks: [] as unknown[][],
+  assetFails: false,
+  streamCalls: 0,
   lock: vi.fn(),
   saves: [] as { scenes: string[]; expected: number }[],
 }))
@@ -30,19 +35,26 @@ vi.mock("../usage", () => ({
   recordUsage: async (row: { conversationId: string; model: string }) => {
     mocks.rows.push(row)
   },
-  spendCooldown: async (_user: string, _tag: string, ms: number) => {
+  spendCooldown: async (_user: string, tag: string, ms: number) => {
     const { cooldownDecision } = await import("../cooldown")
-    return cooldownDecision(mocks.lastStart, ms)
+    return cooldownDecision(tag === "three-cuts" ? mocks.userLastStart : mocks.lastStart, ms)
   },
 }))
-vi.mock("./assets", () => ({ getAsset: async () => null }))
+vi.mock("./assets", () => ({
+  getAsset: async () => {
+    if (mocks.assetFails) throw new Error("db down")
+    return null
+  },
+}))
 vi.mock("./projects", () => ({
   getProject: async () => ({ id: "vp-1", revision: 4, document: fixture(), lock: UNLOCKED }),
   lockProject: async (...args: unknown[]) => {
     mocks.lock(...args)
     return true
   },
-  unlockProject: async () => {},
+  unlockProject: async (...args: unknown[]) => {
+    mocks.unlocks.push(args)
+  },
   saveDocument: async (_id: string, _user: string, document: VideoDocument, expected: number) => {
     mocks.saves.push({ scenes: document.scenes.map((s) => s.id), expected })
     return { revision: expected + 1 }
@@ -84,7 +96,40 @@ function fixture(): VideoDocument {
   }
 }
 
-function start() {
+/**
+ * The replay model with a token count on every step, and a throw on the
+ * `failOnCall`th call, for the metering test.
+ */
+function metered(scene: Parameters<typeof replayModel>[0], o: { failOnCall?: number; inputTokens?: number }) {
+  const inner = replayModel(scene, { pace: "none" })
+  let calls = 0
+  return {
+    ...inner,
+    doStream: async (options: Parameters<typeof inner.doStream>[0]) => {
+      calls++
+      mocks.streamCalls++
+      if (o.failOnCall !== undefined && calls >= o.failOnCall) throw new Error("gateway down")
+      const result = await inner.doStream(options)
+      const total = o.inputTokens ?? 0
+      return {
+        ...result,
+        stream: result.stream.pipeThrough(
+          new TransformStream({
+            transform(part, controller) {
+              controller.enqueue(
+                part.type === "finish"
+                  ? { ...part, usage: { ...part.usage, inputTokens: { total, noCache: total, cacheRead: 0, cacheWrite: 0 } } }
+                  : part
+              )
+            },
+          })
+        ),
+      }
+    },
+  }
+}
+
+function start(o: { failOnCall?: number; inputTokens?: number } = {}) {
   return threeCutsResponse({
     request: new Request("http://localhost/api/editor/projects/vp-1/agent", { method: "POST" }),
     projectId: "vp-1",
@@ -95,7 +140,7 @@ function start() {
     maxSteps: 8,
     runId: "run-1",
     messageId: "msg-1",
-    languageModel: (scene) => replayModel(scene, { pace: "none" }),
+    languageModel: (scene) => metered(scene, o),
   })
 }
 
@@ -116,6 +161,10 @@ beforeEach(() => {
   mocks.saves.length = 0
   mocks.spent = 0
   mocks.lastStart = null
+  mocks.userLastStart = null
+  mocks.unlocks.length = 0
+  mocks.assetFails = false
+  mocks.streamCalls = 0
   mocks.lock.mockReset()
 })
 
@@ -157,11 +206,17 @@ describe("three cuts from one recording", () => {
 
     // The attempt log, then one usage row per sub-run.
     expect(mocks.rows.map((r) => r.conversationId).sort()).toEqual([
+      "three-cuts",
       "three-cuts:vp-1",
       "three-cuts:vp-1:A",
       "three-cuts:vp-1:B",
       "three-cuts:vp-1:C",
     ])
+    // The attempt rows are labelled so /credits leaves them out
+    // (usage-attempts.ts); the metered rows are the model's and stay in.
+    for (const row of mocks.rows) {
+      expect(isAttemptOnly(row.model)).toBe(!/:[ABC]$/.test(row.conversationId))
+    }
 
     // A, then A+B, then A+B+C, each against the revision the last one made.
     expect(mocks.saves.map((s) => s.expected)).toEqual([4, 5, 6])
@@ -175,5 +230,31 @@ describe("three cuts from one recording", () => {
     const pick = all.find((c) => c.type === "data-recommend") as { data: { letter: string; reason: string } }
     expect(pick.data.letter).toBe("A")
     expect(pick.data.reason).toMatch(/^I would post A first: it runs /)
+  })
+
+  it("refuses inside the per-person cooldown, whichever project asks", async () => {
+    mocks.userLastStart = new Date(Date.now() - 50_000)
+    const response = await start()
+    expect(response.status).toBe(429)
+    expect(((await response.json()) as { secondsLeft: number }).secondsLeft).toBe(10)
+    expect(mocks.lock).not.toHaveBeenCalled()
+  })
+
+  it("gives the lock back when something between the lock and the stream throws", async () => {
+    mocks.assetFails = true
+    const response = await start()
+    expect(response.status).toBe(500)
+    expect(mocks.unlocks).toEqual([["vp-1", "u-1", "run-1"]])
+  })
+
+  it("meters the steps a cut paid for when the cut throws partway", async () => {
+    const response = await start({ failOnCall: 2, inputTokens: 1_000 })
+    await chunks(response)
+    // Each cut finished one step (1,000 tokens) and threw on its second.
+    expect(mocks.streamCalls).toBe(6)
+    const cutRows = mocks.rows.filter((r) => /:[ABC]$/.test(r.conversationId)) as { inputTokens?: number }[]
+    expect(cutRows).toHaveLength(3)
+    for (const row of cutRows) expect(row.inputTokens).toBe(1_000)
+    expect(mocks.unlocks).toEqual([["vp-1", "u-1", "run-1"]])
   })
 })

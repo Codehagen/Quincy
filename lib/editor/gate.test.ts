@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest"
 
 import { deleteClipSteps, dryRun, editorTools, createRun } from "./agent"
 import { createScene } from "./document"
-import { EXEMPT_TOOLS, GATED_TOOLS, gateReason, gateVerdict, spokenSentences } from "./gate"
-import { newElement } from "./ops"
+import {
+  EXEMPT_TOOLS,
+  GATED_TOOLS,
+  gateLedger,
+  gateReason,
+  gateVerdict,
+  spokenSentences,
+} from "./gate"
+import { applyToScene, newElement } from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import { addCaptions, removeSilenceSteps } from "./tools"
 import type { Word } from "./transcript"
-import type { Scene, VideoElement } from "./types"
+import type { Scene, TimelineElement, VideoElement } from "./types"
 
 /**
  * The gate (plans/036, step 6), on fixtures: a twenty-second take cut into
@@ -173,6 +180,74 @@ describe("the gate", () => {
     for (const name of Object.keys(editorTools(run))) {
       expect(EXEMPT_TOOLS.has(name) !== GATED_TOOLS.has(name)).toBe(true)
     }
+  })
+})
+
+describe("the gate across a run", () => {
+  const del = (scene: Scene, clipNumbers: number[]) => ({
+    toolName: "delete_clip",
+    scene,
+    build: (on: Scene) => dryRun("delete_clip", { clipNumbers }, on),
+  })
+
+  it("adds up the calls of one step, judged before any of them runs", () => {
+    // Clip 2 is 25 %, clip 1 is 20 %: each passes alone, together they are 45 %.
+    const start = take()
+    const gate = gateLedger({ start, words: null })
+    expect(gate.judge(del(start, [2])).verdict).toEqual({ ask: false })
+    const second = gate.judge(del(start, [1])).verdict
+    expect(second).toMatchObject({ ask: true, percent: 45 })
+  })
+
+  it("adds up across steps, against the take as the run found it", () => {
+    const start = take()
+    const gate = gateLedger({ start, words: null })
+    expect(gate.judge(del(start, [2])).verdict.ask).toBe(false)
+    // The first call ran: the working scene is a new object without clip 2.
+    const after = applyToScene(start, dryRun("delete_clip", { clipNumbers: [2] }, start)!.flat(), "agent")
+    expect(gate.judge(del(after, [1])).verdict).toMatchObject({ ask: true, percent: 45 })
+  })
+
+  it("does not count what the exempt tools removed", () => {
+    const start = take()
+    const gate = gateLedger({ start, words: null })
+    const tightened = applyToScene(
+      start,
+      removeSilenceSteps(start, WORDS, { mediaId: "va-1", author: "agent", sourceDurationUs: secondsToUs(20) }).flat(),
+      "agent"
+    )
+    // Clip 2 of the tightened cut is well under 30 % of the original take.
+    expect(gate.judge(del(tightened, [2])).verdict.ask).toBe(false)
+  })
+
+  it("measures the spine, so a long music lane does not hide the cut", () => {
+    const start = take()
+    start.tracks.push({
+      id: "music",
+      kind: "audio",
+      name: "Music",
+      elements: [{ id: "bed", kind: "audio", startUs: us(0), durationUs: secondsToUs(60) } as unknown as TimelineElement],
+    })
+    // Clip 4 is 8 of the spine's 20 seconds; against the 60 s scene it would read 13 %.
+    const result = gateVerdict({ toolName: "delete_clip", before: start, steps: deleteClipSteps(start, [4]), words: null })
+    expect(result).toMatchObject({ ask: true, percent: 40 })
+  })
+
+  it("names the clips it measured, and an accepted answer does not count again", () => {
+    const start = take()
+    const gate = gateLedger({ start, words: WORDS })
+    const clip3 = findMainTrack(start)!.elements[2].id
+    expect(gate.peek(del(start, [3]))).toEqual([clip3])
+    // The person said yes to clip 3 (a whole sentence); the yes is replayed.
+    expect(gate.judge({ ...del(start, [3]), accepted: true }).verdict).toEqual({ ask: false })
+    // A later filler-only cut in the same run is not asked about because of it.
+    expect(gate.judge(del(start, [2])).verdict).toEqual({ ask: false })
+  })
+
+  it("carries the clip ids on a question", () => {
+    const start = take()
+    const result = gateVerdict({ toolName: "delete_clip", before: start, steps: deleteClipSteps(start, [3]), words: WORDS })
+    expect(result).toMatchObject({ ask: true, clipIds: [findMainTrack(start)!.elements[2].id] })
   })
 })
 

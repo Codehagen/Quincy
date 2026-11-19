@@ -9,6 +9,7 @@ import {
 } from "@hugeicons/core-free-icons"
 
 import {
+  currentScene,
   LANDSCAPE_CANVAS,
   SQUARE_CANVAS,
   VERTICAL_CANVAS,
@@ -52,7 +53,7 @@ import { cn } from "@/lib/utils"
 
 import { AgentCursors } from "./agent-cursor/agent-cursor"
 import { CutSpines, type CutView } from "./cut-spines"
-import type { CutsData, RecommendData } from "./cuts-turn"
+import type { CutsData, RecommendData } from "@/lib/editor/stream-parts"
 import { useDirector } from "./agent-cursor/director"
 import { StudioChat, type StudioHarness } from "./studio-chat"
 import { useStrongLine } from "./use-strong-line"
@@ -148,6 +149,8 @@ export function Studio({
     apply,
     applyAgentOps,
     syncRevision,
+    awaitSync,
+    syncLost,
     undo: undoDocument,
     redo: redoDocument,
     beginRun,
@@ -189,9 +192,20 @@ export function Studio({
    * and the agent never touches either.
    */
   const [hoverUs, setHoverUs] = React.useState<number | null>(null)
+  /**
+   * The same value for handlers. Split reads where the pointer is at the
+   * instant of the press, so it has no reason to be rebuilt every frame the
+   * pointer moves — and rebuilding it re-bound the window's key listener with
+   * it, sixty times a second, for as long as the pointer was over the lane.
+   */
+  const hoverRef = React.useRef<number | null>(null)
+  const writeHover = React.useCallback((value: number | null) => {
+    hoverRef.current = value
+    setHoverUs(value)
+  }, [])
   // One write per frame. The lane draws its own head from the pointer; this
-  // state is for the preview seek, the scrub badge and split-at-hover.
-  const { schedule: onHover } = useFrameThrottle(setHoverUs)
+  // state is for the preview seek and the scrub badge.
+  const { schedule: onHover } = useFrameThrottle(writeHover)
   /**
    * A trim edge mid-flight. Held here rather than in the document because a
    * drag is not an edit until it lands — applying every pointermove would be
@@ -200,9 +214,7 @@ export function Studio({
   const [trim, setTrim] = React.useState<TrimDrag | null>(null)
   const zoom = useZoom()
 
-  const scene =
-    document.scenes.find((s) => s.id === document.currentSceneId) ??
-    document.scenes[0]
+  const scene = currentScene(document)
   const canvas = scene?.canvas ?? document.settings.canvas
   const trackId = scene ? mainTrackId(scene) : null
 
@@ -515,12 +527,13 @@ export function Studio({
    */
   const split = React.useCallback(() => {
     if (!scene || !trackId) return
-    // Read at call time, not rendered from: the playhead is no longer state,
-    // and an event handler wants where it is now, not where it last rendered.
-    const at =
-      hoverUs === null ? player.readPlayhead() : us(Math.round(hoverUs))
+    // Read at call time, not rendered from: neither the playhead nor the
+    // hover is state this reads, and an event handler wants where they are
+    // now, not where they last rendered.
+    const hover = hoverRef.current
+    const at = hover === null ? player.readPlayhead() : us(Math.round(hover))
     commit(splitAt(scene, trackId, at))
-  }, [commit, scene, trackId, hoverUs, player])
+  }, [commit, scene, trackId, player])
 
   const commitTrim = React.useCallback(
     (drag: TrimDrag) => {
@@ -1076,6 +1089,8 @@ export function Studio({
           controls={{
             beginRun,
             endRun,
+            awaitSync,
+            syncLost,
             undo,
             redo,
             historyIds,
@@ -1318,9 +1333,11 @@ function SaveBadge({
         ? "Unsaved"
         : save.status === "conflict"
           ? "Someone else edited this — reload to continue"
-          : save.message
+          : save.status === "unsynced"
+            ? "Could not confirm what Quincy saved — reload to continue"
+            : save.message
 
-  const bad = save.status === "conflict" || save.status === "error"
+  const bad = save.status === "conflict" || save.status === "error" || save.status === "unsynced"
 
   return (
     <span className="flex items-center gap-2">

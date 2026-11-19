@@ -10,7 +10,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
-import type { Provenance, TrackKind } from "@/lib/editor/types"
+import type { TrackKind } from "@/lib/editor/types"
 
 import type { Filmstrip as FilmstripSheet } from "./studio"
 import { cn } from "@/lib/utils"
@@ -234,31 +234,6 @@ export function TimeRuler({
         )
       })}
     </div>
-  )
-}
-
-/**
- * Agent authorship, as texture rather than colour.
- *
- * A 2px hatched rule along the top edge of the clip. It survives at every zoom
- * level, it does not compete with selection, and it leaves the palette alone.
- */
-export function AgentMark({ provenance }: { provenance: Provenance }) {
-  const byAgent = provenance.createdBy === "agent"
-  const touchedByUser = provenance.lastEditedBy === "user"
-  if (!byAgent) return null
-
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute inset-x-0 top-0 h-[2px]"
-      style={{
-        backgroundImage: touchedByUser
-          ? // Half-erased: the agent made it, you changed it since.
-            "repeating-linear-gradient(90deg, color-mix(in oklch, var(--color-kit-ink-muted) 60%, transparent) 0 2px, transparent 2px 8px)"
-          : "repeating-linear-gradient(90deg, color-mix(in oklch, var(--color-kit-ink-muted) 85%, transparent) 0 3px, transparent 3px 6px)",
-      }}
-    />
   )
 }
 

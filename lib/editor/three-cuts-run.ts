@@ -11,13 +11,17 @@ import {
 import { ceilingCovers } from "../chat-guards"
 import { cooldownDecision } from "../cooldown"
 import { recordUsage, spendCooldown, summariseUsage } from "../usage"
+import { EDITOR_THREE_CUTS_ATTEMPT } from "../usage-attempts"
 import { createRun, describeScene, dryRun, editorTools, scopedTo } from "./agent"
 import { getAsset } from "./assets"
-import { gateVerdict, GATED_TOOLS } from "./gate"
+import { gateLedger, GATED_TOOLS, type GateLedger } from "./gate"
+import { currentScene } from "./document"
+import { tokenMeter } from "./meter"
 import { getProject, lockProject, saveDocument, unlockProject } from "./projects"
 import { readTake, strongLineSlot } from "./reading"
 import { CHECK_MODEL, needsCheck } from "./self-check"
 import { signOffer } from "./self-check-server"
+import type { CutsMessage } from "./stream-parts"
 import { findMainTrack, sceneDurationUs } from "./timeline"
 import { wordsFromDeepgram, type Word } from "./transcript"
 import {
@@ -29,6 +33,7 @@ import {
   THREE_CUTS_COOLDOWN_MS,
   threeCutsNeedMicros,
   threeCutsTag,
+  threeCutsUserTag,
   type CutBrief,
   type CutOutcome,
 } from "./three-cuts"
@@ -45,16 +50,18 @@ import type { Scene, VideoDocument } from "./types"
  * per save: one revision per cut, so each can be undone on its own.
  *
  * **Money (AGENTS.md).** Before anything starts: a 60 s cooldown per project
- * (the attempt log is a zero-cost `usage_event` row written once the lock is
- * held), and the day's ceiling must cover three runs at their step cap plus
- * three checks. Each sub-run keeps the per-run step cap and writes its own
- * `usage_event` row, failed or not. Replay (development) calls no model and
- * writes no row; an in-memory map stands in for the cooldown's log.
+ * and another per person, across projects (the attempt log is two zero-cost
+ * `usage_event` rows written once the lock is held), and the day's ceiling
+ * must cover three runs at their step cap plus three checks. Each sub-run
+ * keeps the per-run step cap and writes its own `usage_event` row, failed or
+ * not, counted step by step so Stop does not zero it. Replay (development)
+ * calls no model and writes no row; an in-memory map stands in for the
+ * cooldown's log.
  */
 
 const newSceneId = createIdGenerator({ prefix: "vs", size: 16 })
 
-/** Development replays: when each project last started three cuts. */
+/** Development replays: when each cooldown tag was last started. */
 const replayStarted = new Map<string, number>()
 
 export type ThreeCutsOptions = {
@@ -75,10 +82,16 @@ export type ThreeCutsOptions = {
 }
 
 export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> {
-  // The cooldown, cheapest first: one indexed read (none in replay).
-  const cooldown = o.replay
-    ? replayCooldown(o.projectId)
-    : await spendCooldown(o.userId, threeCutsTag(o.projectId), THREE_CUTS_COOLDOWN_MS)
+  // The cooldowns, cheapest first: two indexed reads (none in replay). Per
+  // project alone, a person with three projects open could start three
+  // three-cuts runs in a row; the per-person tag closes that.
+  const [perProject, perUser] = o.replay
+    ? [replayCooldown(o.userId, threeCutsTag(o.projectId)), replayCooldown(o.userId, threeCutsUserTag())]
+    : await Promise.all([
+        spendCooldown(o.userId, threeCutsTag(o.projectId), THREE_CUTS_COOLDOWN_MS),
+        spendCooldown(o.userId, threeCutsUserTag(), THREE_CUTS_COOLDOWN_MS),
+      ])
+  const cooldown = !perProject.ready ? perProject : perUser
   if (!cooldown.ready) {
     const s = cooldown.secondsLeft
     return Response.json(
@@ -98,9 +111,7 @@ export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> 
   const project = await getProject(o.projectId, o.userId)
   if (!project) return Response.json({ error: "No such project." }, { status: 404 })
 
-  const base =
-    project.document.scenes.find((s) => s.id === project.document.currentSceneId) ??
-    project.document.scenes[0]
+  const base = currentScene(project.document)
   const clip = base && findMainTrack(base)?.elements.find((e) => e.kind === "video")
   if (!base || !clip || clip.kind !== "video") {
     return Response.json({ error: "There is no footage to cut three ways." }, { status: 400 })
@@ -110,26 +121,36 @@ export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> 
     return Response.json({ error: "Something is already cutting this project." }, { status: 409 })
   }
 
-  // The attempt log the cooldown reads, written the moment the run is ours.
+  // From the lock until the stream exists, a throw must give the lock back:
+  // the `onFinish` that unlocks belongs to the stream.
+  let words: Word[] | null
+  let briefs: CutBrief[]
   try {
-    if (o.replay) replayStarted.set(o.projectId, Date.now())
-    else await recordUsage({ userId: o.userId, conversationId: threeCutsTag(o.projectId), model: "editor:three-cuts", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 })
+    // The attempt log the cooldowns read, written the moment the run is ours.
+    if (o.replay) {
+      replayStarted.set(`${o.userId}|${threeCutsTag(o.projectId)}`, Date.now())
+      replayStarted.set(`${o.userId}|${threeCutsUserTag()}`, Date.now())
+    } else {
+      const attempt = { userId: o.userId, model: EDITOR_THREE_CUTS_ATTEMPT, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+      await recordUsage({ ...attempt, conversationId: threeCutsTag(o.projectId) })
+      await recordUsage({ ...attempt, conversationId: threeCutsUserTag() })
+    }
+
+    const asset = await getAsset(clip.mediaId, o.userId)
+    words = asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
+    const slot = strongLineSlot(asset?.transcript)
+    briefs = briefsFor({
+      durationUs: sceneDurationUs(base),
+      firstLine: words ? readTake(words, sceneDurationUs(base)).firstLine : null,
+      strongLine: slot?.state === "done" ? slot.line : null,
+    })
   } catch (cause) {
-    await unlockProject(o.projectId, o.userId).catch(() => {})
-    console.error("[three cuts] could not log the attempt:", cause)
+    await unlockProject(o.projectId, o.userId, o.runId).catch(() => {})
+    console.error("[three cuts] could not start:", cause)
     return Response.json({ error: "Three cuts could not start." }, { status: 500 })
   }
 
-  const asset = await getAsset(clip.mediaId, o.userId)
-  const words: Word[] | null = asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
-  const slot = strongLineSlot(asset?.transcript)
-  const briefs = briefsFor({
-    durationUs: sceneDurationUs(base),
-    firstLine: words ? readTake(words, sceneDurationUs(base)).firstLine : null,
-    strongLine: slot?.state === "done" ? slot.line : null,
-  })
-
-  const stream = createUIMessageStream({
+  const stream = createUIMessageStream<CutsMessage>({
     execute: ({ writer }) => cutThree({ ...o, writer, document: project.document, revision: project.revision, base, briefs, words }),
     onError: (error) => {
       console.error("[three cuts] run failed:", error)
@@ -137,7 +158,7 @@ export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> 
     },
     onFinish: async () => {
       try {
-        await unlockProject(o.projectId, o.userId)
+        await unlockProject(o.projectId, o.userId, o.runId)
       } catch (cause) {
         console.error(`[three cuts] could not unlock ${o.projectId}:`, cause)
       }
@@ -148,7 +169,7 @@ export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> 
 
 async function cutThree(
   o: ThreeCutsOptions & {
-    writer: UIMessageStreamWriter
+    writer: UIMessageStreamWriter<CutsMessage>
     document: VideoDocument
     revision: number
     base: Scene
@@ -230,7 +251,7 @@ async function cutThree(
 
 /** One cut: a model loop over the editor's tools, scoped to its scene, metered. */
 async function cutOne(
-  o: ThreeCutsOptions & { writer: UIMessageStreamWriter },
+  o: ThreeCutsOptions & { writer: UIMessageStreamWriter<CutsMessage> },
   run: ReturnType<typeof createRun>,
   cut: { brief: CutBrief; sceneId: string }
 ): Promise<{ landed: boolean; checked: boolean }> {
@@ -243,7 +264,10 @@ async function cutOne(
   const scene = () => run.snapshot().document.scenes.find((s) => s.id === cut.sceneId)
 
   let say = ""
-  let usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+  // Counted as each step ends, so a cut stopped or failed halfway still
+  // meters the steps it paid for (meter.ts).
+  const meter = tokenMeter()
+  let ledger: GateLedger | null = null
   try {
     const result = streamText({
       model: o.languageModel
@@ -256,26 +280,31 @@ async function cutOne(
       tools: editorTools(context),
       stopWhen: isStepCount(o.maxSteps),
       abortSignal: o.request.signal,
+      onStepEnd: (step) => meter.add(step.usage),
       // No one is there to answer a question mid-way through three cuts, so
       // a cut the gate would ask about is not made; the cut says so.
       toolApproval: async ({ toolCall }) => {
         if (!GATED_TOOLS.has(toolCall.toolName)) return undefined
         const current = scene()
-        const steps = current ? dryRun(toolCall.toolName, toolCall.input, current) : null
-        if (!current || !steps) return undefined
-        const verdict = gateVerdict({ toolName: toolCall.toolName, before: current, steps, words: await run.words() })
+        if (!current) return undefined
+        // Measured across the cut's whole loop, against its scene as it began
+        // (gate.ts): a cut that removes a fifth twice has removed two fifths.
+        const gate = (ledger ??= gateLedger({ start: current, words: await run.words() }))
+        const { verdict } = gate.judge({
+          toolName: toolCall.toolName,
+          scene: current,
+          build: (on) => dryRun(toolCall.toolName, toolCall.input, on),
+        })
         return verdict.ask ? { type: "denied", reason: `${verdict.reason} Ask for it in this cut on its own.` } : undefined
       },
     })
     say = await result.text
-    const total = await result.usage
-    usage = { inputTokens: total.inputTokens ?? 0, cachedInputTokens: total.inputTokenDetails?.cacheReadTokens ?? 0, outputTokens: total.outputTokens ?? 0 }
   } catch (cause) {
     console.error(`[three cuts] cut ${cut.brief.letter} failed:`, cause)
   } finally {
     // Metered whether or not the loop finished: whatever it called was spent.
     if (!o.replay) {
-      await recordUsage({ userId: o.userId, conversationId: cutUsageTag(o.projectId, cut.brief.letter), model: o.model, ...usage }).catch((cause) =>
+      await recordUsage({ userId: o.userId, conversationId: cutUsageTag(o.projectId, cut.brief.letter), model: o.model, ...meter.total() }).catch((cause) =>
         console.error("[three cuts] could not record usage:", cause)
       )
     }
@@ -286,7 +315,7 @@ async function cutOne(
   return { landed, checked: needsCheck(committed) }
 }
 
-function replayCooldown(projectId: string) {
-  const last = replayStarted.get(projectId)
+function replayCooldown(userId: string, tag: string) {
+  const last = replayStarted.get(`${userId}|${tag}`)
   return cooldownDecision(last === undefined ? null : new Date(last), THREE_CUTS_COOLDOWN_MS)
 }

@@ -15,10 +15,14 @@ import { UNLOCKED, type VideoDocument, type VideoElement } from "@/lib/editor/ty
  * failed ones included.
  */
 
+type Row = { id?: string; conversationId: string; model: string; inputTokens: number }
+
 const mocks = vi.hoisted(() => ({
-  rows: [] as { conversationId: string; model: string; inputTokens: number }[],
+  rows: [] as Row[],
   look: vi.fn(),
   save: vi.fn(),
+  unlocks: [] as unknown[][],
+  settleFails: false,
 }))
 
 vi.mock("@/lib/db", () => ({ db: {} }))
@@ -32,14 +36,23 @@ vi.mock("@/lib/entitlement", () => ({
 }))
 vi.mock("@/lib/usage", () => ({
   summariseUsage: async () => ({ costMicros: 0 }),
-  recordUsage: async (row: { conversationId: string; model: string; inputTokens: number }) => {
-    mocks.rows.push(row)
+  recordUsage: async (row: Row) => {
+    const id = `use_${mocks.rows.length}`
+    mocks.rows.push({ ...row, id })
+    return id
+  },
+  settleUsage: async (id: string, _user: string, usage: { inputTokens: number }) => {
+    if (mocks.settleFails) throw new Error("db down")
+    const row = mocks.rows.find((r) => r.id === id)
+    if (row) row.inputTokens = usage.inputTokens
   },
 }))
 vi.mock("@/lib/editor/projects", () => ({
   getProject: async () => ({ id: "vp-1", revision: 4, document: documentFixture(), lock: UNLOCKED }),
   lockProject: async () => true,
-  unlockProject: async () => {},
+  unlockProject: async (...args: unknown[]) => {
+    mocks.unlocks.push(args)
+  },
   saveDocument: async (...args: unknown[]) => {
     mocks.save(...args)
     return { revision: 5 }
@@ -108,6 +121,8 @@ beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_SECRET", "test-secret")
   vi.stubEnv("AI_GATEWAY_API_KEY", "test-key")
   mocks.rows.length = 0
+  mocks.unlocks.length = 0
+  mocks.settleFails = false
   mocks.look.mockReset()
   mocks.save.mockReset()
   mocks.look.mockResolvedValue({
@@ -173,5 +188,36 @@ describe("the self-check route", () => {
     const response = await post({ offer: signOffer("vp-1", "run-3"), frames: frames(1) })
     expect(((await response.json()) as { steps: unknown[] }).steps).toEqual([])
     expect(mocks.save).not.toHaveBeenCalled()
+  })
+
+  it("writes the run's row before the model call, so the claim stands whatever follows", async () => {
+    const offer = signOffer("vp-1", "run-4")
+    mocks.look.mockImplementationOnce(async () => {
+      // The row exists while the call is still out.
+      expect(mocks.rows).toEqual([expect.objectContaining({ conversationId: "check:run-4:1f", inputTokens: 0 })])
+      return {
+        verdict: { frames: [], captions: null, keep: null, say: "Fine." },
+        usage: { inputTokens: 7, cachedInputTokens: 0, outputTokens: 1 },
+      }
+    })
+    mocks.settleFails = true
+    expect((await post({ offer, frames: frames(1) })).status).toBe(200)
+    // The settle failed, and the claim still refuses a second check.
+    expect((await post({ offer, frames: frames(1) })).status).toBe(409)
+    expect(mocks.look).toHaveBeenCalledTimes(1)
+  })
+
+  it("meters an answer that failed to parse with the tokens it took", async () => {
+    mocks.look.mockImplementationOnce(async (_frames: unknown, _signal: unknown, onUsage: (u: unknown) => void) => {
+      onUsage({ inputTokens: 850, outputTokens: 30 })
+      throw new Error("No object generated")
+    })
+    expect((await post({ offer: signOffer("vp-1", "run-5"), frames: frames(1) })).status).toBe(502)
+    expect(mocks.rows).toEqual([expect.objectContaining({ conversationId: "check:run-5:1f", inputTokens: 850 })])
+  })
+
+  it("gives back only its own lock", async () => {
+    await post({ offer: signOffer("vp-1", "run-6"), frames: frames(1) })
+    expect(mocks.unlocks).toEqual([["vp-1", "u-1", "check-run-6"]])
   })
 })

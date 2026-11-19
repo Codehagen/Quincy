@@ -29,6 +29,23 @@ const BLACK_LUMA = 14
 const RETRY_FRAMES = 3
 /** One frame at 30 fps: the margin kept inside a clip's window, whatever the proxy's rate. */
 const FRAME_US = 1_000_000 / 30
+/** HTMLMediaElement's ready states, spelled out so the waits read without a DOM. */
+const HAVE_METADATA = 1
+const HAVE_CURRENT_DATA = 2
+
+/**
+ * The part of a `<video>` the waits touch. Narrow on purpose: the order of
+ * the waits is the fix for black frames, and a fake of this shape is how
+ * that order stays tested.
+ */
+export type SeekableVideo = Pick<
+  HTMLVideoElement,
+  "readyState" | "duration" | "currentTime" | "seeking" | "videoWidth" | "videoHeight"
+> &
+  Partial<Pick<HTMLVideoElement, "requestVideoFrameCallback">> & {
+    addEventListener(type: string, listener: () => void): void
+    removeEventListener(type: string, listener: () => void): void
+  }
 
 /** Mirrors captionInset in composition.tsx: where the caption's baseline sits. */
 function captionInset(width: number, height: number): number {
@@ -121,8 +138,8 @@ export async function grabFrames({
  * where the browser has it; otherwise `readyState` reaching
  * HAVE_CURRENT_DATA).
  */
-async function frameAt(video: HTMLVideoElement, seconds: number): Promise<boolean> {
-  if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+export async function frameAt(video: SeekableVideo, seconds: number): Promise<boolean> {
+  if (video.readyState < HAVE_METADATA) {
     if (!(await once(video, "loadedmetadata", SEEK_TIMEOUT_MS))) return false
   }
   const target = Math.max(0, Math.min(seconds, (video.duration || seconds) - 0.001))
@@ -132,14 +149,14 @@ async function frameAt(video: HTMLVideoElement, seconds: number): Promise<boolea
     if (!(await seeked)) return false
   }
   await presented(video)
-  if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+  if (video.readyState < HAVE_CURRENT_DATA) {
     if (!(await once(video, "loadeddata", SEEK_TIMEOUT_MS))) return false
   }
   return video.videoWidth > 0 && video.videoHeight > 0
 }
 
 /** True when the event fires before the timeout; false on an error or the timeout. */
-function once(video: HTMLVideoElement, event: string, timeoutMs: number): Promise<boolean> {
+function once(video: SeekableVideo, event: string, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const done = (ok: boolean) => {
       window.clearTimeout(timer)
@@ -156,10 +173,10 @@ function once(video: HTMLVideoElement, event: string, timeoutMs: number): Promis
 }
 
 /** The next presented frame, or a short wait where the browser cannot say. */
-function presented(video: HTMLVideoElement): Promise<void> {
+function presented(video: SeekableVideo): Promise<void> {
   return new Promise((resolve) => {
     const timer = window.setTimeout(resolve, FRAME_TIMEOUT_MS)
-    if ("requestVideoFrameCallback" in video) {
+    if ("requestVideoFrameCallback" in video && video.requestVideoFrameCallback) {
       video.requestVideoFrameCallback(() => {
         window.clearTimeout(timer)
         resolve()
@@ -180,16 +197,24 @@ function isBlack(video: HTMLVideoElement): boolean {
   if (!probe) return false
   try {
     probe.drawImage(video, 0, 0, 16, 9)
-    const { data } = probe.getImageData(0, 0, 16, 9)
-    for (let i = 0; i < data.length; i += 4) {
-      const luma = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
-      if (luma > BLACK_LUMA) return false
-    }
-    return true
+    return allDark(probe.getImageData(0, 0, 16, 9).data)
   } catch {
     // A tainted canvas cannot be read here; the export below says so.
     return false
   }
+}
+
+/**
+ * True when no pixel in RGBA `data` is brighter than `BLACK_LUMA` (Rec. 709
+ * luma, 0–255). Alpha is ignored: a decoder that has not drawn yet leaves
+ * opaque black, and that is what this looks for.
+ */
+export function allDark(data: ArrayLike<number>): boolean {
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
+    if (luma > BLACK_LUMA) return false
+  }
+  return true
 }
 
 function drawPicture(

@@ -67,6 +67,20 @@ export function useSelfCheck({
   const [checking, setChecking] = React.useState(false)
   const [checks, setChecks] = React.useState<Record<string, CheckState>>({})
   const abort = React.useRef<AbortController | null>(null)
+  /**
+   * The look's request has left: from here on Stop does not abort it.
+   *
+   * Aborting a sent request races the route's save. The model may already
+   * have answered and the fix be committing when the abort lands, and then
+   * the server holds a fix and a revision this page never hears of — the next
+   * autosave 409s, and the fix sits in the project unseen. Re-reading the
+   * whole document to find out is the other way out; letting the one request
+   * finish is simpler, and the look is already paid for. So Stop lets it
+   * answer, and its fix lands at once, without the cursor, like any beat that
+   * had arrived when Stop was pressed.
+   */
+  const sent = React.useRef(false)
+  const stopped = React.useRef(false)
 
   const latest = React.useRef({ look, onSaved, director })
   React.useEffect(() => {
@@ -87,6 +101,8 @@ export function useSelfCheck({
       const controller = new AbortController()
       abort.current?.abort()
       abort.current = controller
+      sent.current = false
+      stopped.current = false
       const { look: source } = latest.current
       const scene = source.scene(sceneId ?? undefined)
 
@@ -105,6 +121,7 @@ export function useSelfCheck({
 
         setChecks((prev) => ({ ...prev, [key]: { status: "looking", frames } }))
 
+        sent.current = true
         const response = await fetcher(
           `/api/editor/projects/${projectId}/check${replay ? "?replay=1" : ""}`,
           {
@@ -149,7 +166,10 @@ export function useSelfCheck({
               })
             )
           )
-          cursor.finish()
+          // Stopped while the look was out: what it fixed is already saved,
+          // so it lands now, all at once, and the cursor parks.
+          if (stopped.current) cursor.stop()
+          else cursor.finish()
         }
         if (body.revision !== null) latest.current.onSaved(body.revision)
       } catch (cause) {
@@ -160,7 +180,11 @@ export function useSelfCheck({
           [key]: { status: "failed", message: "The check did not answer." },
         }))
       } finally {
-        if (abort.current === controller) abort.current = null
+        if (abort.current === controller) {
+          abort.current = null
+          sent.current = false
+          stopped.current = false
+        }
         setChecking(false)
       }
     },
@@ -173,10 +197,14 @@ export function useSelfCheck({
     []
   )
 
-  /** Stop: drop the offer and any look in flight. Nothing lands. */
+  /**
+   * Stop: drop the offers. A look still grabbing its frames is aborted and
+   * nothing lands; one whose request has left answers and lands (see `sent`).
+   */
   const cancel = React.useCallback(() => {
     setOffers([])
-    abort.current?.abort()
+    if (sent.current) stopped.current = true
+    else abort.current?.abort()
   }, [])
 
   return {

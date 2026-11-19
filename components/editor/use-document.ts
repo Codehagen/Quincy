@@ -5,7 +5,16 @@ import * as React from "react"
 import { applyOps, type EditOp } from "@/lib/editor/ops"
 import { UNLOCKED, type VideoDocument } from "@/lib/editor/types"
 
-import { amend, commit, createHistory, idsOf, redo as redoHistory, undo as undoHistory, type History } from "./history"
+import {
+  amend,
+  commit,
+  createHistory,
+  idsOf,
+  redo as redoHistory,
+  replacePresent,
+  undo as undoHistory,
+  type History,
+} from "./history"
 
 /** The browser's fetch, called through a stable function so it can be a default. */
 export const networkFetch: typeof fetch = (input, init) => fetch(input, init)
@@ -37,6 +46,15 @@ export type SaveState =
   | { status: "saving" }
   | { status: "conflict" }
   | { status: "error"; message: string; givenUp: boolean }
+  /**
+   * A stopped run saved on the server and its revision never reached us.
+   * Saving on top of a revision we do not know would 409 or, worse, look
+   * like someone else's edit; reloading is the honest way out.
+   */
+  | { status: "unsynced" }
+
+/** The network's opinion only. Whether work is unsaved is derived from seq. */
+type Network = Exclude<SaveState, { status: "dirty" }>
 
 /** Milliseconds of quiet before a save. Long enough that a drag is one write. */
 const AUTOSAVE_DELAY = 1200
@@ -54,6 +72,58 @@ const MAX_ATTEMPTS = 3
 
 /** Backoff between attempts. Doubling, so a wall is hit quickly and quietly. */
 const RETRY_DELAY = [1500, 4000, 10_000]
+
+/**
+ * How long until the next autosave, or null when none may fire.
+ *
+ * Pure so the whole schedule can be read in one place and tested: a conflict,
+ * a save in flight, a give-up and an unconfirmed run all stop it; an error
+ * backs off; anything else waits for a quiet moment.
+ */
+export function autosaveDelay(state: {
+  dirty: boolean
+  awaitingSync: boolean
+  network: Network
+  attempts: number
+}): number | null {
+  if (!state.dirty) return null
+  // A stopped run's save is still landing on the server. Its revision is the
+  // only safe base for ours, so nothing is written until the read-back brings
+  // it — or says it cannot.
+  if (state.awaitingSync) return null
+  const { network } = state
+  if (network.status === "conflict" || network.status === "saving") return null
+  if (network.status === "unsynced") return null
+  // Given up means given up. The work is still here, beforeunload guards the
+  // tab, and there is a Retry — but nothing fires on its own again.
+  if (network.status === "error") {
+    if (network.givenUp) return null
+    return RETRY_DELAY[state.attempts - 1] ?? RETRY_DELAY.at(-1)!
+  }
+  return AUTOSAVE_DELAY
+}
+
+/**
+ * What a 409 means, given what we have learned since the request left.
+ *
+ * - `retry`: a run's revision reached us while the save was in flight, and it
+ *   is at least the one that won. The winner was the run's own save, which
+ *   this document already holds, so the same work saved on top of it is right.
+ * - `wait`: a stopped run's save is still to be confirmed. The 409 is most
+ *   likely that save; the read-back decides, and the retry after it is the
+ *   test — if someone else really wrote, it 409s again and becomes a conflict.
+ * - `conflict`: someone or something else wrote first. Retrying the same body
+ *   would either fail identically or overwrite whatever won.
+ */
+export function conflictVerdict(
+  state: { revision: number; awaitingSync: boolean },
+  sent: number,
+  actual: number | null
+): "retry" | "wait" | "conflict" {
+  if (actual !== null && state.revision > sent && state.revision >= actual) return "retry"
+  if (state.awaitingSync) return "wait"
+  return "conflict"
+}
 
 type State = {
   /** The document now, and the undo and redo entries behind it (history.ts). */
@@ -83,6 +153,19 @@ type State = {
   run: "idle" | "open" | "pushed"
   /** The history entry the last run committed: its checkpoint asks for this one. */
   runEntry: number | null
+  /** Only ever the network's opinion. Whether work is unsaved is derived. */
+  network: Network
+  /** Failed saves in a row, for the backoff and the give-up. */
+  attempts: number
+  /**
+   * A stopped run saved on the server and its revision has not reached us.
+   *
+   * Stop closes the stream before the run's `data-saved` part can arrive,
+   * and the server saves after it meters the run, so its revision moves late.
+   * Until the read-back brings it, every save would carry a stale revision
+   * and 409 on the run's own write — and a conflict stops autosave for good.
+   */
+  awaitingSync: boolean
 }
 
 export function initialState(document: VideoDocument, revision: number): State {
@@ -93,6 +176,9 @@ export function initialState(document: VideoDocument, revision: number): State {
     savedSeq: 0,
     run: "idle",
     runEntry: null,
+    network: { status: "clean" },
+    attempts: 0,
+    awaitingSync: false,
   }
 }
 
@@ -121,6 +207,25 @@ type Action =
   | { type: "synced"; revision: number }
   | { type: "run-start" }
   | { type: "run-end" }
+  /** A stopped run's save is landing on the server: hold autosave for its revision. */
+  | { type: "await-sync" }
+  /** The read-back gave up: the run's revision is unknown. */
+  | { type: "sync-lost" }
+  | { type: "save-start" }
+  /** A 409: `sent` is the revision the request carried, `actual` the one that won. */
+  | { type: "save-conflict"; sent: number; actual: number | null }
+  | { type: "save-failed"; message: string }
+  | { type: "retry" }
+
+/**
+ * Select a scene, and nothing else: where the person is looking, not what the
+ * cut is. Saved, so the project reopens on it, but never an undo entry — Cmd+Z
+ * should take back an edit, not a click on a tab, and a navigation pushed on
+ * top of a run would leave "Undo the run" pointing at the wrong entry.
+ */
+function viewOnly(ops: EditOp[]): boolean {
+  return ops.every((op) => op.op === "select_scene")
+}
 
 /** Exported for its tests (use-document.test.ts). */
 export function reduce(state: State, action: Action): State {
@@ -140,8 +245,11 @@ export function reduce(state: State, action: Action): State {
       return {
         ...state,
         // Any new edit forks the timeline; a redo stack that survived it would
-        // offer to reapply changes to a document that no longer exists.
-        history: commit(state.history, result.snapshot.document),
+        // offer to reapply changes to a document that no longer exists. A
+        // navigation forks nothing, so it keeps the stacks as they are.
+        history: viewOnly(action.ops)
+          ? replacePresent(state.history, result.snapshot.document)
+          : commit(state.history, result.snapshot.document),
         seq: state.seq + 1,
       }
     }
@@ -172,7 +280,43 @@ export function reduce(state: State, action: Action): State {
     }
 
     case "synced":
-      return { ...state, revision: action.revision }
+      return {
+        ...state,
+        revision: action.revision,
+        awaitingSync: false,
+        // A revision from the server is exactly what "unsynced" was missing.
+        network: state.network.status === "unsynced" ? { status: "clean" } : state.network,
+      }
+
+    case "await-sync":
+      return { ...state, awaitingSync: true }
+
+    case "sync-lost":
+      return { ...state, awaitingSync: false, network: { status: "unsynced" } }
+
+    case "save-start":
+      return { ...state, network: { status: "saving" } }
+
+    case "save-conflict": {
+      const verdict = conflictVerdict(state, action.sent, action.actual)
+      // Retry and wait both leave the work dirty with nothing failing: the
+      // autosave fires again on the revision we now hold, or once the
+      // read-back brings it.
+      if (verdict !== "conflict") return { ...state, network: { status: "clean" } }
+      return { ...state, network: { status: "conflict" } }
+    }
+
+    case "save-failed": {
+      const attempts = state.attempts + 1
+      return {
+        ...state,
+        attempts,
+        network: { status: "error", message: action.message, givenUp: attempts >= MAX_ATTEMPTS },
+      }
+    }
+
+    case "retry":
+      return { ...state, attempts: 0, network: { status: "clean" } }
 
     case "run-start":
       return { ...state, run: "open", runEntry: null }
@@ -194,7 +338,13 @@ export function reduce(state: State, action: Action): State {
       // savedSeq is what was actually written, not the current seq — so an
       // edit made while the request was in flight leaves the document dirty
       // and the autosave picks it up on the next quiet moment.
-      return { ...state, revision: action.revision, savedSeq: action.seq }
+      return {
+        ...state,
+        revision: action.revision,
+        savedSeq: action.seq,
+        attempts: 0,
+        network: { status: "clean" },
+      }
   }
 }
 
@@ -208,10 +358,6 @@ export function useDocument(
   const [state, dispatch] = React.useReducer(reduce, initialRevision, (revision) =>
     initialState(initial, revision)
   )
-
-  /** Only ever the network's opinion. Whether work is unsaved is derived. */
-  const [network, setNetwork] = React.useState<SaveState>({ status: "clean" })
-  const [attempts, setAttempts] = React.useState(0)
 
   const dirty = state.seq !== state.savedSeq
 
@@ -227,6 +373,8 @@ export function useDocument(
     (revision: number) => dispatch({ type: "synced", revision }),
     []
   )
+  const awaitSync = React.useCallback(() => dispatch({ type: "await-sync" }), [])
+  const syncLost = React.useCallback(() => dispatch({ type: "sync-lost" }), [])
   const beginRun = React.useCallback(() => dispatch({ type: "run-start" }), [])
   const endRun = React.useCallback(() => dispatch({ type: "run-end" }), [])
   const undo = React.useCallback(() => dispatch({ type: "undo" }), [])
@@ -234,7 +382,7 @@ export function useDocument(
 
   const flush = React.useCallback(
     async (document: VideoDocument, revision: number, seq: number) => {
-      setNetwork({ status: "saving" })
+      dispatch({ type: "save-start" })
 
       try {
         const response = await fetcher(`/api/editor/projects/${projectId}`, {
@@ -244,10 +392,17 @@ export function useDocument(
         })
 
         if (response.status === 409) {
-          // Someone or something else wrote first. Not recoverable by retrying
-          // the same body — that is what made it a conflict — so it is
-          // surfaced rather than swallowed, and local work is left intact.
-          setNetwork({ status: "conflict" })
+          // The reducer decides whether this is a real conflict or the run's
+          // own save arriving late (conflictVerdict). Local work stays intact
+          // either way.
+          const detail = (await response.json().catch(() => null)) as {
+            actual?: number
+          } | null
+          dispatch({
+            type: "save-conflict",
+            sent: revision,
+            actual: typeof detail?.actual === "number" ? detail.actual : null,
+          })
           return
         }
 
@@ -255,74 +410,41 @@ export function useDocument(
           const detail = (await response.json().catch(() => null)) as {
             error?: string
           } | null
-          fail(detail?.error ?? "Save failed.")
+          dispatch({ type: "save-failed", message: detail?.error ?? "Save failed." })
           return
         }
 
         const saved = (await response.json()) as { revision: number }
         dispatch({ type: "saved", revision: saved.revision, seq })
-        setAttempts(0)
-        setNetwork({ status: "clean" })
       } catch {
-        fail("Save could not reach the server.")
-      }
-
-      function fail(message: string) {
-        setAttempts((count) => {
-          const next = count + 1
-          setNetwork({
-            status: "error",
-            message,
-            givenUp: next >= MAX_ATTEMPTS,
-          })
-          return next
-        })
+        dispatch({ type: "save-failed", message: "Save could not reach the server." })
       }
     },
     [projectId, fetcher]
   )
 
   /** Try again after the automatic attempts have stopped. */
-  const retry = React.useCallback(() => {
-    setAttempts(0)
-    setNetwork({ status: "clean" })
-  }, [])
+  const retry = React.useCallback(() => dispatch({ type: "retry" }), [])
 
   /**
-   * Autosave on quiet.
-   *
-   * The timer re-arms on every edit, so a drag is one write rather than sixty.
-   * It does not run while a conflict is unresolved: retrying the write that
-   * just lost would either fail identically or, worse, succeed and overwrite
-   * whatever won.
+   * Autosave on quiet. When it may fire, and how long it waits, is
+   * autosaveDelay's call; the timer re-arms on every edit, so a drag is one
+   * write rather than sixty.
    */
+  const delay = autosaveDelay({
+    dirty,
+    awaitingSync: state.awaitingSync,
+    network: state.network,
+    attempts: state.attempts,
+  })
   React.useEffect(() => {
-    if (!dirty) return
-    if (network.status === "conflict" || network.status === "saving") return
-    // Given up means given up. The work is still here, beforeunload guards the
-    // tab, and there is a Retry — but nothing fires on its own again.
-    if (network.status === "error" && network.givenUp) return
-
-    const delay =
-      network.status === "error"
-        ? (RETRY_DELAY[attempts - 1] ?? RETRY_DELAY.at(-1)!)
-        : AUTOSAVE_DELAY
-
+    if (delay === null) return
     const timer = setTimeout(
       () => void flush(state.history.present, state.revision, state.seq),
       delay
     )
-
     return () => clearTimeout(timer)
-  }, [
-    dirty,
-    state.history.present,
-    state.revision,
-    state.seq,
-    network,
-    attempts,
-    flush,
-  ])
+  }, [delay, state.history.present, state.revision, state.seq, flush])
 
   /**
    * Say something before the tab closes on unsaved work.
@@ -344,8 +466,9 @@ export function useDocument(
    * save in flight, then unsaved work — and "clean" only when the document
    * genuinely matches what the server confirmed.
    */
+  const network = state.network
   const save: SaveState =
-    network.status === "conflict" || network.status === "error"
+    network.status === "conflict" || network.status === "error" || network.status === "unsynced"
       ? network
       : network.status === "saving"
         ? network
@@ -360,6 +483,8 @@ export function useDocument(
     apply,
     applyAgentOps,
     syncRevision,
+    awaitSync,
+    syncLost,
     undo,
     redo,
     beginRun,

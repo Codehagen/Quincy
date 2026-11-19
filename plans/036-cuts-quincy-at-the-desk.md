@@ -1072,3 +1072,72 @@ A second review, 2026-11-19:
   a guard is unnecessary is the smell (AGENTS.md › Money).
 - A verification would run the agent on a real recording or the real account:
   ask the owner first.
+
+## Audit fixes (server)
+
+An audit of the server half found ten gaps. All are fixed, with tests, and
+none needed a migration or a new environment variable.
+
+- **Locks.** A lock older than five minutes (`LOCK_STALE_MS`) can be taken
+  over, so a function the platform kills no longer leaves a project read-only
+  for good. `unlockProject` takes the run id and releases only that run's
+  lock. The agent route and three-cuts give the lock back on any throw
+  between the lock and the stream, and a message without `parts` no longer
+  throws.
+- **Gate.** It measures the spine's end, not the scene's. A run keeps one
+  ledger: removed spine time is added up across calls and steps against the
+  spine at run start, and calls in one step are measured on top of each
+  other. Sentences count from the start of the run. The exempt tools still
+  never ask and never count. `remove_silences` refuses padding below 0 and
+  minimums below 250 ms, and `detectSilences` clamps the same values.
+- **Approvals.** `experimental_toolApprovalSecret` comes from an HMAC of
+  `BETTER_AUTH_SECRET` under its own label (`lib/editor/server-keys.ts`). The
+  `data-gate` part carries the clip ids it measured, signed. A yes runs only
+  if the same clips would go.
+- **Metering.** The agent run, each three-cuts sub-run and the self-check
+  add up usage step by step. Stop, a throw or a parse failure no longer
+  records zero.
+- **Cooldowns.** The agent route has a 3 s cooldown per person. Each signed
+  gate question gives its answer one skip. Three-cuts has a 60 s cooldown per
+  person on top of the one per project.
+- **Self-check.** The run's usage row is written as a claim under the lock,
+  before the model call, and filled in afterwards. The agent run unlocks
+  before it sends `data-check`.
+- **Strong line.** The slot is settled before metering, and each write is
+  guarded on its own. A `pending` claim older than 60 s can be taken again.
+- The outer UI stream on the agent route now gets `originalMessages`.
+  Without it, the run that follows a yes ended in a stream error.
+
+## Audit fixes (debt)
+
+A cleanup after the server fixes. Behaviour is unchanged except where a line
+says so.
+
+- **Stop stops spending.** The agent route gives `streamText` the request's
+  abort signal, as three-cuts already did, so Stop ends the model call and not
+  only the stream. The steps that finished are still in the meter and are
+  recorded by `onFinish`. The route test asserts the signal reaches the call.
+- **Attempt rows stay off /credits.** `editor:agent` and `editor:three-cuts`
+  rows only shadow a run that meters itself in a second row
+  (`lib/usage-attempts.ts`). `recentUsage` leaves them out of the list and
+  `summariseUsage` does not count them as turns; cost is unchanged, since they
+  cost nothing. The continuation rows carry the `editor:agent` label, so they
+  follow the same rule. `cuts:ingest` stays: it is the only record of an ingest.
+- **Typed data parts.** `lib/editor/stream-parts.ts` holds one map of the data
+  parts and `CutsMessage`. The route, three-cuts-run, the mock and the margin
+  write and read through it, and the `part.data as …` casts are gone.
+- **`currentScene(document)`** in `lib/editor/document.ts` replaces the ten
+  copies of "the scene on screen, else the first".
+- **The mock says what it is.** `cuts-mock/three-cuts.ts` keeps its own calls
+  per cut (the motion the owner approved) and its header now says so and why,
+  instead of claiming the replay model's calls. Its gate reads `GATED_TOOLS`
+  and the verdict, as the route does.
+- **StudioChat draws, `useCutsStream` runs.** The transport, the data parts,
+  Stop and its read-back, the undo group and the self-check moved to
+  `components/editor/use-cuts-stream.ts`. The rules it keeps (the gate holds
+  the run open, what one receipt counts, the run state) are pure functions in
+  `components/editor/cuts-stream.ts`, tested in node.
+- **Dead code.** `AgentMark` is gone, and the names used only in their own
+  file in `gate.ts`, `three-cuts.ts` and `director.ts` are no longer exported.
+- **AGENTS.md** names the margin by its files and lists the shadcn and AI
+  Elements components it really uses.

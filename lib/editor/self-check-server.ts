@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { and, eq, like } from "drizzle-orm"
-import { generateText, Output } from "ai"
+import { generateText, Output, type LanguageModelUsage } from "ai"
 
 import { db } from "../db"
 import { usageEvent } from "../schema-app"
@@ -95,16 +95,24 @@ export type CheckAnswer = {
   usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number }
 }
 
-/** The one model call. Throws on failure; the caller meters either way. */
+/**
+ * The one model call. Throws on failure; the caller meters either way.
+ *
+ * `onUsage` hears the call's usage as soon as the model has answered, before
+ * the answer is parsed: an answer that fails the schema throws, and the
+ * tokens it took were still spent.
+ */
 export async function lookAtFrames(
   frames: { dataUrl: string; atLabel: string }[],
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  onUsage?: (usage: LanguageModelUsage) => void
 ): Promise<CheckAnswer> {
   const result = await generateText({
     model: CHECK_MODEL,
     output: Output.object({ schema: checkVerdictSchema }),
     maxOutputTokens: 600,
     abortSignal,
+    onStepEnd: (step) => onUsage?.(step.usage),
     messages: [
       {
         role: "user",

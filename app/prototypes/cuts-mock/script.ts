@@ -1,9 +1,9 @@
 import type { createChat } from "@shadcn/helpers/ai-sdk"
-import type { UIMessage } from "ai"
 
 import type { CommitMeta } from "@/lib/editor/agent"
 import { paceOf, type Pace } from "@/lib/editor/pace"
 import { needsCheck } from "@/lib/editor/self-check"
+import type { CutsMessage } from "@/lib/editor/stream-parts"
 
 import type { Commit, Recorded } from "./record"
 import { mockOffer } from "./server"
@@ -20,7 +20,7 @@ import { mockOffer } from "./server"
  * the shape; "none" is the old back-to-back stream.
  */
 
-type Turn = Parameters<ReturnType<typeof createChat<UIMessage>>["assistant"]>[0]
+type Turn = Parameters<ReturnType<typeof createChat<CutsMessage>>["assistant"]>[0]
 /** The helper's writer (not exported by name), read off `assistant`. */
 export type Writer = Parameters<Extract<Turn, (...args: never[]) => unknown>>[0]["writer"]
 

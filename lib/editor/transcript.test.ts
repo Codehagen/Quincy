@@ -269,3 +269,19 @@ describe("transcriptText", () => {
     expect(transcriptText(words)).toBe("Hei, der")
   })
 })
+
+describe("detectSilences, given options the tool should never pass", () => {
+  const words = [word("one", 0.2, 0.6), word("two", 1.6, 2)]
+  const options = { minSilenceUs: s(350 / 1000), paddingUs: s(0.12), trimHead: false, trimTail: false }
+
+  it("never lets a negative padding cut into the words", () => {
+    const [gap] = detectSilences(words, s(3), { ...options, paddingUs: us(-300_000) })
+    expect(gap.startUs).toBeGreaterThanOrEqual(words[0].endUs)
+    expect(gap.endUs).toBeLessThanOrEqual(words[1].startUs)
+  })
+
+  it("never treats a gap under 250 ms as a pause", () => {
+    const tight = [word("one", 0, 0.4), word("two", 0.6, 1)]
+    expect(detectSilences(tight, s(1), { ...options, minSilenceUs: us(10_000), paddingUs: us(0) })).toEqual([])
+  })
+})

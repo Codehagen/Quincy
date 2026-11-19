@@ -14,8 +14,8 @@ import type { Scene } from "./types"
  * as a score.
  */
 
-export const CUT_LETTERS = ["A", "B", "C"] as const
-export type CutLetter = (typeof CUT_LETTERS)[number]
+const CUT_LETTERS = ["A", "B", "C"] as const
+type CutLetter = (typeof CUT_LETTERS)[number]
 
 /**
  * Between two three-cuts requests on one project. A person can press the
@@ -27,6 +27,15 @@ export const THREE_CUTS_COOLDOWN_MS = 60_000
 /** The `usage_event.conversation_id` of the attempt log the cooldown reads. */
 export function threeCutsTag(projectId: string): string {
   return `three-cuts:${projectId}`
+}
+
+/**
+ * The same attempt log, per person rather than per project: the project
+ * cooldown alone lets someone with three projects open buy nine runs in a
+ * row. `spendCooldown` already filters on the user, so the tag needs no id.
+ */
+export function threeCutsUserTag(): string {
+  return "three-cuts"
 }
 
 /** The tag a sub-run's model spend is metered under. */
@@ -56,10 +65,10 @@ export function asksForThreeCuts(text: string): boolean {
  * and the prompt, so 3k input; its output is capped at 600 tokens by
  * `lookAtFrames`.
  */
-export const RUN_STEP_INPUT_TOKENS = 8_000
-export const RUN_STEP_OUTPUT_TOKENS = 500
-export const CHECK_INPUT_TOKENS = 3_000
-export const CHECK_OUTPUT_TOKENS = 600
+const RUN_STEP_INPUT_TOKENS = 8_000
+const RUN_STEP_OUTPUT_TOKENS = 500
+const CHECK_INPUT_TOKENS = 3_000
+const CHECK_OUTPUT_TOKENS = 600
 
 export function threeCutsNeedMicros(options: {
   runModel: string
@@ -97,7 +106,7 @@ export type CutBrief = {
 }
 
 /** What the briefs are written from: the reading of the take. */
-export type TakeFacts = {
+type TakeFacts = {
   durationUs: number
   firstLine: string | null
   strongLine: string | null
@@ -165,7 +174,7 @@ export type CutOutcome = {
   landed: boolean
 }
 
-export type Recommendation = { sceneId: string; letter: CutLetter; reason: string }
+type Recommendation = { sceneId: string; letter: CutLetter; reason: string }
 
 /**
  * Which cut to post first, and why, from what the cuts are now.
@@ -239,7 +248,7 @@ function joinFacts(facts: string[]): string {
 }
 
 /** 0:00.8, the transport's precision. */
-export function tenths(us: number): string {
+function tenths(us: number): string {
   const total = Math.max(0, us)
   const s = Math.floor(total / 1_000_000)
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.${Math.floor((total % 1_000_000) / 100_000)}`

@@ -1,10 +1,12 @@
 import { createChat } from "@shadcn/helpers/ai-sdk"
-import type { ChatTransport, UIMessage } from "ai"
+import type { ChatTransport } from "ai"
 
 import { dryRun } from "@/lib/editor/agent"
+import { currentScene } from "@/lib/editor/document"
 import { isFiller } from "@/lib/editor/fillers"
-import { gateVerdict } from "@/lib/editor/gate"
+import { GATED_TOOLS, gateVerdict, type GateVerdict } from "@/lib/editor/gate"
 import { paceOf, seedOf, type ModelPace, type Pace } from "@/lib/editor/pace"
+import type { CutsMessage } from "@/lib/editor/stream-parts"
 import { findMainTrack } from "@/lib/editor/timeline"
 import type { Word } from "@/lib/editor/transcript"
 import type { VideoDocument } from "@/lib/editor/types"
@@ -62,7 +64,7 @@ export type Prepared = {
 const STOP_GAP_MS = 420
 const STOP_PROMPT = "Tighten every pause and add captions"
 
-type Chat = ReturnType<typeof createChat<UIMessage>>
+type Chat = ReturnType<typeof createChat<CutsMessage>>
 const options = { delayMs: 18 }
 
 /** Where the strong line is said, in the take's own seconds. */
@@ -83,7 +85,8 @@ function lineSeconds(words: Word[], line: string): { from: number; to: number } 
  * and the cut's seconds differ, and punch_in reads the cut's.
  */
 function onTimeline(document: VideoDocument, at: { from: number; to: number }) {
-  const scene = document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0]
+  const scene = currentScene(document)
+  if (!scene) return null
   const clips = findMainTrack(scene)?.elements ?? []
   const fromUs = at.from * 1e6
   for (let index = 0; index < clips.length; index++) {
@@ -221,24 +224,36 @@ async function answer(
   }
 }
 
-/** The gate: a cut that removes most of the take, asked first. */
+/**
+ * The gate: a cut that removes most of the take, asked first.
+ *
+ * Decided the way the agent route decides it (gate.ts): only a tool in
+ * `GATED_TOOLS` is measured, and only a verdict that asks makes the call
+ * wait. The cut is a delete because that is what `clipsToFit` names, not
+ * because the mock knows which tools ask; if the gate stops covering it,
+ * the mock stops asking with it.
+ */
 async function underLength(chat: Chat, document: VideoDocument, words: Word[], seconds: number, pace: Pace): Promise<Chat> {
-  const scene = document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0]
+  const scene = currentScene(document)!
+  const toolName = "delete_clip"
   const input = { clipNumbers: clipsToFit(document, seconds) }
   if (input.clipNumbers.length === 0) return chat.assistant(`It is already under ${seconds} s.`)
-  const toolCallId = nextId("delete_clip")
-  const verdict = gateVerdict({ toolName: "delete_clip", before: scene, steps: dryRun("delete_clip", input, scene) ?? [], words })
-  const [call] = await recorder(document, words).call([{ toolName: "delete_clip", input, toolCallId }])
+  const toolCallId = nextId(toolName)
+  const verdict: GateVerdict = GATED_TOOLS.has(toolName)
+    ? gateVerdict({ toolName, before: scene, steps: dryRun(toolName, input, scene) ?? [], words })
+    : { ask: false }
+  const [call] = await recorder(document, words).call([{ toolName, input, toolCallId }])
 
   return chat
     .assistant(({ writer }) => {
       if (!verdict.ask) return writeRun(writer, [call], "Cut to fit.", undefined, pace)
       writer.sleep(pace.thinkMs)
-      writer.tool("delete_clip", { toolCallId, input, needsApproval: true, output: call.output })
+      writer.tool(toolName, { toolCallId, input, needsApproval: verdict.ask, output: call.output })
+      // Unsigned: the mock has no server secret (stream-parts.ts, GateData).
       writer.data({
         type: "data-gate",
         id: toolCallId,
-        data: { toolCallId, reason: verdict.reason, sentences: verdict.sentences, percent: verdict.percent },
+        data: { toolCallId, reason: verdict.reason, sentences: verdict.sentences, percent: verdict.percent, clipIds: verdict.clipIds },
       })
     })
     .assistant(({ writer, toolCall }) => {
@@ -252,13 +267,13 @@ async function underLength(chat: Chat, document: VideoDocument, words: Word[], s
       for (const commit of call.commits)
         writer
           .sleep(pace.partMs)
-          .data({ type: "data-ops", data: { ops: commit.ops, toolCallId, toolName: "delete_clip" }, transient: true })
+          .data({ type: "data-ops", data: { ops: commit.ops, toolCallId, toolName }, transient: true })
       writeLine(writer, `Cut to under ${seconds} s: the end of the take is out.`, pace)
       writeEnd(writer, [call])
     })
 }
 
-const textOf = (message: UIMessage) =>
+const textOf = (message: CutsMessage) =>
   message.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ").trim()
 
 /**
@@ -273,8 +288,8 @@ export function liveTransport(
   words: Word[],
   strongLine: string | null,
   pace: () => ModelPace = () => "none"
-): ChatTransport<UIMessage> {
-  let asking: ChatTransport<UIMessage> | null = null
+): ChatTransport<CutsMessage> {
+  let asking: ChatTransport<CutsMessage> | null = null
 
   return {
     async sendMessages(request) {
@@ -284,7 +299,7 @@ export function liveTransport(
       const prior = request.messages.slice(0, -1)
       const text = last ? textOf(last) : ""
       const chat = await answer(
-        createChat<UIMessage>({ messages: prior, messageIdPrefix: `mock-msg-${++calls}`, toolCallIdPrefix: "mock-call" }).user(text, {
+        createChat<CutsMessage>({ messages: prior, messageIdPrefix: `mock-msg-${++calls}`, toolCallIdPrefix: "mock-call" }).user(text, {
           id: last?.id,
         }),
         intentOf(text),

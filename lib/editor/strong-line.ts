@@ -20,7 +20,17 @@ import { wordsFromDeepgram } from "./transcript"
  * exists), so two tabs opening the same cut cannot both pay. The usage row
  * is written whether or not the call answered, and a failed call is never
  * retried: the slot stays `failed`.
+ *
+ * A claim whose request died before it settled (the function was killed, or
+ * the write that settles it failed) would otherwise stay `pending` for good,
+ * and the asset would never get its line. So a `pending` older than
+ * `PENDING_STALE_MS` counts as no claim, and the next request may take it:
+ * at most one more call, and only after a minute in which the first could
+ * not have finished.
  */
+
+/** Far past the one call's time to answer, so a live claim is never retaken. */
+export const PENDING_STALE_MS = 60_000
 
 /** Cheap, priced in lib/pricing.ts. */
 export const STRONG_LINE_MODEL = "openai/gpt-5.6-luna"
@@ -47,18 +57,26 @@ export function candidateSentences(transcript: unknown): string[] {
  * Take the asset's one call. True only for the caller that wrote the claim;
  * everyone else reads what is (or will be) in the slot.
  */
-export async function claimStrongLine(assetId: string, userId: string): Promise<boolean> {
+export async function claimStrongLine(
+  assetId: string,
+  userId: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  const staleBefore = new Date(now.getTime() - PENDING_STALE_MS).toISOString()
+  const slot = sql`${videoAsset.transcript} -> ${STRONG_LINE_KEY}`
   const claimed = await db
     .update(videoAsset)
     .set({
-      transcript: sql`${videoAsset.transcript} || jsonb_build_object(${STRONG_LINE_KEY}::text, jsonb_build_object('state', 'pending'))`,
+      transcript: sql`${videoAsset.transcript} || jsonb_build_object(${STRONG_LINE_KEY}::text, jsonb_build_object('state', 'pending', 'at', ${now.toISOString()}::text))`,
     })
     .where(
       and(
         eq(videoAsset.id, assetId),
         eq(videoAsset.userId, userId),
         isNotNull(videoAsset.transcript),
-        sql`not (${videoAsset.transcript} ? ${STRONG_LINE_KEY})`
+        // No slot yet, or a pending one left behind by a request that died.
+        // A pending claim with no `at` predates the stamp and is long dead.
+        sql`(not (${videoAsset.transcript} ? ${STRONG_LINE_KEY}) or (${slot} ->> 'state' = 'pending' and coalesce((${slot} ->> 'at')::timestamptz, 'epoch'::timestamptz) < ${staleBefore}::timestamptz))`
       )
     )
     .returning({ id: videoAsset.id })
@@ -85,7 +103,9 @@ export async function fillStrongLine(asset: {
   transcript: unknown
 }): Promise<string | null> {
   const cached = strongLineSlot(asset.transcript)
-  if (cached) return cached.state === "done" ? cached.line : null
+  if (cached && !(cached.state === "pending" && isStalePending(cached.at))) {
+    return cached.state === "done" ? cached.line : null
+  }
 
   const sentences = candidateSentences(asset.transcript)
   if (sentences.length < MIN_SENTENCES) return null
@@ -115,15 +135,26 @@ export async function fillStrongLine(asset: {
   } catch (cause) {
     console.error(`[strong line] ${asset.id} failed:`, cause)
   } finally {
+    // Settled first and each on its own: a metering write that throws must
+    // not leave the claim pending, and a settle that throws must not leave
+    // the call unmetered.
+    await settle(asset.id, asset.userId, slot).catch((cause) =>
+      console.error(`[strong line] could not settle ${asset.id}:`, cause)
+    )
     // Metered whether or not it answered; the slot keeps it from asking again.
     await recordUsage({
       userId: asset.userId,
       conversationId: `strong-line:${asset.id}`,
       model: STRONG_LINE_MODEL,
       ...usage,
-    })
-    await settle(asset.id, asset.userId, slot)
+    }).catch((cause) => console.error(`[strong line] could not meter ${asset.id}:`, cause))
   }
 
   return slot.state === "done" ? slot.line : null
+}
+
+/** Whether a pending claim stamped `at` is old enough to be taken again. */
+export function isStalePending(at: string | undefined, now = Date.now()): boolean {
+  const time = at ? Date.parse(at) : Number.NaN
+  return !Number.isFinite(time) || now - time >= PENDING_STALE_MS
 }

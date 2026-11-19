@@ -415,6 +415,16 @@ export function StudioLanes({
   /** Set by a drag, read and cleared by the click that follows it. */
   const swallowClick = React.useRef(false)
 
+  /**
+   * The window listeners of the scrub or marquee in flight, to take off.
+   *
+   * The lanes can unmount mid-gesture — a three-cuts run swaps them for the
+   * cut spines — and listeners left on the window would keep seeking and
+   * setting state on a component that is gone, until the next pointerup.
+   */
+  const detachGesture = React.useRef<(() => void) | null>(null)
+  React.useEffect(() => () => detachGesture.current?.(), [])
+
   /** Where to scroll once the new zoom has been laid out. */
   const pendingScrollUs = React.useRef<number | null>(null)
 
@@ -459,7 +469,10 @@ export function StudioLanes({
         window.removeEventListener("pointermove", onScrubMove)
         window.removeEventListener("pointerup", endScrub)
         window.removeEventListener("pointercancel", endScrub)
+        if (detachGesture.current === endScrub) detachGesture.current = null
       }
+      detachGesture.current?.()
+      detachGesture.current = endScrub
       window.addEventListener("pointermove", onScrubMove)
       window.addEventListener("pointerup", endScrub)
       window.addEventListener("pointercancel", endScrub)
@@ -496,6 +509,7 @@ export function StudioLanes({
       window.removeEventListener("pointermove", onPointerMove)
       window.removeEventListener("pointerup", onPointerUp)
       window.removeEventListener("pointercancel", onPointerCancel)
+      if (detachGesture.current === detach) detachGesture.current = null
       setBand(null)
     }
 
@@ -525,6 +539,8 @@ export function StudioLanes({
       detach()
     }
 
+    detachGesture.current?.()
+    detachGesture.current = detach
     window.addEventListener("pointermove", onPointerMove)
     window.addEventListener("pointerup", onPointerUp)
     window.addEventListener("pointercancel", onPointerCancel)
@@ -1018,6 +1034,10 @@ function EffectChipView({
     durationUs: number
   } | null>(null)
 
+  /** The drag in flight's window listeners, taken off if the chip unmounts mid-drag. */
+  const detachDrag = React.useRef<(() => void) | null>(null)
+  React.useEffect(() => () => detachDrag.current?.(), [])
+
   /**
    * A look has no window, so there is nothing to move and nothing to resize.
    *
@@ -1065,6 +1085,7 @@ function EffectChipView({
       window.removeEventListener("pointermove", onPointerMove)
       window.removeEventListener("pointerup", onPointerUp)
       window.removeEventListener("pointercancel", onPointerCancel)
+      if (detachDrag.current === stop) detachDrag.current = null
       setPreview(null)
     }
 
@@ -1088,6 +1109,8 @@ function EffectChipView({
      */
     const onPointerCancel = () => stop()
 
+    detachDrag.current?.()
+    detachDrag.current = stop
     window.addEventListener("pointermove", onPointerMove)
     window.addEventListener("pointerup", onPointerUp)
     window.addEventListener("pointercancel", onPointerCancel)

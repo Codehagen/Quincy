@@ -1,9 +1,11 @@
-import type { ChatTransport, UIMessage, UIMessageChunk } from "ai"
+import type { ChatTransport, InferUIMessageChunk } from "ai"
 
 import { createRun } from "@/lib/editor/agent"
+import { currentScene } from "@/lib/editor/document"
 import { applyOps, type EditOp } from "@/lib/editor/ops"
 import { replayCheck } from "@/lib/editor/replay-model"
 import { fixSteps } from "@/lib/editor/self-check"
+import type { CutsMessage } from "@/lib/editor/stream-parts"
 import type { Word } from "@/lib/editor/transcript"
 import { UNLOCKED, type VideoDocument } from "@/lib/editor/types"
 
@@ -39,8 +41,10 @@ function save(server: MockServer): number {
   return server.revision
 }
 
+type Chunk = InferUIMessageChunk<CutsMessage>
+
 /** The scripted transport, behind the server: ops land here as they stream. */
-export function serverTransport(server: MockServer, inner: ChatTransport<UIMessage>): ChatTransport<UIMessage> {
+export function serverTransport(server: MockServer, inner: ChatTransport<CutsMessage>): ChatTransport<CutsMessage> {
   return {
     async sendMessages(options) {
       // Stop: the route saves what already streamed (agent route, onEnd).
@@ -49,12 +53,11 @@ export function serverTransport(server: MockServer, inner: ChatTransport<UIMessa
       })
       const stream = await inner.sendMessages(options)
       return stream.pipeThrough(
-        new TransformStream<UIMessageChunk, UIMessageChunk>({
+        new TransformStream<Chunk, Chunk>({
           transform(chunk, controller) {
-            if (chunk.type === "data-ops") land(server, (chunk.data as { ops: EditOp[] }).ops)
+            if (chunk.type === "data-ops") land(server, chunk.data.ops)
             if (chunk.type === "data-saved") {
-              const data = chunk.data as { revision: number; sceneId?: string }
-              chunk = { ...chunk, data: { ...data, revision: save(server) } }
+              chunk = { ...chunk, data: { ...chunk.data, revision: save(server) } }
             }
             controller.enqueue(chunk)
           },
@@ -106,7 +109,7 @@ export function mockFetch(server: MockServer, words: Word[], strongLine: string 
       const document = server.document
       const scene = sceneId
         ? document.scenes.find((s) => s.id === sceneId)
-        : (document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0])
+        : currentScene(document)
       if (!scene) return json({ error: "The project has no cut." }, 404)
 
       // The route's own path with the scripted look (check/route.ts, replay).

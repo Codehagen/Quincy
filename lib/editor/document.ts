@@ -156,6 +156,18 @@ export function createScene(options: {
   }
 }
 
+/**
+ * The scene on screen, else the first. A document whose `currentSceneId`
+ * names a scene that has gone (undone, deleted) still has a cut to show and
+ * to edit, and every reader falls back the same way. Undefined only for a
+ * document with no scenes at all.
+ */
+export function currentScene(
+  document: Pick<VideoDocument, "scenes" | "currentSceneId">
+): Scene | undefined {
+  return document.scenes.find((scene) => scene.id === document.currentSceneId) ?? document.scenes[0]
+}
+
 export function createDocument(options: {
   name: string
   fps?: number

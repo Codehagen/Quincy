@@ -18,9 +18,10 @@
  *
  * **Cancellation is a generation.** Stop, a new run and unmount bump it, and
  * every pending wait rejects, so nothing stacks. Stop lands every beat that
- * has already arrived at once, without the cursor: those ops are already in
- * the server's working copy and will be saved with the run, so the screen must
- * show them. A step whose ops never arrived is the margin's "skipped".
+ * has already arrived at once, without the cursor: the one mid-gesture first,
+ * then the queue, in order. Those ops are already in the server's working
+ * copy and will be saved with the run, so the screen must show them. A step
+ * whose ops never arrived is the margin's "skipped".
  *
  * **Reduced motion:** no cursor and no drag; beats land in order 60 ms apart,
  * each with an opacity-only highlight on its target.
@@ -30,6 +31,7 @@ import * as React from "react"
 
 import { useReducedMotion } from "@/components/kit"
 import { targetKey, type EditOp, type OpTarget } from "@/lib/editor/ops"
+import type { OpsData } from "@/lib/editor/stream-parts"
 
 import {
   beatTarget,
@@ -64,7 +66,7 @@ export const ECHO_COUNT = 8
 
 export function beatFromPart(
   id: string,
-  data: { ops: EditOp[]; toolCallId?: string; toolName?: string; sceneId?: string }
+  data: OpsData
 ): Beat {
   return {
     id,
@@ -81,7 +83,7 @@ export function beatFromPart(
  * three cuts have three, one per scene. Lanes differ only in these numbers,
  * so the engine has no idea how many there are.
  */
-export type LaneConfig = {
+type LaneConfig = {
   /** The scene id, or MAIN_LANE. */
   key: string
   /** The name tag: "Quincy", "Quincy · A", "B". */
@@ -94,7 +96,7 @@ export type LaneConfig = {
   paceFactor: number
 }
 
-export const MAIN_LANE = "main"
+const MAIN_LANE = "main"
 
 /**
  * Three cursors out of step (plans/036, phase D; lab piece 53): starts 0, 90
@@ -119,7 +121,7 @@ export function cutLane(index: number, letter: string): LaneConfig {
  * the cursor's position) is plain mutable state outside React's render, which
  * is where per-frame and per-press bookkeeping belongs.
  */
-class CursorEngine {
+export class CursorEngine {
   root: () => HTMLElement | null = () => null
   /** Where this cursor's targets are looked up: its scene's lanes, or the whole desk. */
   scope: () => HTMLElement | null = () => null
@@ -160,6 +162,19 @@ class CursorEngine {
   private presses = 0
   private timing: Timing = TIMING
   private timers = new Set<number>()
+  /**
+   * The beat mid-gesture. It has left the queue but not landed yet, so Stop
+   * would otherwise drop it: its wait rejects and the press never comes.
+   */
+  private current: Beat | null = null
+  /**
+   * Every beat this engine has landed, by id. Stop lands the one in flight,
+   * and a beat can be in flight and landed at once (the gap after its
+   * press), so landing has to be safe to ask for twice.
+   */
+  private landed = new Set<string>()
+  /** Controls showing a pressed state whose release is still a timer away. */
+  private pressed = new Set<HTMLElement>()
 
   /* ------------------------------------------------------- the nodes */
 
@@ -368,6 +383,8 @@ class CursorEngine {
   /* ---------------------------------------------------- one gesture */
 
   private land(beat: Beat) {
+    if (this.landed.has(beat.id)) return
+    this.landed.add(beat.id)
     this.onLand(beat)
     this.setBeats((prev) => prev.map((b) => (b.id === beat.id ? { ...b, landed: true } : b)))
   }
@@ -443,7 +460,11 @@ class CursorEngine {
       // A real control takes its own pressed state, as it would for a pointer.
       const node = pressed
       node.setAttribute("data-agent-pressed", "")
-      this.later(120, () => node.removeAttribute("data-agent-pressed"))
+      this.pressed.add(node)
+      this.later(120, () => {
+        node.removeAttribute("data-agent-pressed")
+        this.pressed.delete(node)
+      })
     }
     if (mark) {
       mark.removeAttribute("data-hover")
@@ -468,7 +489,9 @@ class CursorEngine {
       if (this.presses === 0 && this.delayMs > 0 && !this.reduced) await this.wait(this.delayMs, g)
       while (this.queue.length > 0) {
         const beat = this.queue.shift()!
+        this.current = beat
         await this.perform(beat, g)
+        this.current = null
         this.presses++
         const gap = this.reduced
           ? this.timing.reducedGapMs
@@ -488,6 +511,10 @@ class CursorEngine {
     this.looping = false
     for (const id of this.timers) window.clearTimeout(id)
     this.timers.clear()
+    // The timers just cleared include each press's release; without this a
+    // control stopped mid-press would keep its pressed look for good.
+    for (const node of this.pressed) node.removeAttribute("data-agent-pressed")
+    this.pressed.clear()
   }
 
   /* ------------------------------------------------------------ API */
@@ -514,7 +541,8 @@ class CursorEngine {
   stop() {
     this.cancel()
     this.streaming = false
-    const arrived = this.queue
+    const arrived = this.current ? [this.current, ...this.queue] : this.queue
+    this.current = null
     this.queue = []
     for (const beat of arrived) this.land(beat)
     this.park()

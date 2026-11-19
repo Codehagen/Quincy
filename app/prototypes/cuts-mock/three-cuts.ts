@@ -1,3 +1,4 @@
+import { currentScene } from "@/lib/editor/document"
 import { paceOf, type Pace } from "@/lib/editor/pace"
 import { readTake } from "@/lib/editor/reading"
 import { needsCheck } from "@/lib/editor/self-check"
@@ -13,11 +14,18 @@ import { opsPart, PART_GAP_MS, type Writer } from "./script"
 /*
  * Three cuts, recorded the way lib/editor/three-cuts-run.ts runs them: the
  * three scenes added first (A put on screen), then each cut's tools on its
- * own scope of one shared snapshot. The calls per cut are the ones the
- * replay model picks for each brief's words (lib/editor/replay-model.ts).
- * The sub-runs run in parallel on the server, so their parts interleave on
- * the stream; here they are dealt round-robin, which is the same thing for
- * the cursors, since each cut's ops name only its own scene.
+ * own scope of one shared snapshot. The sub-runs run in parallel on the
+ * server, so their parts interleave on the stream; here they are dealt on
+ * their own times (DEAL_MS), which is the same thing for the cursors, since
+ * each cut's ops name only its own scene.
+ *
+ * The calls per cut are this file's own script (`callsFor`), not the ones
+ * the replay model would pick from each brief's words
+ * (lib/editor/replay-model.ts), and that is on purpose. The replay model
+ * reads keywords, so the three briefs would get much the same calls and the
+ * three cursors would press in the same places at once. The mock exists to
+ * tune that motion, and the owner approved it with each cut working in its
+ * own place. So the two differ, and a change to one does not move the other.
  */
 
 const SAY = "Done. The pauses and anything you asked to go are out, and the rest plays as it did."
@@ -68,7 +76,7 @@ export async function recordThreeCuts(
   words: Word[],
   strongLine: string | null
 ): Promise<ThreeCutsRecording> {
-  const base = document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0]
+  const base = currentScene(document)!
   const r = recorder(document, words, "mock-three")
   const briefs = briefsFor({
     durationUs: sceneDurationUs(base),
@@ -171,7 +179,8 @@ export async function recordThreeCuts(
 
 /** Clip numbers from the end, never the first, until the cut fits (replay-model.ts's rule). */
 export function clipsToFit(document: VideoDocument, seconds: number): number[] {
-  const scene = document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0]
+  const scene = currentScene(document)
+  if (!scene) return []
   const clips = findMainTrack(scene)?.elements ?? []
   let remaining: number = sceneDurationUs(scene)
   const numbers: number[] = []

@@ -44,7 +44,8 @@ export type TakeReading = {
 export const STRONG_LINE_KEY = "quincy_strong_line"
 
 export type StrongLineSlot =
-  | { state: "pending" }
+  /** `at` is when the claim was taken (ISO); absent on claims written before it was. */
+  | { state: "pending"; at?: string }
   | { state: "done"; line: string }
   | { state: "failed" }
 
@@ -56,7 +57,11 @@ export function strongLineSlot(transcript: unknown): StrongLineSlot | undefined 
   const state = (slot as { state?: unknown }).state
   const line = (slot as { line?: unknown }).line
   if (state === "done" && typeof line === "string" && line) return { state, line }
-  if (state === "pending" || state === "failed") return { state }
+  if (state === "pending") {
+    const at = (slot as { at?: unknown }).at
+    return typeof at === "string" ? { state, at } : { state }
+  }
+  if (state === "failed") return { state }
   return undefined
 }
 

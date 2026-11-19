@@ -1,7 +1,7 @@
 import { tool, type Tool } from "ai"
 import { z } from "zod"
 
-import { LANDSCAPE_CANVAS, SQUARE_CANVAS, VERTICAL_CANVAS } from "./document"
+import { currentScene, LANDSCAPE_CANVAS, SQUARE_CANVAS, VERTICAL_CANVAS } from "./document"
 import { effectSpec } from "./effect-catalogue"
 import {
   applyEffect,
@@ -107,13 +107,7 @@ const CANVASES = {
 
 export function editorTools(context: AgentContext): Record<string, Tool> {
   /** The scene under the cursor, which is what every tool operates on. */
-  const currentScene = (): Scene | undefined => {
-    const { document } = context.snapshot()
-    return (
-      document.scenes.find((scene) => scene.id === document.currentSceneId) ??
-      document.scenes[0]
-    )
-  }
+  const onScreen = (): Scene | undefined => currentScene(context.snapshot().document)
 
   /**
    * Run a tool body against the current scene and report the result.
@@ -128,7 +122,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
     describe: (scene: Scene, before: Scene) => string,
     nothing: string
   ): string => {
-    const scene = currentScene()
+    const scene = onScreen()
     if (!scene) return "This project has no scene to edit."
 
     // A builder that plans in steps hands back one batch per press; each is
@@ -139,7 +133,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     for (const ops of steps) context.commit(ops, meta)
 
-    const after = currentScene()
+    const after = onScreen()
     return after ? describe(after, scene) : "Done."
   }
 
@@ -158,7 +152,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       return "This recording has not been transcribed, so there are no words to work from."
     }
 
-    const scene = currentScene()
+    const scene = onScreen()
     const mediaId = spineMedia(scene)
     if (!scene || !mediaId) return "This project has no footage on its spine."
 
@@ -177,12 +171,14 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       inputSchema: z.object({
         minSilenceMs: z
           .number()
+          .min(250)
           .optional()
           .describe(
             "Pauses shorter than this stay. Default 350. Below 250 the tightening becomes audible as clipping."
           ),
         paddingMs: z
           .number()
+          .min(0)
           .optional()
           .describe(
             "Silence left at each end of a cut. Default 120. Zero produces jump-cut voice."
@@ -650,7 +646,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
         "Read the cut as it stands: length, frame, clips and captions. Use before an edit that depends on where things are, and after one you want to check.",
       inputSchema: z.object({}),
       execute: async () => {
-        const scene = currentScene()
+        const scene = onScreen()
         return scene ? describeScene(scene) : "This project has no scene."
       },
     }),

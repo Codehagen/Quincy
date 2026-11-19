@@ -39,6 +39,14 @@ export function amend<T>(history: History<T>, next: T): History<T> {
   return { ...history, present: next, future: [] }
 }
 
+/**
+ * A change that is no entry at all (picking which scene is open): the present
+ * moves and both stacks stay. Nothing forked, so the redo stack survives too.
+ */
+export function replacePresent<T>(history: History<T>, next: T): History<T> {
+  return { ...history, present: next }
+}
+
 export function undo<T>(history: History<T>): History<T> {
   const top = history.past.at(-1)
   if (!top) return history

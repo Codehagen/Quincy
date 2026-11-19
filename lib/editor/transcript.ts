@@ -78,6 +78,9 @@ export type SilenceOptions = {
   trimTail: boolean
 }
 
+/** The shortest pause a tighten may cut; below it the cut is audible clipping. */
+export const MIN_SILENCE_US = us(250_000)
+
 export const DEFAULT_SILENCE: SilenceOptions = {
   // 350ms is roughly where a pause stops reading as emphasis and starts
   // reading as dead air. Below 250ms tightening becomes audible as clipping.
@@ -101,7 +104,14 @@ export function detectSilences(
 ): UsRange[] {
   if (words.length === 0) return []
 
-  const { minSilenceUs, paddingUs, trimHead, trimTail } = options
+  const { trimHead, trimTail } = options
+  // Clamped here as well as in the agent's tool schema, because this is the
+  // function every caller reaches. A negative padding moves each cut past the
+  // pause and into the words on either side, and a tiny minimum treats the
+  // gap between two words as a pause: either one turns "remove the silences",
+  // which the gate lets through unasked, into a tool that removes speech.
+  const minSilenceUs = Math.max(MIN_SILENCE_US, options.minSilenceUs)
+  const paddingUs = Math.max(0, options.paddingUs)
   const ranges: UsRange[] = []
 
   if (trimHead && words[0].startUs > minSilenceUs) {

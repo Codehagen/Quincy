@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   settled: 0,
   rows: [] as { conversationId: string; model: string; inputTokens: number }[],
   generate: vi.fn(),
+  order: [] as string[],
+  recordFails: false,
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -30,6 +32,7 @@ vi.mock("@/lib/db", () => ({
           // The settle, awaited without `returning`.
           then: (resolve: (v: unknown) => void) => {
             mocks.settled++
+            mocks.order.push("settle")
             resolve(undefined)
           },
         }),
@@ -39,6 +42,8 @@ vi.mock("@/lib/db", () => ({
 }))
 vi.mock("@/lib/usage", () => ({
   recordUsage: async (row: { conversationId: string; model: string; inputTokens: number }) => {
+    mocks.order.push("record")
+    if (mocks.recordFails) throw new Error("db down")
     mocks.rows.push(row)
   },
 }))
@@ -47,7 +52,7 @@ vi.mock("ai", async (importOriginal) => ({
   generateText: mocks.generate,
 }))
 
-const { fillStrongLine, STRONG_LINE_MODEL, candidateSentences, MAX_SENTENCES } = await import(
+const { fillStrongLine, STRONG_LINE_MODEL, candidateSentences, isStalePending, MAX_SENTENCES } = await import(
   "./strong-line"
 )
 
@@ -70,6 +75,8 @@ beforeEach(() => {
   mocks.claimed = false
   mocks.settled = 0
   mocks.rows.length = 0
+  mocks.order.length = 0
+  mocks.recordFails = false
   mocks.generate.mockReset()
   mocks.generate.mockResolvedValue({
     output: { index: 2 },
@@ -108,6 +115,27 @@ describe("fillStrongLine", () => {
     const failed = { ...TAKE, [STRONG_LINE_KEY]: { state: "failed" } }
     expect(await fillStrongLine({ id: "va-1", userId: "u-1", transcript: failed })).toBeNull()
     expect(mocks.generate).toHaveBeenCalledTimes(1)
+  })
+
+  it("settles the claim before metering, so a failed meter cannot leave it pending", async () => {
+    mocks.recordFails = true
+    expect(await fillStrongLine({ id: "va-1", userId: "u-1", transcript: TAKE })).toBe("Then one person wrote back.")
+    expect(mocks.order).toEqual(["settle", "record"])
+  })
+
+  it("takes a pending claim again once it is a minute old, and not before", async () => {
+    const fresh = { ...TAKE, [STRONG_LINE_KEY]: { state: "pending", at: new Date().toISOString() } }
+    expect(await fillStrongLine({ id: "va-1", userId: "u-1", transcript: fresh })).toBeNull()
+    expect(mocks.generate).not.toHaveBeenCalled()
+
+    const dead = { ...TAKE, [STRONG_LINE_KEY]: { state: "pending", at: new Date(Date.now() - 61_000).toISOString() } }
+    expect(await fillStrongLine({ id: "va-1", userId: "u-1", transcript: dead })).toBe("Then one person wrote back.")
+    expect(mocks.generate).toHaveBeenCalledTimes(1)
+  })
+
+  it("treats a pending claim with no stamp as dead", () => {
+    expect(isStalePending(undefined)).toBe(true)
+    expect(isStalePending(new Date().toISOString())).toBe(false)
   })
 
   it("makes no call for a one-sentence take", async () => {

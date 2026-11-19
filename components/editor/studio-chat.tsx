@@ -1,14 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useChat } from "@ai-sdk/react"
-import {
-  DefaultChatTransport,
-  isToolUIPart,
-  type ChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-  type UIMessage,
-} from "ai"
+import { isToolUIPart } from "ai"
 
 import {
   AspectRatioIcon,
@@ -42,7 +35,6 @@ import {
 } from "@/components/ui/message-scroller"
 import { Trace, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace"
 import { readableChatError } from "@/lib/chat-error"
-import type { EditOp } from "@/lib/editor/ops"
 import {
   noticed,
   startersFor,
@@ -51,18 +43,19 @@ import {
   type TakeReading,
 } from "@/lib/editor/reading"
 
-import { asksForThreeCuts } from "@/lib/editor/three-cuts"
+import type { CutsMessage } from "@/lib/editor/stream-parts"
 
-import { beatFromPart, cutLane, type BeatState, type Director } from "./agent-cursor/director"
-import { cutBeats, cutsOf, CutsTurn, recommendationOf, type CutsData, type RecommendData } from "./cuts-turn"
+import type { BeatState, Director } from "./agent-cursor/director"
+import { cutsOf, recommendationOf, type RunRecord } from "./cuts-stream"
+import { CutsTurn } from "./cuts-turn"
 import { removedUs } from "./agent-cursor/timing"
 import { sentenceFor, stepDetail, stepTitle } from "./run-steps"
 import { CheckFrames, type CheckState } from "./self-check/check-frames"
-import type { Arrival, ArrivalMode } from "./arrival/use-arrival"
-import { checkCallId, useSelfCheck, type LookSource } from "./self-check/use-self-check"
+import type { Arrival } from "./arrival/use-arrival"
+import type { LookSource } from "./self-check/use-self-check"
 import { formatClockTenths } from "./studio-parts"
-import { entryState, type HistoryIds } from "./history"
-import { networkFetch } from "./use-document"
+import { entryState } from "./history"
+import { useCutsStream, type CutsDesk, type RunControls, type StudioHarness } from "./use-cuts-stream"
 import "./cuts-shadcn.css"
 
 /**
@@ -89,6 +82,10 @@ import "./cuts-shadcn.css"
  * spoken sentences waits (lib/editor/gate.ts, decided on the server). The
  * question says why, in words, and is answered with the SDK's approval
  * response; the approved call then runs like any other.
+ *
+ * **Drawing only.** The stream and the run state behind it (transport, data
+ * parts, Stop and its read-back, the undo group, the self-check) live in
+ * use-cuts-stream.ts; this file renders what it returns.
  */
 
 /**
@@ -117,62 +114,7 @@ const THREE_CUTS: Starter = {
 /** Tools whose calls are reads, not edits: no step in the run. */
 const READS = new Set(["describe_timeline"])
 
-/** The re-read after Stop: about ten seconds, then the conflict path takes over. */
-const READ_BACK_TRIES = 10
-const READ_BACK_DELAY_MS = 1000
-
-type OpsData = { ops: EditOp[]; toolCallId?: string; toolName?: string; sceneId?: string }
-type GateData = { toolCallId: string; reason: string; sentences: number; percent: number }
-
-/** A finished run: what the checkpoint and the receipt read. */
-type RunRecord = {
-  startUs: number
-  endUs: number
-  /** The undo entry the run committed (history.ts); null if it pushed none. */
-  entry: number | null
-  revision: number | null
-  edits: number
-}
-
-export type RunControls = {
-  /** Start and end one undo group (use-document). */
-  beginRun: () => void
-  endRun: () => void
-  undo: () => void
-  redo: () => void
-  /** The entry ids on the undo and redo stacks. */
-  historyIds: HistoryIds
-  /** The entry the last run committed. */
-  runEntry: number | null
-  /** The cut's length now. */
-  durationUs: number
-}
-
-/** What a three-cuts run needs from the desk around the margin. */
-export type CutsDesk = {
-  /** A three-cuts run named its cuts: show their spines. */
-  onCuts: (cuts: CutsData) => void
-  onRecommend: (pick: RecommendData) => void
-  /** Take one cut back out: its own undo. */
-  undoCut: (sceneId: string) => void
-  hasScene: (sceneId: string) => boolean
-  durationOf: (sceneId: string) => number
-  aspectOf: (sceneId: string) => number
-}
-
-/**
- * The network the editor talks to, swapped whole: the cutting run's transport
- * and every other request (save, read-back, self-check, transcript, strong
- * line). Only the prototype mock (app/prototypes/cuts-mock) passes one, so
- * the motion can be tuned on the real editor with no server; without it the
- * editor talks to its routes as always.
- */
-export type StudioHarness = {
-  transport: ChatTransport<UIMessage>
-  fetch: typeof fetch
-  /** Whether the arrival plays: the mock plays it on every mount (use-arrival.ts). */
-  arrival?: ArrivalMode
-}
+export type { CutsDesk, RunControls, StudioHarness } from "./use-cuts-stream"
 
 export function StudioChat({
   projectId,
@@ -210,221 +152,25 @@ export function StudioChat({
 }) {
   const noticedId = React.useId()
   const [input, setInput] = React.useState("")
-  const [failure, setFailure] = React.useState<string | null>(null)
-  const [runs, setRuns] = React.useState<Record<string, RunRecord>>({})
-  const [stopped, setStopped] = React.useState<Set<string>>(() => new Set())
-  /** The revision each of three cuts was saved as. */
-  const [cutRevisions, setCutRevisions] = React.useState<Record<string, number>>({})
+  const {
+    messages,
+    status,
+    error,
+    isBusy,
+    failure,
+    stopped,
+    cutRevisions,
+    runs,
+    checks,
+    send: sendText,
+    halt,
+    retry,
+    respond,
+  } = useCutsStream({ projectId, director, controls, onSaved, onRunningChange, look, desk, harness })
 
-  // Development only: `?replay=1` on the page plays the model's part from a
-  // script (lib/editor/replay-model.ts), so the cursor can be watched on a
-  // real project without a model call. The routes refuse it in production.
-  const [replay] = React.useState(
-    () =>
-      process.env.NODE_ENV !== "production" &&
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("replay") === "1"
-  )
-
-  const fetcher = harness?.fetch ?? networkFetch
-
-  const [transport] = React.useState<ChatTransport<UIMessage>>(() => {
-    if (harness) return harness.transport
-    return new DefaultChatTransport({
-      api: `/api/editor/projects/${projectId}/agent${replay ? "?replay=1" : ""}`,
-    })
-  })
-
-  const savedRef = React.useRef(onSaved)
-  React.useEffect(() => {
-    savedRef.current = onSaved
-  }, [onSaved])
-
-  const beatSeq = React.useRef(0)
-  const savedRevision = React.useRef<number | null>(null)
-
-  /** The self-check: one look at three frames after a run that changed what is on screen. */
-  const selfCheck = useSelfCheck({
-    projectId,
-    replay,
-    director,
-    look,
-    fetcher,
-    onSaved: (revision) => {
-      savedRevision.current = revision
-      savedRef.current(revision)
-    },
-  })
-
-  /**
-   * After Stop, the server still saves what the run already cut (see the
-   * agent route's onEnd), but the stream is closed, so `data-saved` never
-   * reaches us. Without the new revision the next autosave 409s. So read the
-   * project back until the run's lock is off, then take its revision.
-   * A bounded read of our own row: at most READ_BACK_TRIES requests.
-   */
-  const readBack = React.useCallback(async () => {
-    for (let attempt = 0; attempt < READ_BACK_TRIES; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, READ_BACK_DELAY_MS))
-      try {
-        const response = await fetcher(`/api/editor/projects/${projectId}`, { cache: "no-store" })
-        if (!response.ok) return
-        const project = (await response.json()) as { revision: number; lock: { status: string } | null }
-        if (!project.lock || project.lock.status === "unlocked") {
-          savedRef.current(project.revision)
-          return
-        }
-      } catch {
-        // Offline for a moment: the next try may reach it.
-      }
-    }
-  }, [projectId, fetcher])
-
-  const { messages, sendMessage, status, stop, error, regenerate, clearError, addToolApprovalResponse } =
-    useChat({
-      transport,
-      // An answered question resumes the run on its own: the approved cut
-      // lands with the cursor like any other step.
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-      onFinish: ({ isAbort }) => {
-        if (isAbort) void readBack()
-      },
-      /**
-       * Every data part the run sends, in order. `data-ops` is transient and
-       * only ever visible here: it goes to the director, which lands it with
-       * a press. A reload that replayed past ops would double every edit.
-       */
-      onData: (part) => {
-        if (part.type === "data-ops") {
-          director.push(beatFromPart(`b${beatSeq.current++}`, part.data as OpsData))
-        } else if (part.type === "data-cuts") {
-          // One cursor per cut, out of step, the first leading.
-          const data = part.data as CutsData
-          director.setLanes(data.cuts.map((cut, index) => ({ ...cutLane(index, cut.letter), key: cut.sceneId })))
-          desk.onCuts(data)
-        } else if (part.type === "data-recommend") {
-          desk.onRecommend(part.data as RecommendData)
-        } else if (part.type === "data-saved") {
-          const { revision, sceneId } = part.data as { revision: number; sceneId?: string }
-          savedRevision.current = revision
-          if (sceneId) setCutRevisions((prev) => ({ ...prev, [sceneId]: revision }))
-          onSaved(revision)
-        } else if (part.type === "data-check") {
-          const { offer, sceneId } = part.data as { offer: string; sceneId?: string }
-          selfCheck.receive(offer, sceneId ?? null)
-        } else if (part.type === "data-run-failed") {
-          setFailure((part.data as { message: string }).message)
-        }
-      },
-    })
-
-  const streaming = status === "submitted" || status === "streaming"
-  // The run is over when the stream has ended and the cursor has parked.
-  // A pending or running self-check keeps the run open, so its fix joins
-  // the run's undo and its receipt.
-  const isBusy = streaming || director.busy || selfCheck.pending || selfCheck.checking
-
-  React.useEffect(() => {
-    onRunningChange(isBusy)
-  }, [isBusy, onRunningChange])
-
-  /* ── One run: one undo group, one record ──────────────────────────────── */
-
-  const runStart = React.useRef<number | null>(null)
-  const latest = React.useRef({ controls, messages, beats: director.beats })
-  React.useEffect(() => {
-    latest.current = { controls, messages, beats: director.beats }
-  })
-
-  React.useEffect(() => {
-    if (streaming && runStart.current === null) {
-      runStart.current = latest.current.controls.durationUs
-      savedRevision.current = null
-      latest.current.controls.beginRun()
-      director.begin()
-    } else if (!streaming && runStart.current !== null) {
-      director.finish()
-    }
-  }, [streaming, director])
-
-  React.useEffect(() => {
-    if (isBusy || runStart.current === null) return
-    const { controls: now, messages: all, beats } = latest.current
-    const startUs = runStart.current
-    runStart.current = null
-    now.endRun()
-    const last = all.at(-1)
-    if (!last || last.role !== "assistant") return
-    const calls = toolCallIds(last).add(checkCallId(last.id))
-    const three = cutsOf(last)
-    const edits = three
-      ? three.cuts.reduce((sum, cut) => sum + cutBeats(beats, cut.sceneId).filter((b) => b.landed).length, 0)
-      : beats.filter((b) => b.landed && b.toolCallId && calls.has(b.toolCallId)).length
-    setRuns((prev) => ({
-      ...prev,
-      [last.id]: {
-        startUs: prev[last.id]?.startUs ?? startUs,
-        endUs: now.durationUs,
-        entry: now.runEntry ?? prev[last.id]?.entry ?? null,
-        revision: savedRevision.current,
-        // Counted over the whole turn, so a run resumed after a question
-        // reads as one receipt.
-        edits,
-      },
-    }))
-  }, [isBusy])
-
-  /* ── The self-check, once the cursor has parked ─────────────────────── */
-
-  const { pending: checkPending, checking, start: startCheck, cancel: cancelCheck } = selfCheck
-  React.useEffect(() => {
-    if (!checkPending || checking || streaming || director.busy) return
-    const last = latest.current.messages.at(-1)
-    if (!last || last.role !== "assistant") return
-    const calls = toolCallIds(last)
-    const landed = latest.current.beats.filter((b) => b.landed)
-    void startCheck(last.id, (sceneId) =>
-      (sceneId
-        ? cutBeats(landed, sceneId)
-        : landed.filter((b) => b.toolCallId && calls.has(b.toolCallId))
-      ).map((b) => b.target)
-    )
-  }, [checkPending, checking, streaming, director.busy, startCheck])
-
-  /* ── Sending, stopping ─────────────────────────────────────────────── */
-
-  const send = React.useCallback(
-    ({ text }: { text: string }) => {
-      const trimmed = text.trim()
-      if (!trimmed || isBusy) return
-      setFailure(null)
-      clearError()
-      setInput("")
-      void sendMessage(
-        { text: trimmed },
-        asksForThreeCuts(trimmed) ? { body: { mode: "three-cuts" } } : undefined
-      )
-    },
-    [isBusy, sendMessage, clearError]
-  )
-
-  /** Esc or Stop: the cursor parks, what landed stays, the rest is skipped. */
-  const halt = React.useCallback(() => {
-    const last = messages.at(-1)
-    if (last?.role === "assistant") setStopped((prev) => new Set(prev).add(last.id))
-    director.stop()
-    cancelCheck()
-    void stop()
-  }, [director, messages, stop, cancelCheck])
-
-  React.useEffect(() => {
-    if (!isBusy) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") halt()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [isBusy, halt])
+  const send = ({ text }: { text: string }) => {
+    if (sendText(text)) setInput("")
+  }
 
   /* ── What the margin shows ───────────────────────────────────────────── */
 
@@ -581,7 +327,7 @@ export function StudioChat({
                             live={isBusy && message.id === lastAssistant?.id}
                             stopped={stopped.has(message.id)}
                             beats={director.beats}
-                            checks={selfCheck.checks}
+                            checks={checks}
                             revisions={cutRevisions}
                             durationOf={desk.durationOf}
                             hasScene={desk.hasScene}
@@ -597,10 +343,10 @@ export function StudioChat({
                             stopped={stopped.has(message.id)}
                             beats={director.beats}
                             record={runs[message.id]}
-                            check={selfCheck.checks[message.id]}
+                            check={checks[message.id]}
                             aspect={look.canvas.width / look.canvas.height}
                             controls={controls}
-                            onRespond={(id, approved) => void addToolApprovalResponse({ id, approved })}
+                            onRespond={respond}
                           />
                         )}
                         {/* Next steps sit right under the checkpoint, inside the turn's
@@ -627,9 +373,7 @@ export function StudioChat({
                             variant="outline"
                             onClick={() => {
                               const asked = [...messages].reverse().find((m) => m.role === "user")
-                              void regenerate(
-                                asked && asksForThreeCuts(textOf(asked)) ? { body: { mode: "three-cuts" } } : undefined
-                              )
+                              retry(asked ? textOf(asked) : null)
                             }}
                           >
                             Try again
@@ -686,7 +430,7 @@ function Turn({
   controls,
   onRespond,
 }: {
-  message: UIMessage
+  message: CutsMessage
   live: boolean
   stopped: boolean
   beats: readonly BeatState[]
@@ -700,7 +444,7 @@ function Turn({
   const tools = message.parts.filter(isToolUIPart).filter((p) => !READS.has(toolNameOf(p.type)))
   const gates = new Map(
     message.parts.flatMap((p) =>
-      p.type === "data-gate" ? [[(p.data as GateData).toolCallId, p.data as GateData] as const] : []
+      p.type === "data-gate" ? [[p.data.toolCallId, p.data] as const] : []
     )
   )
 
@@ -859,10 +603,6 @@ function toolNameOf(type: string): string {
   return type.startsWith("tool-") ? type.slice(5) : type
 }
 
-function textOf(message: UIMessage): string {
+function textOf(message: CutsMessage): string {
   return message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join(" ")
-}
-
-function toolCallIds(message: UIMessage): Set<string> {
-  return new Set(message.parts.filter(isToolUIPart).map((p) => p.toolCallId))
 }

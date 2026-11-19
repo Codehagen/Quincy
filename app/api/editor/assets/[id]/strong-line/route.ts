@@ -1,7 +1,11 @@
 import { ceilingVerdict } from "@/lib/chat-guards"
 import { getAsset } from "@/lib/editor/assets"
 import { strongLineSlot } from "@/lib/editor/reading"
-import { candidateSentences, fillStrongLine } from "@/lib/editor/strong-line"
+import {
+  candidateSentences,
+  fillStrongLine,
+  isStalePending,
+} from "@/lib/editor/strong-line"
 import {
   isEntitled,
   paywallResponse,
@@ -34,8 +38,12 @@ export async function POST(
   }
 
   // A line already chosen, or a call already made: free, and no gate needed.
+  // A pending claim left behind by a request that died falls through to the
+  // gates below, and fillStrongLine may take it again.
   const slot = strongLineSlot(asset.transcript)
-  if (slot) return Response.json({ line: slot.state === "done" ? slot.line : null })
+  if (slot && !(slot.state === "pending" && isStalePending(slot.at))) {
+    return Response.json({ line: slot.state === "done" ? slot.line : null })
+  }
 
   // Development only: a scripted choice (the longest sentence), no model
   // call, nothing stored and nothing metered.

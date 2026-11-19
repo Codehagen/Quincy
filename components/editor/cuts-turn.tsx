@@ -1,12 +1,12 @@
 "use client"
 
-import type { UIMessage } from "ai"
-
 import { Checkpoint } from "@/components/ai-elements/checkpoint"
 import { TaskFold, type TaskStep } from "@/components/ai-elements/task"
 import { Message, MessageContent } from "@/components/ui/message"
+import type { CutsData, CutsMessage } from "@/lib/editor/stream-parts"
 
 import type { BeatState } from "./agent-cursor/director"
+import { cutBeats, recommendationOf } from "./cuts-stream"
 import { stepDetail, stepTitle } from "./run-steps"
 import { CheckFrames, type CheckState } from "./self-check/check-frames"
 import { checkKey } from "./self-check/use-self-check"
@@ -21,28 +21,6 @@ import { formatClockTenths } from "./studio-parts"
  * together.
  */
 
-export type CutsData = {
-  leadId: string
-  cuts: { sceneId: string; letter: string; name: string; where: string; hook: string | null; lengthS: number }[]
-}
-export type CutDone = { sceneId: string; letter: string; say: string; landed: boolean }
-export type RecommendData = { sceneId: string; letter: string; reason: string }
-
-export function cutsOf(message: UIMessage): CutsData | null {
-  const part = message.parts.find((p) => p.type === "data-cuts")
-  return part && "data" in part ? (part.data as CutsData) : null
-}
-
-export function recommendationOf(message: UIMessage): RecommendData | null {
-  const part = message.parts.find((p) => p.type === "data-recommend")
-  return part && "data" in part ? (part.data as RecommendData) : null
-}
-
-/** The beats of one cut that are its edits (making the scene is not one). */
-export function cutBeats(beats: readonly BeatState[], sceneId: string): BeatState[] {
-  return beats.filter((b) => b.sceneId === sceneId && b.toolName !== "add_scene")
-}
-
 export function CutsTurn({
   message,
   cuts,
@@ -56,7 +34,7 @@ export function CutsTurn({
   aspectOf,
   onUndoCut,
 }: {
-  message: UIMessage
+  message: CutsMessage
   cuts: CutsData
   live: boolean
   stopped: boolean
@@ -70,7 +48,7 @@ export function CutsTurn({
   onUndoCut: (sceneId: string) => void
 }) {
   const done = new Map(
-    message.parts.flatMap((p) => (p.type === "data-cut-done" ? [[(p.data as CutDone).sceneId, p.data as CutDone] as const] : []))
+    message.parts.flatMap((p) => (p.type === "data-cut-done" ? [[p.data.sceneId, p.data] as const] : []))
   )
   const pick = recommendationOf(message)
   const settled = !live

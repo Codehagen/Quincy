@@ -401,3 +401,32 @@ describe("targets on the stream (plans/036)", () => {
     expect(streamed.every((batch) => batch[0].target?.action === "cut")).toBe(true)
   })
 })
+
+describe("remove_silences input", () => {
+  it("refuses a negative padding and a minimum under 250 ms", () => {
+    const run = createRun({
+      initial: {
+        document: {
+          version: 1,
+          metadata: { id: "p", name: "", durationUs: us(0), createdAt: "", updatedAt: "" },
+          settings: { fps: 30, canvas: { width: 1, height: 1 }, background: { type: "color", color: "#000" } },
+          scenes: [createScene({})],
+          currentSceneId: "",
+        },
+        revision: 0,
+        lock: { status: "unlocked", runId: null, lockedBy: null, startedAt: null },
+      },
+      runId: "r",
+      onCommit: () => {},
+      loadWords: async () => null,
+    })
+    // The schema is the zod object the tool was built with.
+    const schema = editorTools(run).remove_silences.inputSchema as unknown as {
+      safeParse: (value: unknown) => { success: boolean }
+    }
+    expect(schema.safeParse({ paddingMs: -50 }).success).toBe(false)
+    expect(schema.safeParse({ minSilenceMs: 100 }).success).toBe(false)
+    expect(schema.safeParse({ minSilenceMs: 250, paddingMs: 0 }).success).toBe(true)
+  })
+})
+

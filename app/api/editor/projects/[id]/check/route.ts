@@ -1,5 +1,6 @@
 import { ceilingVerdict } from "@/lib/chat-guards"
 import { createRun } from "@/lib/editor/agent"
+import { currentScene } from "@/lib/editor/document"
 import {
   getProject,
   lockProject,
@@ -27,7 +28,8 @@ import {
   resolveEntitlementForRequest,
 } from "@/lib/entitlement"
 import { getSession } from "@/lib/session"
-import { recordUsage, summariseUsage } from "@/lib/usage"
+import { tokenMeter } from "@/lib/editor/meter"
+import { recordUsage, settleUsage, summariseUsage } from "@/lib/usage"
 
 /**
  * The self-check (plans/036, phase C): three frames of the cut Quincy just
@@ -37,9 +39,14 @@ import { recordUsage, summariseUsage } from "@/lib/usage"
  * **Money (AGENTS.md).** Spends one model call, so every guard is here:
  * the entitlement gate and the day's ceiling, a signed offer that only a
  * run which changed the picture or captions receives, at most one check per
- * run (the metering row is the attempt log, written for failed calls too),
- * at most MAX_CHECK_FRAMES frames of at most MAX_FRAME_CHARS each, and the
- * project lock so two checks cannot overlap.
+ * run, at most MAX_CHECK_FRAMES frames of at most MAX_FRAME_CHARS each, and
+ * the project lock so two checks cannot overlap.
+ *
+ * One per run is a claim: under the lock, the route looks for the run's
+ * metering row and, finding none, writes it before the model call, then fills
+ * in the tokens after. Two requests for one run cannot both pass the look,
+ * and a call that fails, or a metering write that fails afterwards, still
+ * leaves the row that refuses the next.
  *
  * The frames come inline: three small JPEGs are about 150 KB, far under
  * the platform's 4.5 MB body limit, and an upload would be a second request
@@ -113,13 +120,6 @@ export async function POST(
     return Response.json({ error: ceiling.error, state: "ceiling" }, { status: 429 })
   }
 
-  const checked = replay
-    ? replayChecked.has(offer.runId)
-    : await alreadyChecked(session.user.id, offer.runId)
-  if (checked) {
-    return Response.json({ error: "This run has been checked." }, { status: 409 })
-  }
-
   const project = await getProject(id, session.user.id)
   if (!project) return Response.json({ error: "No such project." }, { status: 404 })
 
@@ -129,11 +129,20 @@ export async function POST(
   }
 
   try {
+    // Asked under the lock, so a second request for this run waits on the
+    // first one's claim instead of reading the log before it is written.
+    const checked = replay
+      ? replayChecked.has(offer.runId)
+      : await alreadyChecked(session.user.id, offer.runId)
+    if (checked) {
+      return Response.json({ error: "This run has been checked." }, { status: 409 })
+    }
+
     const document = project.document
     // A three-cuts sub-run's offer names its cut; any other run's, the scene on screen.
     const scene = offer.sceneId
       ? document.scenes.find((s) => s.id === offer.sceneId)
-      : (document.scenes.find((s) => s.id === document.currentSceneId) ?? document.scenes[0])
+      : currentScene(document)
     if (!scene) return Response.json({ error: "The project has no cut." }, { status: 404 })
 
     let verdict: CheckVerdict
@@ -141,23 +150,33 @@ export async function POST(
       replayChecked.add(offer.runId)
       verdict = (await import("@/lib/editor/replay-model")).replayCheck(scene, frames.length)
     } else {
-      let usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+      // The claim: the run's one row, written before the call.
+      const rowId = await recordUsage({
+        userId: session.user.id,
+        conversationId: checkTag(offer.runId, frames.length),
+        model: CHECK_MODEL,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+      })
+      const meter = tokenMeter()
+      let usage = meter.total()
       try {
         const answer = await lookAtFrames(
           frames.map((f) => ({ dataUrl: f.dataUrl, atLabel: atLabel(f.atUs) })),
-          request.signal
+          request.signal,
+          (step) => meter.add(step)
         )
         usage = answer.usage
         verdict = answer.verdict
+      } catch (cause) {
+        // An answer that failed to parse was still paid for.
+        usage = meter.total()
+        throw cause
       } finally {
-        // Metered whether or not the call answered: the row is also the
-        // attempt log that refuses a second check of this run.
-        await recordUsage({
-          userId: session.user.id,
-          conversationId: checkTag(offer.runId, frames.length),
-          model: CHECK_MODEL,
-          ...usage,
-        })
+        await settleUsage(rowId, session.user.id, { model: CHECK_MODEL, ...usage }).catch((cause) =>
+          console.error("[editor check] could not meter the call:", cause)
+        )
       }
     }
 
@@ -205,7 +224,7 @@ export async function POST(
     return Response.json({ error: "Quincy could not look at the cut this time." }, { status: 502 })
   } finally {
     try {
-      await unlockProject(id, session.user.id)
+      await unlockProject(id, session.user.id, checkRunId)
     } catch (cause) {
       console.error(`[editor check] could not unlock ${id}:`, cause)
     }

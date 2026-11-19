@@ -6,10 +6,10 @@ import {
   isStepCount,
   streamText,
   toUIMessageStream,
-  type UIMessage,
 } from "ai"
 
 import { getAsset } from "@/lib/editor/assets"
+import { currentScene } from "@/lib/editor/document"
 import {
   createRun,
   describeScene,
@@ -17,10 +17,24 @@ import {
   editorTools,
   type CommitMeta,
 } from "@/lib/editor/agent"
-import { gateVerdict, GATED_TOOLS } from "@/lib/editor/gate"
+import { gateLedger, GATED_TOOLS, type GateLedger } from "@/lib/editor/gate"
+import {
+  AGENT_COOLDOWN_MS,
+  AGENT_TAG,
+  answeredQuestion,
+  CONTINUE_WINDOW_MS,
+  continueTag,
+  gateRecords,
+  knownToolCalls,
+  sameClips,
+  type GateRecord,
+} from "@/lib/editor/agent-guards"
+import { tokenMeter } from "@/lib/editor/meter"
 import { needsCheck } from "@/lib/editor/self-check"
+import type { CutsMessage } from "@/lib/editor/stream-parts"
 import { threeCutsResponse } from "@/lib/editor/three-cuts-run"
 import { signOffer } from "@/lib/editor/self-check-server"
+import { signGateRecord, toolApprovalSecret } from "@/lib/editor/server-keys"
 import type { EditOp } from "@/lib/editor/ops"
 import {
   getProject,
@@ -28,10 +42,12 @@ import {
   saveDocument,
   unlockProject,
   RevisionConflictError,
+  type VideoProjectRow,
 } from "@/lib/editor/projects"
 import { findMainTrack } from "@/lib/editor/timeline"
 import { wordsFromDeepgram } from "@/lib/editor/transcript"
-import type { VideoElement } from "@/lib/editor/types"
+import type { Scene, VideoElement } from "@/lib/editor/types"
+import { cooldownDecision } from "@/lib/cooldown"
 import {
   isEntitled,
   paywallResponse,
@@ -39,7 +55,8 @@ import {
 } from "@/lib/entitlement"
 import { ceilingVerdict, inputVerdict } from "@/lib/chat-guards"
 import { getSession } from "@/lib/session"
-import { recordUsage, summariseUsage } from "@/lib/usage"
+import { recordUsage, spendCooldown, summariseUsage } from "@/lib/usage"
+import { EDITOR_AGENT_ATTEMPT } from "@/lib/usage-attempts"
 
 /**
  * Cutting by prompt.
@@ -80,6 +97,10 @@ const generateRunId = createIdGenerator({ prefix: "run", size: 16 })
  * describe_timeline, and a loop that costs money should end on its own.
  */
 const MAX_STEPS = 8
+
+/** Development replays write no usage rows, so these stand in for them. */
+const replayStarted = new Map<string, number>()
+const replayContinued = new Set<string>()
 
 const SYSTEM = `You are the cutting room inside Quincy, editing one video project with the person who recorded it.
 
@@ -135,7 +156,7 @@ export async function POST(
 
   const { id } = await params
 
-  let body: { messages?: UIMessage[]; mode?: unknown }
+  let body: { messages?: CutsMessage[]; mode?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -198,7 +219,45 @@ export async function POST(
     )
   }
 
-  const project = await getProject(id, session.user.id)
+  // Signed with a key derived from the server secret; read here, above the
+  // lock, so a missing secret refuses the request before it holds anything.
+  const approvalSecret = toolApprovalSecret()
+
+  /**
+   * The cooldown (see agent-guards.ts), skipped once for the browser's
+   * automatic continuation after the person answers a gate question.
+   */
+  const records = gateRecords(messages)
+  const answering = answeredQuestion(messages, records)
+  const userId = session.user.id
+  const answerTag = answering === null ? null : continueTag(answering)
+  const continuing =
+    answerTag !== null &&
+    (replay
+      ? !replayContinued.has(`${userId}|${answerTag}`)
+      : (await spendCooldown(userId, answerTag, CONTINUE_WINDOW_MS)).ready)
+
+  if (!continuing) {
+    const cooldown = replay
+      ? cooldownDecision(
+          replayStarted.has(userId) ? new Date(replayStarted.get(userId)!) : null,
+          AGENT_COOLDOWN_MS
+        )
+      : await spendCooldown(userId, AGENT_TAG, AGENT_COOLDOWN_MS)
+    if (!cooldown.ready) {
+      const s = cooldown.secondsLeft
+      return Response.json(
+        {
+          error: `Quincy is still on the last cut. Try again in ${s} ${s === 1 ? "second" : "seconds"}.`,
+          state: "cooldown",
+          secondsLeft: s,
+        },
+        { status: 429 }
+      )
+    }
+  }
+
+  const project = await getProject(id, userId)
   if (!project) {
     return Response.json({ error: "No such project." }, { status: 404 })
   }
@@ -208,14 +267,74 @@ export async function POST(
   // Claimed before anything expensive starts. The claim is a conditional UPDATE
   // rather than a read-then-write, because two runs arriving together is
   // precisely the case a lock exists to prevent.
-  if (!(await lockProject(id, session.user.id, runId))) {
+  if (!(await lockProject(id, userId, runId))) {
     return Response.json(
       { error: "Something is already cutting this project." },
       { status: 409 }
     )
   }
 
+  /**
+   * From here until the stream exists, a throw would leave the project
+   * locked: the `onFinish` that unlocks belongs to the stream. So everything
+   * in between gives the lock back on its way out.
+   */
+  try {
+    // The attempt rows the cooldown reads, written the moment the run is ours.
+    if (replay) {
+      replayStarted.set(userId, Date.now())
+      if (continuing && answerTag) replayContinued.add(`${userId}|${answerTag}`)
+    } else {
+      const attempt = { userId, model: EDITOR_AGENT_ATTEMPT, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+      await recordUsage({ ...attempt, conversationId: AGENT_TAG })
+      if (continuing && answerTag) {
+        await recordUsage({ ...attempt, conversationId: answerTag })
+      }
+    }
+
+    return startRun({
+      id,
+      userId,
+      runId,
+      replay,
+      project,
+      messages,
+      records,
+      approvalSecret,
+      signal: request.signal,
+    })
+  } catch (cause) {
+    console.error(`[editor agent] could not start on ${id}:`, cause)
+    await unlockProject(id, userId, runId).catch(() => {})
+    return Response.json({ error: "The cut could not start." }, { status: 500 })
+  }
+}
+
+/** The run itself, once the lock is held and the attempt is logged. */
+function startRun({
+  id,
+  userId,
+  runId,
+  replay,
+  project,
+  messages,
+  records,
+  approvalSecret,
+  signal,
+}: {
+  id: string
+  userId: string
+  runId: string
+  replay: boolean
+  project: VideoProjectRow
+  messages: CutsMessage[]
+  records: Map<string, GateRecord>
+  approvalSecret: string
+  /** The request's, so Stop ends the model call and not only the stream. */
+  signal: AbortSignal
+}): Response {
   const startedAtRevision = project.revision
+  const scene = currentScene(project.document)
 
   /** What this run changed, for whether it earns the self-check. */
   const committedTools = new Set<string>()
@@ -237,15 +356,10 @@ export async function POST(
       streamOps(ops, meta)
     },
     loadWords: async () => {
-      const scene =
-        project.document.scenes.find(
-          (candidate) => candidate.id === project.document.currentSceneId
-        ) ?? project.document.scenes[0]
-
       const clip = scene && findMainTrack(scene)?.elements.find(isVideo)
       if (!clip) return null
 
-      const asset = await getAsset(clip.mediaId, session.user.id)
+      const asset = await getAsset(clip.mediaId, userId)
       return asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
     },
   })
@@ -260,27 +374,48 @@ export async function POST(
    */
   let streamOps: (ops: EditOp[], meta?: CommitMeta) => void = () => {}
 
-  const scene =
-    project.document.scenes.find(
-      (candidate) => candidate.id === project.document.currentSceneId
-    ) ?? project.document.scenes[0]
-
   /**
    * Tool calls the browser already knows about. The SDK re-evaluates the
    * approval policy when an approved call is replayed, and the question must
    * not be asked a second time.
    */
-  const knownCalls = new Set(
-    messages.flatMap((message) =>
-      message.parts.flatMap((part) =>
-        "toolCallId" in part && typeof part.toolCallId === "string"
-          ? [part.toolCallId]
-          : []
-      )
-    )
-  )
+  const knownCalls = knownToolCalls(messages)
 
-  const stream = createUIMessageStream({
+  /** The run's gate, made on the first measured call (it needs the words). */
+  let ledger: GateLedger | null = null
+
+  /**
+   * What the run spent, step by step, metered once whatever ends it: the
+   * stream's `onEnd` on a clean finish, the outer `onFinish` when Stop or a
+   * throw means `onEnd` never comes.
+   */
+  const meter = tokenMeter()
+  let metered = false
+  const recordSpend = async () => {
+    // A replay calls no model, so there is nothing to meter.
+    if (replay || metered) return
+    metered = true
+    try {
+      await recordUsage({
+        userId,
+        conversationId: `project:${id}`,
+        model: MODEL,
+        ...meter.total(),
+      })
+    } catch (cause) {
+      console.error("[editor agent] could not record usage:", cause)
+    }
+  }
+
+  const stream = createUIMessageStream<CutsMessage>({
+    /**
+     * The conversation so far, so the stream knows which message it carries
+     * on. With an `onFinish` the stream assembles the message itself, and the
+     * run that follows a yes appends to the message that asked: without the
+     * history, the approved call's result names a call it has never seen,
+     * and the stream ends in an error after the cut has already landed.
+     */
+    originalMessages: messages,
     execute: async ({ writer }) => {
       streamOps = (ops, meta) =>
         writer.write({
@@ -304,45 +439,80 @@ export async function POST(
         tools: editorTools(run),
         stopWhen: isStepCount(MAX_STEPS),
         /**
+         * Stop closes the browser's side of the stream, and on its own that
+         * ends only the reading: the model call upstream would run to its
+         * last step and bill for all of them. Tied to the request, the call
+         * ends with it. The steps that finished before the abort are already
+         * in the meter (`onStepEnd`), and `onFinish` below records them.
+         */
+        abortSignal: signal,
+        /**
+         * Without it the SDK takes an approval replayed from the browser at
+         * its word, input included: a client could approve its own call.
+         * With it, every approval request is signed when it is issued, and a
+         * yes that does not carry that signature never runs.
+         */
+        experimental_toolApprovalSecret: approvalSecret,
+        onStepEnd: (step) => meter.add(step.usage),
+        /**
          * The gate. A tool that could remove speech is dry-run against the
-         * working scene with the same builder its execute uses; if the ops
-         * would remove more than 30% of the take or whole spoken sentences,
-         * the call waits for the person instead of landing. The reason, in
-         * words, rides beside the request as a data part, because the SDK's
-         * approval request carries no text of its own.
+         * working scene with the same builder its execute uses; if this run's
+         * cuts together would remove more than 30% of the take or whole spoken
+         * sentences, the call waits for the person instead of landing. The
+         * reason, in words, rides beside the request as a data part, because
+         * the SDK's approval request carries no text of its own.
          */
         toolApproval: async ({ toolCall }) => {
           if (!GATED_TOOLS.has(toolCall.toolName)) return undefined
 
-          const working = run.snapshot().document
-          const current =
-            working.scenes.find((s) => s.id === working.currentSceneId) ??
-            working.scenes[0]
-          if (!current) return undefined
+          const current = currentScene(run.snapshot().document)
+          if (!current || !scene) return undefined
 
-          const steps = dryRun(toolCall.toolName, toolCall.input, current)
-          if (!steps) return undefined
-
-          const verdict = gateVerdict({
-            toolName: toolCall.toolName,
-            before: current,
-            steps,
+          const gate = (ledger ??= gateLedger({
+            start: scene,
             words: await run.words(),
-          })
+          }))
+          const call = {
+            toolName: toolCall.toolName,
+            scene: current,
+            build: (on: Scene) => dryRun(toolCall.toolName, toolCall.input, on),
+          }
+
+          /**
+           * A call the browser already holds is the person's answer coming
+           * back. It runs only if it would still remove the clips the
+           * question was about: the timeline is the person's again between
+           * the question and the answer, and "delete clip 3" names a
+           * position, not a clip.
+           */
+          if (knownCalls.has(toolCall.toolCallId)) {
+            const record = records.get(toolCall.toolCallId)
+            if (!record || !sameClips(record.clipIds, gate.peek(call))) {
+              return {
+                type: "denied",
+                reason:
+                  "The cut changed after I asked, so I left it as it was. Ask again on the cut as it is now.",
+              }
+            }
+            gate.judge({ ...call, accepted: true })
+            return "user-approval"
+          }
+
+          const { verdict } = gate.judge(call)
           if (!verdict.ask) return undefined
 
-          if (!knownCalls.has(toolCall.toolCallId)) {
-            writer.write({
-              type: "data-gate",
-              id: toolCall.toolCallId,
-              data: {
-                toolCallId: toolCall.toolCallId,
-                reason: verdict.reason,
-                sentences: verdict.sentences,
-                percent: verdict.percent,
-              },
-            })
-          }
+          writer.write({
+            type: "data-gate",
+            id: toolCall.toolCallId,
+            data: {
+              toolCallId: toolCall.toolCallId,
+              reason: verdict.reason,
+              sentences: verdict.sentences,
+              percent: verdict.percent,
+              clipIds: verdict.clipIds,
+              signature: signGateRecord(toolCall.toolCallId, verdict.clipIds),
+            },
+          })
           return "user-approval"
         },
       })
@@ -353,22 +523,7 @@ export async function POST(
           originalMessages: messages,
           generateMessageId,
           onEnd: async () => {
-            try {
-              // A replay calls no model, so there is nothing to meter.
-              const usage = replay ? null : await result.usage
-
-              if (usage) await recordUsage({
-                userId: session.user.id,
-                conversationId: `project:${id}`,
-                model: MODEL,
-                inputTokens: usage.inputTokens ?? 0,
-                cachedInputTokens:
-                  usage.inputTokenDetails?.cacheReadTokens ?? 0,
-                outputTokens: usage.outputTokens ?? 0,
-              })
-            } catch (cause) {
-              console.error("[editor agent] could not record usage:", cause)
-            }
+            await recordSpend()
 
             /**
              * Saved even on an abort, and that is deliberate.
@@ -385,7 +540,7 @@ export async function POST(
             try {
               const saved = await saveDocument(
                 id,
-                session.user.id,
+                userId,
                 run.snapshot().document,
                 startedAtRevision
               )
@@ -402,8 +557,12 @@ export async function POST(
 
               // The self-check (plans/036, phase C): only a run that changed
               // the picture or captions is offered one, and the offer is
-              // signed so the check route can hold it to one per run.
+              // signed so the check route can hold it to one per run. The
+              // lock comes off first: a browser that posts the check the
+              // moment the offer lands would otherwise meet this run's lock
+              // and be refused.
               if (needsCheck(committedTools)) {
+                await unlockProject(id, userId, runId)
                 writer.write({
                   type: "data-check",
                   data: { offer: signOffer(id, runId) },
@@ -434,16 +593,16 @@ export async function POST(
       return "The cut failed partway through. Anything already applied is still there."
     },
     /**
-     * The lock comes off here and nowhere else.
-     *
-     * `onFinish` runs on a clean end, an abort and a thrown error alike, which
-     * is the only property that matters: a run that dies holding the lock
-     * leaves the project permanently read-only, and the user's only recourse
-     * is a support message.
+     * The lock comes off here, on a clean end, an abort and a thrown error
+     * alike — and only this run's lock, by its id, so it cannot release one
+     * a self-check took after the offer went out. A run the platform kills
+     * outright never reaches this; `LOCK_STALE_MS` (projects.ts) frees that
+     * one.
      */
     onFinish: async () => {
+      await recordSpend()
       try {
-        await unlockProject(id, session.user.id)
+        await unlockProject(id, userId, runId)
       } catch (cause) {
         console.error(`[editor agent] could not unlock ${id}:`, cause)
       }
