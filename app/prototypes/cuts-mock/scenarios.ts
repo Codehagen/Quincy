@@ -3,10 +3,11 @@ import type { ChatTransport } from "ai"
 
 import { dryRun } from "@/lib/editor/agent"
 import { currentScene } from "@/lib/editor/document"
-import { isFiller } from "@/lib/editor/fillers"
+import { isSoundFiller } from "@/lib/editor/fillers"
 import { GATED_TOOLS, gateVerdict, type GateVerdict } from "@/lib/editor/gate"
 import { paceOf, seedOf, type ModelPace, type Pace } from "@/lib/editor/pace"
 import type { CutsMessage } from "@/lib/editor/stream-parts"
+import { FILLER_REQUEST } from "@/lib/editor/replay-model"
 import { findMainTrack } from "@/lib/editor/timeline"
 import type { Word } from "@/lib/editor/transcript"
 import type { VideoDocument } from "@/lib/editor/types"
@@ -22,7 +23,7 @@ import { clipsToFit, recordThreeCuts } from "./three-cuts"
  * chat helper, so the transport is local but every op is a real op.
  */
 
-export type ScenarioId = "tighten" | "captions" | "push-in" | "under" | "stop" | "three-cuts" | "self-check"
+export type ScenarioId = "tighten" | "fillers" | "captions" | "push-in" | "under" | "stop" | "three-cuts" | "self-check"
 
 /** What the scenarios need to know about the take on screen. */
 export type TakeShape = { durationUs: number; width: number; height: number }
@@ -44,6 +45,7 @@ function otherShape(take: TakeShape): "vertical" | "square" {
 export function scenarios(take: TakeShape): readonly { id: ScenarioId; label: string }[] {
   return [
     { id: "tighten", label: "Tighten the edit" },
+    { id: "fillers", label: "Remove the fillers" },
     { id: "captions", label: "Add captions" },
     { id: "push-in", label: "Push in on the strong line" },
     { id: "under", label: `Make it under ${underSeconds(take)} s (asks first)` },
@@ -112,6 +114,8 @@ export async function prepare(
   switch (id) {
     case "tighten":
       return { document: base, prompt: "Tighten the edit" }
+    case "fillers":
+      return { document: base, prompt: "Remove the fillers" }
     case "captions":
       return { document: base, prompt: "Add captions" }
     case "push-in":
@@ -139,6 +143,7 @@ type Intent =
   | { kind: "three-cuts" }
   | { kind: "under"; seconds: number }
   | { kind: "tighten" }
+  | { kind: "fillers"; alsoCut: string[] }
   | { kind: "captions" }
   | { kind: "push-in" }
   | { kind: "shape"; shape: "vertical" | "square" | "wide" }
@@ -151,6 +156,9 @@ function intentOf(text: string): Intent | null {
   const under = t.match(/(?:under|to|below)\s*(\d+)\s*(?:s\b|sec)/)
   if (under) return { kind: "under", seconds: Number(under[1]) }
   if (/shorter|cut it down/.test(t)) return { kind: "under", seconds: 20 }
+  // Before tighten, and by the replay model's own pattern, so the mock and
+  // a replay read "remove the ums" the same way.
+  if (FILLER_REQUEST.test(t)) return { kind: "fillers", alsoCut: ["liksom", "altså"].filter((w) => t.includes(w)) }
   if (/tighten|pause|silence|dead air/.test(t)) return { kind: "tighten" }
   if (/caption|subtitle/.test(t)) return { kind: "captions" }
   if (/push in|punch|zoom/.test(t)) return { kind: "push-in" }
@@ -161,7 +169,7 @@ function intentOf(text: string): Intent | null {
 }
 
 const FALLBACK =
-  "In the mock I can tighten the edit, add captions, push in, make it vertical, square or wide, cut it under a length, or make three cuts. Try one of those."
+  "In the mock I can tighten the edit, remove the fillers, add captions, push in, make it vertical, square or wide, cut it under a length, or make three cuts. Try one of those."
 
 let calls = 0
 const nextId = (tag: string) => `mock-${tag}-${++calls}`
@@ -175,12 +183,15 @@ async function answer(
   strongLine: string | null,
   pace: Pace
 ): Promise<Chat> {
-  const one = async (toolCalls: { toolName: string; input: Record<string, unknown> }[], say: string, gapMs?: number) => {
+  const one = async (
+    toolCalls: { toolName: string; input: Record<string, unknown> }[],
+    say: string,
+    gapMs?: number,
+    nothing = "Nothing to change there: the cut already has it."
+  ) => {
     const recorded = await recorder(document, words).call(toolCalls.map((c) => ({ ...c, toolCallId: nextId(c.toolName) })))
     const landed = recorded.some((c) => c.commits.length > 0)
-    return chat.assistant(({ writer }) =>
-      writeRun(writer, recorded, landed ? say : "Nothing to change there: the cut already has it.", gapMs, pace)
-    )
+    return chat.assistant(({ writer }) => writeRun(writer, recorded, landed ? say : nothing, gapMs, pace))
   }
 
   if (!intent) return chat.assistant(({ writer }) => writeLine(writer, FALLBACK, pace))
@@ -189,10 +200,17 @@ async function answer(
     case "tighten":
       return one(
         [{ toolName: "remove_silences", input: {} }],
-        // Only a take with a filler in it has one to keep.
-        words.some((w) => isFiller(w.text))
-          ? "Took out the long pauses. The um stays: it sits inside a sentence."
+        // Only a take with a filler sound in it has one to mention.
+        words.some((w) => isSoundFiller(w.text))
+          ? "Took out the long pauses. The fillers stay; ask and I will cut them too."
           : "Took out the long pauses."
+      )
+    case "fillers":
+      return one(
+        [{ toolName: "remove_fillers", input: intent.alsoCut.length > 0 ? { alsoCut: intent.alsoCut } : {} }],
+        "The fillers are out and the captions still match the voice.",
+        undefined,
+        "No fillers to cut: this take has none."
       )
     case "captions":
       return one([{ toolName: "add_captions", input: {} }], "Captions are on, word by word, timed to the voice.")

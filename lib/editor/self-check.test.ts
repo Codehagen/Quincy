@@ -76,6 +76,8 @@ describe("needsCheck: only a run that changed picture or captions", () => {
 
   it("does not check after cuts alone, or a read", () => {
     expect(needsCheck(["remove_silences", "delete_clip", "split_clip"])).toBe(false)
+    // A filler cut is a cut, like the pauses: no frame shows anything new.
+    expect(needsCheck(["remove_fillers"])).toBe(false)
     expect(needsCheck(["describe_timeline"])).toBe(false)
     expect(needsCheck([])).toBe(false)
   })

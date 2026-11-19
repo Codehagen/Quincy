@@ -13,7 +13,7 @@ import {
 import { applyToScene, newElement } from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
-import { addCaptions, removeSilenceSteps } from "./tools"
+import { addCaptions, removeFillerSteps, removeSilenceSteps } from "./tools"
 import type { Word } from "./transcript"
 import type { Scene, TimelineElement, VideoElement } from "./types"
 
@@ -95,6 +95,14 @@ describe("the gate", () => {
       removeSilenceSteps(b, WORDS, { mediaId: "va-1", author: "agent", sourceDurationUs: secondsToUs(20) })
     expect(plan(take()).length).toBeGreaterThan(0)
     expect(verdict("remove_silences", plan)).toEqual({ ask: false })
+  })
+
+  it("lets a filler cut through, and it is exempt by what it is", () => {
+    expect(EXEMPT_TOOLS.has("remove_fillers")).toBe(true)
+    const plan = (b: Scene) =>
+      removeFillerSteps(b, WORDS, { mediaId: "va-1", author: "agent", sourceDurationUs: secondsToUs(20) }).steps
+    expect(plan(take()).length).toBeGreaterThan(0)
+    expect(verdict("remove_fillers", plan)).toEqual({ ask: false })
   })
 
   it("lets captions through", () => {
@@ -218,6 +226,19 @@ describe("the gate across a run", () => {
     )
     // Clip 2 of the tightened cut is well under 30 % of the original take.
     expect(gate.judge(del(tightened, [2])).verdict.ask).toBe(false)
+  })
+
+  it("does not count a filler cut against the run's share", () => {
+    // Clip 1 is 20 %. A filler cut judged first must not add to it.
+    const start = take()
+    const gate = gateLedger({ start, words: null })
+    const fillers = gate.judge({
+      toolName: "remove_fillers",
+      scene: start,
+      build: (on) => removeFillerSteps(on, WORDS, { mediaId: "va-1", author: "agent", sourceDurationUs: secondsToUs(20) }).steps,
+    })
+    expect(fillers).toEqual({ verdict: { ask: false }, clipIds: [] })
+    expect(gate.judge(del(start, [1])).verdict).toEqual({ ask: false })
   })
 
   it("measures the spine, so a long music lane does not hide the cut", () => {

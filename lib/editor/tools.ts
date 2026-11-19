@@ -7,6 +7,7 @@ import {
   findMainTrack,
   layOut,
   remapCaptions,
+  sourceToTimelineUs,
   splitBySourceRanges,
 } from "./timeline"
 import { timelineSpans } from "./edits"
@@ -15,6 +16,7 @@ import {
   buildCaptionSeeds,
   detectSilences,
   DEFAULT_SILENCE,
+  fillerCuts,
   type SilenceOptions,
   type Word,
 } from "./transcript"
@@ -219,6 +221,19 @@ export function removeSilenceSteps(
   )
   if (silences.length === 0) return []
 
+  return cutSteps(scene, silences, options)
+}
+
+/**
+ * Cut source ranges in steps, at most `MAX_CUT_STEPS` of them and within
+ * the caption ceiling, each built against the scene the last one left.
+ * Shared by the pauses and the fillers, so both stream the same way.
+ */
+function cutSteps(
+  scene: Scene,
+  ranges: UsRange[],
+  options: { mediaId: string; author: Author }
+): EditOp[][] {
   const captionCount = scene.tracks
     .filter((track) => track.kind === "caption")
     .reduce((sum, track) => sum + track.elements.length, 0)
@@ -236,7 +251,7 @@ export function removeSilenceSteps(
   const steps: EditOp[][] = []
   let current = scene
 
-  for (const group of chunk(silences, maxSteps)) {
+  for (const group of chunk(ranges, maxSteps)) {
     const ops = cutSourceRanges(current, group, options)
     if (ops.length === 0) continue
 
@@ -245,6 +260,50 @@ export function removeSilenceSteps(
   }
 
   return steps
+}
+
+/**
+ * Cut the standalone fillers out of the spine, in steps, captions with them.
+ *
+ * Only the fillers that still play: one inside a stretch an earlier edit
+ * removed is not in the cut, and naming it as removed would be a receipt
+ * for nothing. Returns the steps and the filler words they take, so the
+ * tool can say which went.
+ */
+export function removeFillerSteps(
+  scene: Scene,
+  words: Word[],
+  options: {
+    mediaId: string
+    author: Author
+    sourceDurationUs: Us
+    include?: readonly string[]
+  }
+): { steps: EditOp[][]; removed: Word[] } {
+  const spine = findMainTrack(scene)
+  if (!spine) return { steps: [], removed: [] }
+
+  const plays = (word: Word) =>
+    sourceToTimelineUs(
+      spine,
+      options.mediaId,
+      us(Math.round((word.startUs + word.endUs) / 2))
+    ) !== null
+
+  const cuts = fillerCuts(words, options.sourceDurationUs, {
+    include: options.include,
+  }).filter((cut) => cut.fillers.some(plays))
+  if (cuts.length === 0) return { steps: [], removed: [] }
+
+  const steps = cutSteps(
+    scene,
+    cuts.map((cut) => cut.range),
+    options
+  )
+  return {
+    steps,
+    removed: steps.length === 0 ? [] : cuts.flatMap((cut) => cut.fillers.filter(plays)),
+  }
 }
 
 /** Split a list into at most `count` runs of neighbours, as even as it goes. */

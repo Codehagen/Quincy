@@ -1141,3 +1141,33 @@ says so.
   file in `gate.ts`, `three-cuts.ts` and `director.ts` are no longer exported.
 - **AGENTS.md** names the margin by its files and lists the shadcn and AI
   Elements components it really uses.
+
+## Fillers
+
+Uncommitted on `feat/cuts-at-the-desk`, 2026-11-19. Quincy counted fillers
+in "What I noticed" but could not cut them; now it can.
+
+- **The tool.** `remove_fillers` (lib/editor/agent.ts) works like
+  `remove_silences`: one cut per press, a `range` target per step, spine and
+  captions together (`removeFillerSteps`, lib/editor/tools.ts, sharing the
+  step loop and its ceilings with the pauses).
+- **What it cuts.** The sounds only by default (`SOUND_FILLERS`,
+  lib/editor/fillers.ts): um, umm, uh, uhm, erm, ehm, eh, hmm, øh, øhm, æh.
+  "liksom" and "altså" are counted but cut only when named (`alsoCut`,
+  limited to `WORD_FILLERS`); no other word can be passed.
+- **Safety** (`fillerCuts`, lib/editor/transcript.ts). The filler's span
+  plus 60 ms, held to the middle of the gap on either side, so a cut never
+  reaches a neighbour. A pause beside a filler goes with it, cut where
+  `remove_silences` would cut it. Touching cuts merge. A filler whose span
+  overlaps a spoken word is left alone. No words, no cut.
+- **The gate.** Exempt, as the rule already said; it never counts towards
+  the run's share. **The self-check** does not run after it: a cut, not a
+  picture change.
+- **The receipt.** The tool's first line is "Removed 7 fillers: 4 × øh,
+  3 × um · 2.1 s" (`fillerReceipt`); the margin shows it above "Undo the
+  run". The step rows read "Cut a filler".
+- **Starters.** "Remove the N fillers" when the take has filler sounds, with
+  the words as its reason. Not in the three cuts' briefs.
+- **Replay and mock.** "fillers", "um", "øh" map to `remove_fillers` in the
+  replay model, and the mock has a "Remove the fillers" scenario that says
+  "No fillers to cut" when the take has none.

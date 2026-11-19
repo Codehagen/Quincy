@@ -19,7 +19,8 @@ import {
 import { aimed, applyOps, applyToScene, type EditOp } from "./ops"
 import { findMainTrack, sceneDurationUs } from "./timeline"
 import { secondsToUs, us } from "./time"
-import { addCaptions, removeSilenceSteps } from "./tools"
+import { fillerReceipt, WORD_FILLERS } from "./fillers"
+import { addCaptions, removeFillerSteps, removeSilenceSteps } from "./tools"
 import { DEFAULT_SILENCE, type Word } from "./transcript"
 import type {
   ProjectSnapshot,
@@ -239,6 +240,48 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           },
           "There is no pause in this take long enough to cut. Nothing was changed."
         ),
+    }),
+
+    remove_fillers: tool({
+      description:
+        "Cut the filler sounds out of the recording (um, uh, erm, hmm, øh, æh) and close the gaps, keeping the captions in sync. Use for 'remove the ums', 'cut the fillers', 'fjern øh-ene'. Only standalone sounds go; a pause beside one goes with it. 'liksom' and 'altså' are real words much of the time, so they stay unless the person names them: then pass them in alsoCut. This is not 'tighten', which means the pauses (remove_silences).",
+      inputSchema: z.object({
+        alsoCut: z
+          .array(z.enum(WORD_FILLERS as [string, ...string[]]))
+          .optional()
+          .describe(
+            "Filler words to cut as well as the sounds, only when the person asked for them by name."
+          ),
+      }),
+      execute: async ({ alsoCut }, options?: CallOptions) => {
+        // Set by the builder, read by the sentence: which words went.
+        let removed: string[] = []
+        return withWords(
+          { toolCallId: options?.toolCallId, toolName: "remove_fillers" },
+          (scene, words, mediaId) => {
+            const source = spineClip(scene, mediaId)
+            if (!source) return []
+
+            const plan = removeFillerSteps(scene, words, {
+              mediaId,
+              author: "agent",
+              sourceDurationUs: source.sourceDurationUs,
+              include: alsoCut,
+            })
+            removed = plan.removed.map((word) => word.text)
+            return plan.steps
+          },
+          (scene, before) => {
+            // The first line is the receipt the margin shows (fillers.ts
+            // `fillerReceiptOf`); the rest is for the model.
+            const savedUs = Math.max(0, sceneDurationUs(before) - sceneDurationUs(scene))
+            return `${fillerReceipt(removed, savedUs)}\n${describeScene(scene)}`
+          },
+          alsoCut && alsoCut.length > 0
+            ? "There are no fillers in this take to cut, the named words included. Nothing was changed."
+            : "There are no filler sounds in this take to cut. Nothing was changed."
+        )
+      },
     }),
 
     add_captions: tool({

@@ -1,6 +1,6 @@
 import { createIdGenerator } from "ai"
 
-import { FILLERS, normaliseWord } from "./fillers"
+import { FILLERS, isKnownFiller, normaliseWord, SOUND_FILLERS } from "./fillers"
 import { mergeRanges, secondsToUs, us, type Us, type UsRange } from "./time"
 
 const newTokenId = createIdGenerator({ prefix: "tk", size: 12 })
@@ -166,6 +166,129 @@ export function detectFillers(
 
 /** Norwegian and English, because the recordings are both (fillers.ts). */
 export const DEFAULT_FILLERS = FILLERS
+
+/**
+ * Breath left either side of a filler cut, at most.
+ *
+ * Small on purpose: an "um" sits close to the words around it, and the
+ * padding is only there so the cut does not land on the very edge of the
+ * sound. It is always clamped (see `fillerCuts`), so it never reaches a
+ * neighbour.
+ */
+export const FILLER_PADDING_US = us(60_000)
+
+export type FillerCutOptions = {
+  /**
+   * Words to cut besides the sounds (fillers.ts `WORD_FILLERS`). Anything
+   * not on the filler lists is dropped here, whatever the caller passes: this
+   * is the function every caller reaches, and a tool that cut any word it was
+   * handed would be a delete the gate never measured.
+   */
+  include?: readonly string[]
+  paddingUs?: Us
+  /** A gap this long beside a filler is a pause, and goes with it. */
+  pause?: Pick<SilenceOptions, "minSilenceUs" | "paddingUs">
+}
+
+/** One cut: the source range, and the filler words it removes. */
+export type FillerCut = { range: UsRange; fillers: Word[] }
+
+/**
+ * Standalone fillers as source ranges to cut, safely.
+ *
+ * - A cut covers the filler's own span plus padding, and the padding stops
+ *   at the middle of the gap to the next word on either side, so it never
+ *   reaches a neighbour's span.
+ * - A gap beside the filler long enough to be a pause goes with it, cut to
+ *   where `remove_silences` would cut it (the pause's padding kept next to
+ *   the neighbour). Cutting the "um" and leaving the pause either side of it
+ *   would leave two pauses joined, which plays as a longer one.
+ * - Cuts that touch become one, so two fillers in a row leave no sliver.
+ * - A filler whose span overlaps a word that is not a filler is left alone:
+ *   the timings disagree about where the speech is, and the cut must not
+ *   guess.
+ * - No words, no cuts.
+ */
+export function fillerCuts(
+  words: Word[],
+  durationUs: Us,
+  options: FillerCutOptions = {}
+): FillerCut[] {
+  if (words.length === 0) return []
+
+  const wanted = new Set<string>([
+    ...SOUND_FILLERS,
+    ...(options.include ?? []).filter(isKnownFiller).map(normaliseWord),
+  ])
+  const isCut = (word: Word) => wanted.has(normaliseWord(word.text))
+  const isAnyFiller = (word: Word) => isKnownFiller(word.text)
+  const padding = Math.max(0, options.paddingUs ?? FILLER_PADDING_US)
+  const pause = options.pause ?? DEFAULT_SILENCE
+  const minPauseUs = Math.max(MIN_SILENCE_US, pause.minSilenceUs)
+  const pausePadding = Math.max(0, pause.paddingUs)
+
+  const cuts: FillerCut[] = []
+
+  words.forEach((word, index) => {
+    if (!isCut(word)) return
+    const overlapsSpeech = words.some(
+      (other, at) =>
+        at !== index &&
+        !isAnyFiller(other) &&
+        other.startUs < word.endUs &&
+        other.endUs > word.startUs
+    )
+    if (overlapsSpeech) return
+
+    const before = words[index - 1]
+    const after = words[index + 1]
+
+    // The left edge: padding, held to the middle of the gap, or the pause
+    // swallowed up to its own padding when the gap is a pause.
+    const leftEdge = before ? before.endUs : 0
+    const leftGap = word.startUs - leftEdge
+    let startUs: number
+    if (leftGap > minPauseUs) {
+      startUs = before ? leftEdge + pausePadding : 0
+    } else {
+      const limit = before ? leftEdge + Math.max(0, leftGap) / 2 : 0
+      startUs = Math.max(word.startUs - padding, limit)
+    }
+
+    const rightEdge = after ? after.startUs : durationUs
+    const rightGap = rightEdge - word.endUs
+    let endUs: number
+    if (rightGap > minPauseUs) {
+      endUs = after ? rightEdge - pausePadding : durationUs
+    } else {
+      const limit = after ? rightEdge - Math.max(0, rightGap) / 2 : durationUs
+      endUs = Math.min(word.endUs + padding, limit)
+    }
+
+    startUs = Math.min(startUs, word.startUs)
+    endUs = Math.max(endUs, word.endUs)
+    cuts.push({
+      range: { startUs: us(Math.round(startUs)), endUs: us(Math.round(endUs)) },
+      fillers: [word],
+    })
+  })
+
+  // Touching cuts become one: both padded to the same midpoint, they meet.
+  const merged: FillerCut[] = []
+  for (const cut of cuts) {
+    const last = merged.at(-1)
+    if (last && cut.range.startUs <= last.range.endUs) {
+      last.range = {
+        startUs: last.range.startUs,
+        endUs: us(Math.max(last.range.endUs, cut.range.endUs)),
+      }
+      last.fillers.push(...cut.fillers)
+    } else {
+      merged.push({ range: { ...cut.range }, fillers: [...cut.fillers] })
+    }
+  }
+  return merged
+}
 
 /**
  * Refine cut boundaries toward the quietest instant nearby.

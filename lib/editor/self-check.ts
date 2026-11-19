@@ -34,7 +34,7 @@ export const CHECK_OFFER_TTL_MS = 10 * 60 * 1000
 
 /**
  * The tools whose edits change what is on screen: the picture or the
- * captions. A run that only cut pauses or clips leaves every frame as it
+ * captions. A run that only cut pauses, fillers or clips leaves every frame as it
  * was, so there is nothing new to look at and the check does not run.
  */
 export const CHECKED_TOOLS: ReadonlySet<string> = new Set([

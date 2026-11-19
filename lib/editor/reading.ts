@@ -1,4 +1,4 @@
-import { isFiller, normaliseWord } from "./fillers"
+import { isFiller, isSoundFiller, normaliseWord } from "./fillers"
 import type { Word } from "./transcript"
 
 /**
@@ -191,6 +191,22 @@ export function startersFor(reading: TakeReading, frame?: Frame): Starter[] {
       text: "Tighten the edit",
       tool: "remove_silences",
       read: `${plural(reading.pauses.count, "pause", "pauses")} over a second, ${formatSeconds(reading.pauses.totalUs)}`,
+    })
+  }
+
+  // Only the sounds the cut takes unasked: "liksom" and "altså" are counted
+  // under "What I noticed" but stay in the take unless named (fillers.ts).
+  const sounds = Object.entries(reading.fillers.byWord)
+    .filter(([word]) => isSoundFiller(word))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const soundCount = sounds.reduce((sum, [, count]) => sum + count, 0)
+  if (soundCount > 0) {
+    starters.push({
+      text: soundCount === 1 ? "Remove the filler" : `Remove the ${soundCount} fillers`,
+      tool: "remove_fillers",
+      read: sounds
+        .map(([word, count]) => (count === 1 ? `“${word}”` : `${count} × “${word}”`))
+        .join(", "),
     })
   }
 

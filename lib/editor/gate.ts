@@ -36,6 +36,8 @@ const GATE_SHARE = 0.3
  */
 export const EXEMPT_TOOLS = new Set([
   "remove_silences",
+  // Sounds only, never a spoken word (fillers.ts): the rule names fillers.
+  "remove_fillers",
   "add_captions",
   "reframe",
   "crop",

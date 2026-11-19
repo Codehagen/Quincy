@@ -18,7 +18,8 @@ import type { Scene } from "./types"
  * The route uses it only when `NODE_ENV !== "production"` and the request asks
  * for it (`?replay=1`). Production never constructs it.
  *
- * The script: "tighten" / "pauses" → remove_silences; "captions" →
+ * The script: "tighten" / "pauses" → remove_silences; "fillers" / "um" /
+ * "øh" → remove_fillers (with "liksom" and "altså" only when named); "captions" →
  * add_captions; "under N s" → delete_clip on clips from the end until the cut
  * fits (the request the gate is built for); "vertical" → reframe; "push in" /
  * "zoom" → punch_in on clip 1; "square" → reframe square; "phrase" makes
@@ -98,6 +99,12 @@ export function replayModel(
   } as V4
 }
 
+/**
+ * A request about fillers, by its words. Whole words only, so "number" and
+ * "umbrella" are not an "um"; "øh" stands alone or as "øh-ene".
+ */
+export const FILLER_REQUEST = /\bfillers?\b|\bums?\b|\buhs?\b|\berms?\b|(^|[^\p{L}])(øh|æh)/u
+
 function respond(
   options: CallOptions,
   scene: Scene | undefined,
@@ -135,6 +142,13 @@ function respond(
   if (/tighten|pause|silence|dead air/.test(said)) {
     calls.push({ toolName: "remove_silences", input: {} })
   }
+  if (FILLER_REQUEST.test(said)) {
+    const alsoCut = ["liksom", "altså"].filter((word) => said.includes(word))
+    calls.push({
+      toolName: "remove_fillers",
+      input: alsoCut.length > 0 ? { alsoCut } : {},
+    })
+  }
   if (/caption|subtitle/.test(said)) {
     calls.push({
       toolName: "add_captions",
@@ -163,7 +177,7 @@ function respond(
 
   if (calls.length === 0) {
     return text(
-      "Replay knows: tighten, add captions, under N s, make it vertical, push in."
+      "Replay knows: tighten, remove the fillers, add captions, under N s, make it vertical, push in."
     )
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isFiller } from "./fillers"
+import { fillerReceipt, fillerReceiptOf, isFiller, isSoundFiller, SOUND_FILLERS, WORD_FILLERS } from "./fillers"
 import { noticed, readTake, startersFor, STRONG_LINE_KEY, strongLineSlot } from "./reading"
 import { us, type Us } from "./time"
 import type { Word } from "./transcript"
@@ -127,6 +127,25 @@ describe("startersFor", () => {
   })
 })
 
+describe("the filler starter", () => {
+  it("offers to remove the sounds, counting only those the cut takes unasked", () => {
+    // PAUSED has an "um," and a "liksom": one sound, and liksom stays.
+    const starter = startersFor(readTake(PAUSED, s(8))).find((x) => x.tool === "remove_fillers")
+    expect(starter).toEqual({ text: "Remove the filler", tool: "remove_fillers", read: "“um”" })
+  })
+
+  it("names the count and the words when there are several", () => {
+    const take = [word("Øh,", 0, 0.2), word("so", 0.3, 0.5), word("um", 0.6, 0.8), word("øh", 0.9, 1.1), word("yes.", 1.2, 1.4)]
+    const starter = startersFor(readTake(take, s(1.5))).find((x) => x.tool === "remove_fillers")
+    expect(starter).toEqual({ text: "Remove the 3 fillers", tool: "remove_fillers", read: "2 × “øh”, “um”" })
+  })
+
+  it("is not offered when the only fillers are words", () => {
+    const take = [word("det", 0, 0.2), word("liksom", 0.3, 0.6), word("altså.", 0.7, 1)]
+    expect(startersFor(readTake(take, s(1.2))).map((x) => x.tool)).not.toContain("remove_fillers")
+  })
+})
+
 describe("the strong line", () => {
   it("is read from its slot on the transcript, and only when chosen", () => {
     expect(strongLineSlot({ [STRONG_LINE_KEY]: { state: "done", line: "It works." } })).toEqual({
@@ -144,5 +163,29 @@ describe("the strong line", () => {
     const push = startersFor(reading).find((x) => x.tool === "punch_in")
     expect(push?.text).toBe("Push in on “This is the line.”")
     expect(push?.read).toBe("The strong line of the take")
+  })
+})
+
+describe("the cut's filler lists", () => {
+  it("takes sounds unasked and keeps the words that are also real words", () => {
+    expect(isSoundFiller("Øh,")).toBe(true)
+    expect(isSoundFiller("liksom")).toBe(false)
+    expect(WORD_FILLERS).toEqual(["liksom", "altså"])
+    for (const sound of SOUND_FILLERS) expect(isFiller(sound)).toBe(true)
+  })
+})
+
+describe("the filler receipt", () => {
+  it("reads as count, the words most first, and the seconds saved", () => {
+    const removed = ["øh", "um,", "Øh,", "øh.", "um", "Um", "øh"]
+    expect(fillerReceipt(removed, 2_140_000)).toBe("Removed 7 fillers: 4 × øh, 3 × um · 2.1 s")
+    expect(fillerReceipt(["uh"], 400_000)).toBe("Removed 1 filler: uh · 0.4 s")
+  })
+
+  it("is found at the head of the tool's output, and nowhere else", () => {
+    const line = "Removed 2 fillers: um, øh · 0.8 s"
+    expect(fillerReceiptOf(`${line}\nThe cut runs 0:59.`)).toBe(line)
+    expect(fillerReceiptOf("There are no filler sounds in this take to cut.")).toBeNull()
+    expect(fillerReceiptOf(undefined)).toBeNull()
   })
 })

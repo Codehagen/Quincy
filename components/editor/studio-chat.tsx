@@ -8,6 +8,7 @@ import {
   Layers01Icon,
   Scissor01Icon,
   SubtitleIcon,
+  TextStrikethroughIcon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
@@ -43,6 +44,7 @@ import {
   type TakeReading,
 } from "@/lib/editor/reading"
 
+import { fillerReceiptOf } from "@/lib/editor/fillers"
 import type { CutsMessage } from "@/lib/editor/stream-parts"
 
 import type { BeatState, Director } from "./agent-cursor/director"
@@ -485,6 +487,14 @@ function Turn({
 
   const text = message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n\n")
   const pending = message.parts.filter(isToolUIPart).filter((p) => p.state === "approval-requested")
+  // A filler cut names what it took ("Removed 7 fillers: 4 × øh, 3 × um ·
+  // 2.1 s"), from the tool's own first line: the owner wanted the words by
+  // name, so the person sees sounds went and no speech.
+  const fillerLines = tools.flatMap((p) =>
+    toolNameOf(p.type) === "remove_fillers" && p.state === "output-available"
+      ? [fillerReceiptOf(p.output)].filter((line): line is string => line !== null)
+      : []
+  )
   const answered = message.parts.filter(isToolUIPart).filter((p) => p.state === "output-denied")
 
   // Undo and Redo act on the top of a stack, so the checkpoint acts only
@@ -549,6 +559,11 @@ function Turn({
         ) : settled && record ? (
           <div className="agent-appear flex flex-col gap-3">
             {text ? <Markdown preset="kit">{text}</Markdown> : null}
+            {fillerLines.map((line, index) => (
+              <p key={index} className="text-muted-foreground tabular-nums">
+                {line}
+              </p>
+            ))}
             {record.edits > 0 ? (
               <Checkpoint
                 label={
@@ -589,6 +604,7 @@ function ReadingLine() {
 /** What kind of edit a starter is, as the icon that leads its chip. */
 const STARTER_ICON: Record<string, IconSvgElement> = {
   remove_silences: Scissor01Icon,
+  remove_fillers: TextStrikethroughIcon,
   add_captions: SubtitleIcon,
   reframe: AspectRatioIcon,
   punch_in: ZoomInAreaIcon,

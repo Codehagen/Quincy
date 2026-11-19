@@ -430,3 +430,80 @@ describe("remove_silences input", () => {
   })
 })
 
+
+describe("remove_fillers", () => {
+  // "um" and "øh" go; "liksom" stays unless named. Gaps are short, so no
+  // pause goes with a filler and every cut is the filler and its padding.
+  const SPOKEN: Word[] = [
+    ["So", 1, 1.3],
+    ["um,", 1.4, 1.7],
+    ["this", 1.8, 2.1],
+    ["liksom", 2.2, 2.5],
+    ["works.", 2.6, 3],
+    ["Øh,", 3.1, 3.4],
+    ["yes.", 3.5, 3.9],
+  ].map(([text, start, end]) => ({
+    text: text as string,
+    startUs: secondsToUs(start as number),
+    endUs: secondsToUs(end as number),
+    confidence: 0.99,
+  }))
+
+  const captionTexts = (run: ReturnType<typeof harness>["run"]) =>
+    run
+      .snapshot()
+      .document.scenes[0].tracks.find((track) => track.kind === "caption")!
+      .elements.map((element) => element.name)
+
+  it("cuts the sounds, keeps the words and the captions, and says which went", async () => {
+    const { run, tools, streamed } = harness({ words: SPOKEN })
+    await call(tools.add_captions, {})
+    const before = streamed.length
+
+    const said = await call(tools.remove_fillers, {})
+
+    expect(said.split("\n")[0]).toBe("Removed 2 fillers: um, øh · 0.8 s")
+    // One press per filler, each a cut on a range the cursor can drag across.
+    const cuts = streamed.slice(before)
+    expect(cuts).toHaveLength(2)
+    expect(cuts.every((batch) => batch[0].target?.action === "cut" && batch[0].target.kind === "range")).toBe(true)
+    // Captions moved with the cut: every word that stayed is still on the lane.
+    expect(captionTexts(run)).toEqual(expect.arrayContaining(["So", "this", "liksom", "works.", "yes."]))
+  })
+
+  it("cuts liksom only when it is named", async () => {
+    const { tools } = harness({ words: SPOKEN })
+    const said = await call(tools.remove_fillers, { alsoCut: ["liksom"] })
+    expect(said.split("\n")[0]).toBe("Removed 3 fillers: liksom, um, øh · 1.2 s")
+  })
+
+  it("refuses a word that is not on the filler lists", () => {
+    const run = createRun({ initial: snapshot(), runId: "r", onCommit: () => {}, loadWords: async () => null })
+    const schema = editorTools(run).remove_fillers.inputSchema as unknown as {
+      safeParse: (value: unknown) => { success: boolean }
+    }
+    expect(schema.safeParse({ alsoCut: ["works"] }).success).toBe(false)
+    expect(schema.safeParse({ alsoCut: ["altså"] }).success).toBe(true)
+  })
+
+  it("says so and changes nothing when there is no filler, or no transcript", async () => {
+    const clean = harness({ words: WORDS })
+    expect(await call(clean.tools.remove_fillers, {})).toMatch(/no filler sounds/i)
+    expect(clean.streamed).toHaveLength(0)
+
+    const none = harness({ words: null })
+    expect(await call(none.tools.remove_fillers, {})).toMatch(/not been transcribed/i)
+    expect(none.streamed).toHaveLength(0)
+  })
+
+  it("aims every batch at something in the scene it lands on", async () => {
+    const { run, tools, streamed } = harness({ words: SPOKEN })
+    let current = run.snapshot().document.scenes[0]
+    await call(tools.remove_fillers, {})
+    expect(streamed.length).toBeGreaterThan(0)
+    for (const batch of streamed) {
+      for (const op of batch) expect(targetInScene(current, op.target!)).toBe(true)
+      current = applyToScene(current, batch, "agent")
+    }
+  })
+})

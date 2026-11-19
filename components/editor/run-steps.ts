@@ -14,6 +14,9 @@ export function stepTitle(beat: BeatState): string {
   if (beat.toolName === "remove_silences" && target?.kind === "range") {
     return target.spans.length > 1 ? `Cut ${target.spans.length} pauses` : "Cut a pause"
   }
+  if (beat.toolName === "remove_fillers" && target?.kind === "range") {
+    return target.spans.length > 1 ? `Cut ${target.spans.length} fillers` : "Cut a filler"
+  }
   if (beat.toolName === "delete_clip") return "Cut a line"
   // The self-check's fix (lib/editor/self-check.ts): not a tool the model calls.
   if (beat.toolName === "move_captions") return "Moved the captions"
