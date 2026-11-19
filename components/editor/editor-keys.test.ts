@@ -20,7 +20,11 @@ function node(
   return self
 }
 
-const press = (key: string, mod = false) => ({ key, metaKey: mod, ctrlKey: false })
+const press = (key: string, mod = false) => ({
+  key,
+  metaKey: mod,
+  ctrlKey: false,
+})
 
 describe("editorOwnsKey", () => {
   const body = node("BODY")
@@ -58,5 +62,17 @@ describe("editorOwnsKey", () => {
     expect(editorOwnsKey(toolbarButton, press(" "))).toBe(false)
     expect(editorOwnsKey(toolbarButton, press("Escape"))).toBe(true)
     expect(editorOwnsKey(clip, press("Backspace"))).toBe(true)
+  })
+
+  it("lets a letter through a focused toolbar button, but not its own keys", () => {
+    expect(editorOwnsKey(toolbarButton, press("j"))).toBe(true)
+    expect(editorOwnsKey(toolbarButton, press("Enter"))).toBe(false)
+    expect(editorOwnsKey(toolbarButton, press("ArrowLeft"))).toBe(false)
+  })
+
+  it("leaves every key to an open menu", () => {
+    const menu = node("DIV", ["[role=menu]"], body)
+    const item = node("DIV", ["[role=menuitem]"], menu)
+    expect(editorOwnsKey(item, press("s"))).toBe(false)
   })
 })

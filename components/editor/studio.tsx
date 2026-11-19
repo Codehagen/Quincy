@@ -7,6 +7,7 @@ import {
   Redo02Icon,
   ScissorIcon,
   Undo02Icon,
+  KeyboardIcon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 
@@ -20,10 +21,12 @@ import {
 } from "@/lib/editor/document"
 import { effectSpec, stepAmount } from "@/lib/editor/effect-catalogue"
 import { effectChips, type EffectChip } from "@/lib/editor/effect-lane"
+import { hintFor, keyActionFor } from "@/lib/editor/keymap"
 import {
   applyEffect,
   cropSpine,
   deleteAndRipple,
+  deleteTimelineRange,
   deleteSpeech,
   mainTrackId,
   moveEffect,
@@ -107,6 +110,7 @@ import { editorOwnsKey } from "./editor-keys"
 import { useExport } from "./use-export"
 import { useFrameThrottle } from "./use-frame-throttle"
 import { GAP_CLOSE, useReveal } from "./use-reveal"
+import { ShortcutSheet } from "./shortcut-sheet"
 import { usePlayer, usePlayheadSelector } from "./use-player"
 
 /**
@@ -1238,48 +1242,215 @@ export function Studio({
   ])
 
   /**
+   * The in and out marks. Not in the document: they are where the person is
+   * pointing, like the playhead, and an undo that moved them would be undoing
+   * something nobody did.
+   */
+  const [marks, setMarks] = React.useState<{
+    inUs: number | null
+    outUs: number | null
+  }>({ inUs: null, outUs: null })
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
+
+  /** Every place a cut falls on the spine, with the start and the end. */
+  const cutPoints = React.useMemo(() => {
+    const spine = scene ? findMainTrack(scene) : null
+    const points = new Set<number>([0])
+    for (const element of spine?.elements ?? []) {
+      points.add(element.startUs)
+      points.add(element.startUs + element.durationUs)
+    }
+    return [...points].sort((x, y) => x - y)
+  }, [scene])
+
+  const seekBy = React.useCallback(
+    (deltaUs: number) => {
+      const next = Math.min(
+        durationUs,
+        Math.max(0, player.readPlayhead() + deltaUs)
+      )
+      player.seekTo(us(Math.round(next)))
+    },
+    [player, durationUs]
+  )
+
+  /**
+   * Q and W: the clip under the playhead loses everything before (or after)
+   * the playhead, and the spine closes up. After Q the frame that was under
+   * the playhead is now the clip's first, so the playhead goes there.
+   */
+  const trimToPlayhead = React.useCallback(
+    (edge: "start" | "end") => {
+      if (!scene || !trackId || !clipAtPlayhead) return
+      const at = player.readPlayhead()
+      const clipEnd = clipAtPlayhead.startUs + clipAtPlayhead.durationUs
+      const delta =
+        edge === "start" ? at - clipAtPlayhead.startUs : at - clipEnd
+      if (delta === 0) return
+      commit(trimEdge(scene, trackId, clipAtPlayhead.id, edge, delta))
+      if (edge === "start") player.seekTo(us(clipAtPlayhead.startUs))
+    },
+    [commit, scene, trackId, clipAtPlayhead, player]
+  )
+
+  const cutMarked = React.useCallback(() => {
+    if (!scene || marks.inUs === null || marks.outUs === null) return
+    const ops = deleteTimelineRange(scene, marks.inUs, marks.outUs)
+    if (ops.length === 0) return
+    commit(ops)
+    player.seekTo(us(Math.round(Math.min(marks.inUs, marks.outUs))))
+    setMarks({ inUs: null, outUs: null })
+  }, [commit, scene, marks, player])
+
+  /**
    * Keyboard, because this is an editor. Who owns a press (a text field, a
    * focused control, the chat margin, or the editor) is decided in
-   * editor-keys.ts, where it is tested.
+   * editor-keys.ts; what a press means is the table in lib/editor/keymap.ts,
+   * which the shortcut sheet reads too. Both are tested.
    */
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (!editorOwnsKey(target, event)) return
+  const onKey = React.useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!editorOwnsKey(target, event)) return
 
-      if (event.key === " ") {
-        event.preventDefault()
+    const action = keyActionFor(event)
+    if (!action) return
+
+    // Escape is "never mind": it never swallows the press, so a dialog or a
+    // menu still closes on it.
+    if (action !== "deselect") event.preventDefault()
+
+    // While Quincy cuts, the document is read-only: the keys that only look
+    // still work, the ones that edit do nothing.
+    const edits =
+      action === "split" ||
+      action === "delete-range" ||
+      action === "trim-start" ||
+      action === "trim-end" ||
+      action === "delete" ||
+      action === "add-zoom" ||
+      action === "undo" ||
+      action === "redo"
+    if (edits && running) return
+
+    const frameUs = 1_000_000 / fps
+    const at = player.readPlayhead()
+
+    switch (action) {
+      case "toggle-play":
         player.toggle()
-      } else if (event.key === "Escape") {
-        // Drops all three. Escape means "never mind" everywhere else in the
-        // app, and both a selected effect and a selected phrase leave a
-        // destructive button sitting in a toolbar.
+        break
+      case "play-forward":
+        // Pressed while playing it speeds up, the way a shuttle does.
+        if (player.playing) setRate((current) => stepRate(current, 1))
+        else player.play()
+        break
+      case "pause":
+        player.pause()
+        setRate(1)
+        break
+      case "back-second":
+        player.pause()
+        seekBy(-1_000_000)
+        break
+      case "frame-back":
+        player.pause()
+        seekBy(-frameUs)
+        break
+      case "frame-forward":
+        player.pause()
+        seekBy(frameUs)
+        break
+      case "second-back":
+        seekBy(-1_000_000)
+        break
+      case "second-forward":
+        seekBy(1_000_000)
+        break
+      case "previous-cut": {
+        // A hair of slack, so pressing ↑ while parked on a cut goes to the one
+        // before it rather than to where it already is.
+        const before = cutPoints.filter((point) => point < at - frameUs / 2)
+        player.seekTo(us(before.at(-1) ?? 0))
+        break
+      }
+      case "next-cut": {
+        const after = cutPoints.find((point) => point > at + frameUs / 2)
+        player.seekTo(us(Math.min(after ?? durationUs, durationUs)))
+        break
+      }
+      case "go-start":
+        player.seekTo(us(0))
+        break
+      case "go-end":
+        player.seekTo(us(durationUs))
+        break
+      case "slower":
+        setRate((current) => stepRate(current, -1))
+        break
+      case "faster":
+        setRate((current) => stepRate(current, 1))
+        break
+      case "split":
+        split()
+        break
+      case "mark-in":
+        setMarks((current) => ({ ...current, inUs: at }))
+        break
+      case "mark-out":
+        setMarks((current) => ({ ...current, outUs: at }))
+        break
+      case "clear-marks":
+        setMarks({ inUs: null, outUs: null })
+        break
+      case "delete-range":
+        cutMarked()
+        break
+      case "trim-start":
+        trimToPlayhead("start")
+        break
+      case "trim-end":
+        trimToPlayhead("end")
+        break
+      case "delete":
+        remove()
+        break
+      case "add-zoom":
+        addZoom()
+        break
+      case "undo":
+        undo()
+        break
+      case "redo":
+        redo()
+        break
+      case "deselect":
+        // Drops everything. Escape means "never mind" everywhere else in the
+        // app, and a selected effect, a selected phrase and a marked range
+        // each leave something destructive one key away.
         setSelectedEffect(null)
         setSelectedId(null)
         setTranscriptSelection(null)
-      } else if (event.key === "<" || event.key === ">") {
-        event.preventDefault()
-        setRate((current) => stepRate(current, event.key === ">" ? 1 : -1))
-      } else if (event.key === "s" && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault()
-        split()
-      } else if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault()
-        remove()
-      } else if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "z"
-      ) {
-        event.preventDefault()
-        if (running) return
-        if (event.shiftKey) redo()
-        else undo()
-      }
+        setMarks({ inUs: null, outUs: null })
+        break
+      case "timeline-in":
+        zoom.zoomIn()
+        break
+      case "timeline-out":
+        zoom.zoomOut()
+        break
+      case "timeline-fit":
+        zoom.fit()
+        break
+      case "shortcuts":
+        setShortcutsOpen(true)
+        break
     }
+  })
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [player, split, remove, undo, redo, running])
+  React.useEffect(() => {
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   if (!scene) return null
 
@@ -1320,6 +1491,17 @@ export function Studio({
               side="bottom"
               onClick={redo}
               disabled={running || !canRedo}
+            />
+            <DeskIconButton
+              icon={KeyboardIcon}
+              label="Keyboard shortcuts"
+              shortcut={["?"]}
+              side="bottom"
+              onClick={() => setShortcutsOpen(true)}
+            />
+            <ShortcutSheet
+              open={shortcutsOpen}
+              onOpenChange={setShortcutsOpen}
             />
           </div>
         </>
@@ -1425,7 +1607,7 @@ export function Studio({
           <DeskIconButton
             icon={ScissorIcon}
             label="Split"
-            shortcut={["S"]}
+            shortcut={hintFor("split")}
             onClick={split}
             disabled={running}
           />
@@ -1454,7 +1636,7 @@ export function Studio({
           <DeskIconButton
             icon={ZoomInAreaIcon}
             label="Add a zoom at the playhead"
-            shortcut={["Z"]}
+            shortcut={hintFor("add-zoom")}
             onClick={addZoom}
             disabled={running || !clipAtPlayhead}
           />
@@ -1580,6 +1762,7 @@ export function Studio({
           />
         ) : (
           <StudioLanes
+            marks={marks}
             onAddCaptions={
               asset?.id ? () => void addCaptionsByHand() : undefined
             }

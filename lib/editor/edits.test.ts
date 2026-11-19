@@ -4,6 +4,7 @@ import { createScene, DEFAULT_CAPTION_STYLE } from "./document"
 import {
   applyEffect,
   clampTrimDelta,
+  deleteTimelineRange,
   clearZoom,
   cropClip,
   cropSpine,
@@ -99,6 +100,50 @@ function run(base: Scene, ops: ReturnType<typeof splitAt>) {
 
   return findMainTrack(result.snapshot.document.scenes[0])!.elements
 }
+
+describe("deleteTimelineRange", () => {
+  it("cuts a range across a cut and closes the gap", () => {
+    const base = scene()
+    // 5s into clip 0 to 3s into clip 1: 8 seconds out of 30.
+    const elements = run(
+      base,
+      deleteTimelineRange(base, secondsToUs(5), secondsToUs(13))
+    )
+
+    const total = elements.reduce((sum, e) => sum + e.durationUs, 0)
+    expect(total).toBe(secondsToUs(22))
+    // No gap: each clip starts where the last ended.
+    for (let i = 1; i < elements.length; i++) {
+      expect(elements[i].startUs).toBe(
+        elements[i - 1].startUs + elements[i - 1].durationUs
+      )
+    }
+    const first = elements[0] as VideoElement
+    const second = elements[1] as VideoElement
+    expect(first.trimEndUs).toBe(secondsToUs(5))
+    expect(second.trimStartUs).toBe(secondsToUs(13))
+  })
+
+  it("takes a range out of the middle of one clip", () => {
+    const base = scene()
+    const elements = run(
+      base,
+      deleteTimelineRange(base, secondsToUs(22), secondsToUs(24))
+    )
+    expect(elements).toHaveLength(4)
+    expect(elements.reduce((sum, e) => sum + e.durationUs, 0)).toBe(
+      secondsToUs(28)
+    )
+  })
+
+  it("does nothing for an empty range, and never empties the spine", () => {
+    const base = scene()
+    expect(deleteTimelineRange(base, secondsToUs(4), secondsToUs(4))).toEqual(
+      []
+    )
+    expect(deleteTimelineRange(base, 0, secondsToUs(30))).toEqual([])
+  })
+})
 
 describe("splitAt", () => {
   it("cuts a clip into two that together play what one did", () => {

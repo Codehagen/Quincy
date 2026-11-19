@@ -276,6 +276,87 @@ export function deleteSpeech(
 }
 
 /**
+ * Cut a stretch of the timeline out of the spine, between an in and an out.
+ *
+ * What I, O and Delete mean: the range is in timeline time, because that is
+ * where the person marked it, and each clip it crosses loses only its own
+ * share. Mapping it to source time per clip, rather than once for the whole
+ * spine, matters when the same footage is on the spine twice: a source range
+ * would cut both copies, and only one was marked.
+ *
+ * Ripples like every spine delete, and refuses to empty the spine for the
+ * reason `deleteSpeech` gives.
+ */
+export function deleteTimelineRange(
+  scene: Scene,
+  fromUs: number,
+  toUs: number
+): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+
+  const start = Math.min(fromUs, toUs)
+  const end = Math.max(fromUs, toUs)
+  if (end - start <= 0) return []
+
+  let changed = false
+
+  const cut = spine.elements.flatMap((element): TimelineElement[] => {
+    if (element.kind !== "video") return [element]
+    const clip = element as VideoElement
+    const clipEnd = clip.startUs + clip.durationUs
+    const overlapFrom = Math.max(start, clip.startUs)
+    const overlapTo = Math.min(end, clipEnd)
+    if (overlapTo <= overlapFrom) return [element]
+
+    const rate = clipRate(clip)
+    const source: UsRange = {
+      startUs: us(
+        Math.round(clip.trimStartUs + (overlapFrom - clip.startUs) * rate)
+      ),
+      endUs: us(
+        Math.round(clip.trimStartUs + (overlapTo - clip.startUs) * rate)
+      ),
+    }
+    const pieces = splitBySourceRanges(clip, [source], newElementId)
+    if (pieces.length === 1 && pieces[0] === element) return pieces
+
+    changed = true
+    return pieces.map((piece) => ({
+      ...piece,
+      provenance: stampFields(piece.provenance, "user", [
+        "startUs",
+        "durationUs",
+        "trimStartUs",
+        "trimEndUs",
+      ]),
+    }))
+  })
+
+  if (!changed || cut.length === 0) return []
+
+  const remaining = layOut(cut)
+
+  return aimed(
+    [
+      {
+        op: "replace_elements",
+        sceneId: scene.id,
+        trackId: spine.id,
+        elements: remaining,
+      },
+      ...captionsFollowing(scene, spine.id, remaining),
+    ],
+    {
+      action: "cut",
+      kind: "range",
+      trackId: spine.id,
+      spans: [{ startUs: us(start), endUs: us(end) }],
+    }
+  )
+}
+
+/**
  * Trim one edge of a clip.
  *
  * The timeline duration and the source trim move together, because they are two

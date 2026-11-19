@@ -51,11 +51,7 @@ import {
 } from "./studio-parts"
 import { useFrameThrottle } from "./use-frame-throttle"
 import type { Player } from "./use-player"
-import {
-  revealDelayMs,
-  revealOffsetPx,
-  type Reveal,
-} from "./use-reveal"
+import { revealDelayMs, revealOffsetPx, type Reveal } from "./use-reveal"
 
 /**
  * Lanes — locked in. Round 2 chose this; ported from
@@ -172,7 +168,13 @@ export function StudioLanes({
   onDropMedia,
   onMoveElement,
   wordEdgesUs,
+  marks,
 }: {
+  /**
+   * The in and out marks (I and O). Either may be unset; with both, the
+   * stretch between them is what X cuts out.
+   */
+  marks?: { inUs: number | null; outUs: number | null }
   scene: Scene
   player: Player
   playing: boolean
@@ -334,20 +336,21 @@ export function StudioLanes({
     excludeElementId: string,
     free: boolean
   ) =>
-    snapSpan(startUs, durationUs, pointsFor(excludeElementId), snapThreshold, free)
-      .atUs
+    snapSpan(
+      startUs,
+      durationUs,
+      pointsFor(excludeElementId),
+      snapThreshold,
+      free
+    ).atUs
 
   /* ── Drop from the library ──────────────────────────────────────────── */
   const dropLine = React.useRef<HTMLDivElement | null>(null)
   const isMediaDrag = (event: React.DragEvent) =>
     Array.from(event.dataTransfer.types).includes(MEDIA_DRAG_TYPE)
   const dropUs = (event: React.DragEvent) =>
-    snap(
-      clientXToUs(event.clientX),
-      pointsFor(),
-      snapThreshold,
-      event.shiftKey
-    ).atUs
+    snap(clientXToUs(event.clientX), pointsFor(), snapThreshold, event.shiftKey)
+      .atUs
   const showDropLine = (atUs: number | null) => {
     const line = dropLine.current
     if (!line) return
@@ -696,7 +699,9 @@ export function StudioLanes({
             showDropLine(dropUs(event))
           }}
           onDragLeave={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node | null))
+            if (
+              event.currentTarget.contains(event.relatedTarget as Node | null)
+            )
               return
             showDropLine(null)
           }}
@@ -739,7 +744,9 @@ export function StudioLanes({
           >
             <TimeRuler
               spanUs={span}
-              marks={laneWidth > 0 ? Math.max(2, Math.floor(laneWidth / 96)) : 7}
+              marks={
+                laneWidth > 0 ? Math.max(2, Math.floor(laneWidth / 96)) : 7
+              }
             />
           </div>
           <LivePlayhead player={player} spanUs={span} live={playing} />
@@ -771,6 +778,13 @@ export function StudioLanes({
                 {formatClock(Math.max(band.fromUs, band.toUs))}
               </span>
             </div>
+          ) : null}
+
+          {/* The marks. A rule at each one set, and with both a tint between
+              them on every lane, because X cuts that stretch out of the cut
+              and the clips under it should be visibly the ones that go. */}
+          {marks && (marks.inUs !== null || marks.outUs !== null) ? (
+            <MarkedRange marks={marks} spanUs={span} />
           ) : null}
 
           {/* The hover head. Quieter than the playhead — it is a question, not
@@ -820,7 +834,9 @@ export function StudioLanes({
                 track={track}
                 overlay={
                   scanning && track.id === findMainTrack(scene)?.id ? (
-                    <ScanSweep widthPercent={(sceneDurationUs(scene) / span) * 100} />
+                    <ScanSweep
+                      widthPercent={(sceneDurationUs(scene) / span) * 100}
+                    />
                   ) : null
                 }
                 emptyContent={
@@ -872,7 +888,12 @@ export function StudioLanes({
                       }
                       snapStart={snapStart}
                       onMove={(startUs, toTrackId) =>
-                        onMoveElement?.(track.id, element.id, startUs, toTrackId)
+                        onMoveElement?.(
+                          track.id,
+                          element.id,
+                          startUs,
+                          toTrackId
+                        )
                       }
                     />
                   )
@@ -915,7 +936,7 @@ function EffectRow({
             button does. Text only, and inert: a press here still seeks. */}
         {empty ? (
           <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-kit-meta whitespace-nowrap text-kit-ink-muted select-none">
-            Zooms go here. + Zoom adds one.
+            Zooms go here. Press Z to add one at the playhead.
           </span>
         ) : null}
         {children}
@@ -1273,7 +1294,7 @@ function EffectChipView({
             ? "bg-kit-ink text-kit-ground"
             : "bg-kit-selected text-kit-ink",
           "transition-colors duration-150 ease-out",
-          "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+          "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
           movable ? "cursor-grab active:cursor-grabbing" : "cursor-default",
           preview && "shadow-kit-lifted"
         )}
@@ -1437,7 +1458,7 @@ function EffectEdge({
         "group-hover/chip:opacity-100 focus-visible:opacity-100",
         // Touch has no hover to reveal them, so they show at rest there.
         "pointer-coarse:opacity-60 pointer-coarse:focus-visible:opacity-100",
-        "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+        "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
         // Inside the box rather than straddling its edge. Chips butt against
         // each other on a packed row, and a handle hanging 6px past the end
         // would sit on top of the neighbour it is not part of.
@@ -1642,7 +1663,10 @@ function Clip({
             .map((node) => (node as HTMLElement).closest?.("[data-track-id]"))
             .find(Boolean) as HTMLElement | undefined
           const toTrackId = under?.dataset.trackId ?? null
-          onMove?.(Math.round(startUs), toTrackId === trackId ? null : toTrackId)
+          onMove?.(
+            Math.round(startUs),
+            toTrackId === trackId ? null : toTrackId
+          )
           try {
             event.currentTarget.releasePointerCapture(event.pointerId)
           } catch {
@@ -1665,7 +1689,7 @@ function Clip({
           // well: the background change alone shows only on the strip.
           "transition-[background-color,box-shadow] duration-150 ease-out",
           "hover:bg-kit-row-hover hover:shadow-kit-object",
-          "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+          "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
           selected && "ring-2 ring-kit-ink"
         )}
       >
@@ -1864,7 +1888,7 @@ function TrimHandle({
         "pointer-coarse:opacity-60 pointer-coarse:focus-visible:opacity-100",
         trimming && "opacity-100 pointer-coarse:opacity-100",
         // The effect chip's handle ring, not the browser's 1px outline.
-        "outline-hidden focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus",
+        "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
         // Inside the clip, as the effect chips' handles are. Straddling the
         // edge put the last clip's end handle 6px past the lane, which gave
         // the lanes 6px of sideways scroll. The hit area keeps its size (the
@@ -1969,5 +1993,59 @@ function CaptionChip({
         </span>
       ) : null}
     </span>
+  )
+}
+
+function MarkedRange({
+  marks,
+  spanUs,
+}: {
+  marks: { inUs: number | null; outUs: number | null }
+  spanUs: number
+}) {
+  const at = (timeUs: number) => `${(timeUs / Math.max(1, spanUs)) * 100}%`
+  const both = marks.inUs !== null && marks.outUs !== null
+  const from = both ? Math.min(marks.inUs!, marks.outUs!) : null
+  const to = both ? Math.max(marks.inUs!, marks.outUs!) : null
+
+  return (
+    <>
+      {both ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 z-20 bg-kit-ink/10 select-none"
+          style={{
+            left: at(from!),
+            width: `${((to! - from!) / Math.max(1, spanUs)) * 100}%`,
+          }}
+        >
+          <span className="absolute top-0.5 left-1 rounded border border-kit-hairline bg-kit-object px-1 text-kit-mono whitespace-nowrap text-kit-ink-muted tabular-nums">
+            {formatClock(from!)}–{formatClock(to!)} · X cuts it
+          </span>
+        </div>
+      ) : null}
+      {marks.inUs !== null ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 z-20 w-0.5 -translate-x-1/2 bg-kit-ink select-none"
+          style={{ left: at(marks.inUs) }}
+        >
+          <span className="absolute bottom-0 left-1 text-kit-mono text-kit-ink">
+            I
+          </span>
+        </div>
+      ) : null}
+      {marks.outUs !== null ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 z-20 w-0.5 -translate-x-1/2 bg-kit-ink select-none"
+          style={{ left: at(marks.outUs) }}
+        >
+          <span className="absolute right-1 bottom-0 text-kit-mono text-kit-ink">
+            O
+          </span>
+        </div>
+      ) : null}
+    </>
   )
 }
