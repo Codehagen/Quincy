@@ -40,6 +40,7 @@ export function StudioPreview({
   fps,
   durationUs,
   background,
+  playbackRate = 1,
 }: {
   player: EditorPlayer
   scene: Scene
@@ -48,6 +49,8 @@ export function StudioPreview({
   fps: number
   durationUs: number
   background: string
+  /** The preview's speed only; the document and the export stay in real time. */
+  playbackRate?: number
 }) {
   const inputProps = React.useMemo<CompositionProps>(
     () => ({ scene, media, background }),
@@ -67,6 +70,7 @@ export function StudioPreview({
         inputProps={inputProps}
         durationInFrames={durationInFrames(durationUs, fps)}
         fps={fps}
+        playbackRate={playbackRate}
         compositionWidth={canvas.width}
         compositionHeight={canvas.height}
         // Fits whichever axis runs out first, which is what makes a 9:16

@@ -16,6 +16,7 @@ import {
   cssTransformOrigin,
   resolveVisual,
 } from "@/lib/editor/effects"
+import { cutEdges, edgeGain, type AudioEdges } from "@/lib/editor/audio-edges"
 import { durationInFrames, framesFor, usForFrame } from "@/lib/editor/frames"
 import type {
   CaptionElement,
@@ -99,8 +100,9 @@ export function EditorComposition({
          * not. Visible only by looking at it.
          */
         .filter((track) => !track.hidden)
-        .map((track) =>
-          track.elements.map((element) => {
+        .map((track) => {
+          const edges = cutEdges(track)
+          return track.elements.map((element) => {
             if (element.hidden) return null
 
             const from = framesFor(element.startUs, fps)
@@ -118,7 +120,12 @@ export function EditorComposition({
                   // the moment something goes wrong.
                   name={element.name}
                 >
-                  <Clip element={element} media={media[element.mediaId]} />
+                  <Clip
+                    element={element}
+                    media={media[element.mediaId]}
+                    edges={edges.get(element.id)}
+                    length={length}
+                  />
                 </Sequence>
               )
             }
@@ -151,7 +158,7 @@ export function EditorComposition({
 
             return null
           })
-        )}
+        })}
     </AbsoluteFill>
   )
 }
@@ -174,9 +181,15 @@ export function EditorComposition({
 function Clip({
   element,
   media,
+  edges,
+  length,
 }: {
   element: VideoElement
   media: CompositionMedia | undefined
+  /** Which ends of this clip are cuts, to soften (audio-edges.ts). */
+  edges?: AudioEdges
+  /** The clip's length in frames, for the ramp at its end. */
+  length: number
 }) {
   const { fps } = useVideoConfig()
   const visual = useVisual(element)
@@ -218,7 +231,14 @@ function Clip({
           src={src}
           trimBefore={framesFor(element.trimStartUs, fps)}
           trimAfter={framesFor(element.trimEndUs, fps)}
-          volume={element.muted ? 0 : element.volume}
+          volume={
+            element.muted
+              ? 0
+              : edges && (edges.in || edges.out)
+                ? (frame: number) =>
+                    element.volume * edgeGain(frame, length, edges)
+                : element.volume
+          }
           style={{
             width: "100%",
             height: "100%",
