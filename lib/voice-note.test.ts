@@ -5,9 +5,11 @@ import {
   MAX_AUDIO_BYTES,
   MAX_AUDIO_SECONDS,
   TRANSCRIBE_COST_MICROS_PER_SECOND,
+  voiceNoteCostMicrosPerSecond,
   transcribeVoiceNote,
   type TranscribeCall,
 } from "./voice-note"
+import { DEEPGRAM_COST_MICROS_PER_SECOND } from "./editor/ingest-limits"
 
 /**
  * The model call itself is not exercised here — no network, no key, following
@@ -223,6 +225,20 @@ describe("ceilings", () => {
     // Gateway dashboard is the invoice. Pinned so a stray edit to the
     // per-second rate shows up as a failing assertion about money.
     expect(TRANSCRIBE_COST_MICROS_PER_SECOND * 60).toBe(6_000)
+  })
+
+  it("prices each provider at its own rate", () => {
+    // The same Deepgram request reads the same on /credits from a voice note
+    // as from the editor; everything else keeps the Gateway's estimate.
+    expect(voiceNoteCostMicrosPerSecond({})).toBe(
+      TRANSCRIBE_COST_MICROS_PER_SECOND
+    )
+    expect(
+      voiceNoteCostMicrosPerSecond({ VOICE_NOTE_TRANSCRIBER: "deepgram" })
+    ).toBe(DEEPGRAM_COST_MICROS_PER_SECOND)
+    expect(
+      voiceNoteCostMicrosPerSecond({ VOICE_NOTE_TRANSCRIBER: "self-hosted" })
+    ).toBe(TRANSCRIBE_COST_MICROS_PER_SECOND)
   })
 
   it("caps a note at ten minutes", () => {

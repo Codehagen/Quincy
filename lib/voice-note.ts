@@ -1,7 +1,8 @@
 import { db } from "./db"
 import { usageEvent } from "./schema-app"
 import { DEFAULT_GATEWAY_TRANSCRIBE_MODEL } from "./transcription/gateway"
-import { speechToTextFor } from "./transcription"
+import { DEEPGRAM_COST_MICROS_PER_SECOND } from "./editor/ingest-limits"
+import { speechProviderFor, speechToTextFor } from "./transcription"
 
 /**
  * Audio in, words out. See plans/018.
@@ -98,6 +99,23 @@ export const VOICE_NOTE_COOLDOWN_MS = 30 * 1000
  * through the `x:read`-shaped path below rather than through `recordUsage`.
  */
 export const TRANSCRIBE_COST_MICROS_PER_SECOND = 100
+
+/**
+ * The rate for the provider voice notes are set to (`VOICE_NOTE_TRANSCRIBER`).
+ *
+ * Deepgram at its own estimate, the one the editor meters the same requests
+ * at (diarization included), so the same spend reads the same on /credits.
+ * A server we run is billed per hour rather than per second, so it keeps the
+ * Gateway's rate: over-reporting trips a ceiling early, under-reporting
+ * spends quietly.
+ */
+export function voiceNoteCostMicrosPerSecond(
+  env: Record<string, string | undefined> = process.env
+): number {
+  return speechProviderFor("voice-note", env) === "deepgram"
+    ? DEEPGRAM_COST_MICROS_PER_SECOND
+    : TRANSCRIBE_COST_MICROS_PER_SECOND
+}
 
 export type TranscriptionOutcome =
   | {
@@ -288,7 +306,7 @@ export async function recordTranscriptionCost(
       id: `use_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
       userId,
       model: "voice:transcribe",
-      costMicros: Math.round(TRANSCRIBE_COST_MICROS_PER_SECOND * seconds),
+      costMicros: Math.round(voiceNoteCostMicrosPerSecond() * seconds),
     })
   } catch (cause) {
     console.error("[voice-note] cost not recorded:", cause)
