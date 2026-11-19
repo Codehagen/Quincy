@@ -323,14 +323,23 @@ export function useCutsStream({
     void stop()
   }, [director, messages, stop, cancelCheck, streaming, readBack])
 
+  /**
+   * Esc is bound once per run, not once per render. `halt` changes with
+   * every streamed part, so the listener was swapped on each render; a
+   * keydown listener ahead of it that sets state (the desk's Esc clears its
+   * selections) can re-render synchronously mid-dispatch, and then the old
+   * listener is removed and the new one, added during the dispatch, is not
+   * called. About one press in three was lost in the mock that way.
+   */
+  const haltOnEscape = React.useEffectEvent(halt)
   React.useEffect(() => {
     if (!isBusy) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") halt()
+      if (event.key === "Escape") haltOnEscape()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [isBusy, halt])
+  }, [isBusy])
 
   /** Try the failed request again, as the same kind of run it was. */
   const retry = React.useCallback(
