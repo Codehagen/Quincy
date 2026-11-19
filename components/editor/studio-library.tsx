@@ -9,7 +9,8 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import { Progress, SearchField, Text } from "@/components/kit"
+import { SearchField, Text } from "@/components/kit"
+import { Friend } from "@/components/mascot/friend"
 import type { PlaceAs } from "@/lib/editor/placement"
 import {
   UploadError,
@@ -20,6 +21,7 @@ import {
 import type { MediaEntry } from "./studio"
 import { MEDIA_DRAG_TYPE } from "./studio-lanes"
 import { formatClockTenths } from "./studio-parts"
+import { UploadWorking } from "./upload-working"
 
 /**
  * The library: what this project is cut from (plans/036 phase E, plan 042
@@ -97,7 +99,11 @@ export function StudioLibrary({
         : "video/*,audio/*,image/png,image/jpeg,image/webp,image/gif"
 
   const heading =
-    filter === "image" ? "Images" : filter === "audio" ? "Sounds" : "This project"
+    filter === "image"
+      ? "Images"
+      : filter === "audio"
+        ? "Sounds"
+        : "This project"
 
   return (
     <div
@@ -105,7 +111,11 @@ export function StudioLibrary({
       onDragOver={(event) => {
         // Nothing lands while a run holds the document: the browser shows
         // "no drop" rather than taking a file the library could not keep.
-        if (onAdded && !disabled && Array.from(event.dataTransfer.types).includes("Files"))
+        if (
+          onAdded &&
+          !disabled &&
+          Array.from(event.dataTransfer.types).includes("Files")
+        )
           event.preventDefault()
       }}
       onDrop={(event) => {
@@ -117,7 +127,9 @@ export function StudioLibrary({
     >
       <div className="flex shrink-0 flex-col gap-3 p-3 pb-2">
         <div className="flex items-center justify-between gap-2 px-1">
-          <h2 className="text-kit-body font-kit-strong text-kit-ink">{heading}</h2>
+          <h2 className="text-kit-body font-kit-strong text-kit-ink">
+            {heading}
+          </h2>
           {onAdded ? (
             <button
               type="button"
@@ -142,13 +154,10 @@ export function StudioLibrary({
           }}
         />
         {busy && progress ? (
-          <Progress
+          <UploadWorking
+            progress={progress}
             label={PHASE_LABEL[progress.phase]}
-            value={
-              progress.fraction === null
-                ? null
-                : Math.round(progress.fraction * 100)
-            }
+            size="panel"
           />
         ) : null}
         {error ? (
@@ -167,15 +176,21 @@ export function StudioLibrary({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {shown.length === 0 ? (
-          <p className="px-1 pt-2 text-kit-small text-kit-ink-muted">
-            {ofKind.length === 0
-              ? filter === "image"
-                ? "No pictures yet. Add a screenshot, a logo or a photo."
-                : filter === "audio"
-                  ? "No music yet. Add a track you have the rights to."
-                  : "No media in this project yet."
-              : `Nothing named “${query.trim()}”.`}
-          </p>
+          <div className="flex flex-col items-center gap-2 px-1 pt-6 text-center">
+            {/* Nothing here is the friend's turn too, not a grey line. */}
+            {ofKind.length === 0 && !busy ? (
+              <Friend size={40} state="idle" className="text-kit-ink" />
+            ) : null}
+            <p className="text-kit-small text-balance text-kit-ink-muted">
+              {ofKind.length === 0
+                ? filter === "image"
+                  ? "No pictures yet. Add a screenshot, a logo or a photo."
+                  : filter === "audio"
+                    ? "No music yet. Add a track you have the rights to."
+                    : "No media in this project yet."
+                : `Nothing named “${query.trim()}”.`}
+            </p>
+          </div>
         ) : (
           <ul className="grid grid-cols-2 gap-x-2 gap-y-3">
             {shown.map((m) => (
@@ -189,7 +204,10 @@ export function StudioLibrary({
                 }}
               >
                 <MediaThumb entry={m} />
-                <span className="truncate px-0.5 text-kit-small text-kit-ink" title={m.filename}>
+                <span
+                  className="truncate px-0.5 text-kit-small text-kit-ink"
+                  title={m.filename}
+                >
                   {m.filename}
                 </span>
                 {onPlace ? (
@@ -235,7 +253,9 @@ function actionsFor(entry: MediaEntry): { as: PlaceAs; label: string }[] {
       return [
         { as: "spine", label: "At the end" },
         { as: "overlay", label: "As b-roll" },
-        ...(entry.hasAudio ? [{ as: "music" as const, label: "As sound" }] : []),
+        ...(entry.hasAudio
+          ? [{ as: "music" as const, label: "As sound" }]
+          : []),
       ]
   }
 }
@@ -267,12 +287,21 @@ function MediaThumb({ entry }: { entry: MediaEntry }) {
             aspectRatio: `${strip.tileWidth} / ${strip.tileHeight}`,
             backgroundImage: `url(${strip.url})`,
             backgroundSize: `${strip.tiles * 100}% 100%`,
-            backgroundPosition: strip.tiles > 1 ? `${(index / (strip.tiles - 1)) * 100}% 0` : "0 0",
+            backgroundPosition:
+              strip.tiles > 1
+                ? `${(index / (strip.tiles - 1)) * 100}% 0`
+                : "0 0",
           }}
         />
       ) : (
         <HugeiconsIcon
-          icon={kind === "audio" ? MusicNote01Icon : kind === "image" ? Image01Icon : Video01Icon}
+          icon={
+            kind === "audio"
+              ? MusicNote01Icon
+              : kind === "image"
+                ? Image01Icon
+                : Video01Icon
+          }
           size={18}
           className="text-kit-ink-muted"
           aria-hidden="true"

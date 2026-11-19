@@ -3,7 +3,8 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { Progress, Text, TextButton, TextLink } from "@/components/kit"
+import { Text, TextButton, TextLink } from "@/components/kit"
+import { Friend } from "@/components/mascot/friend"
 import {
   UploadError,
   uploadAndOpen,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/editor/upload-client"
 
 import { RecordTakePanel } from "./record-take-panel"
+import { UploadWorking } from "./upload-working"
 
 /**
  * Drop a recording here and end up in the editor.
@@ -154,27 +156,19 @@ export function UploadDrop({
       />
 
       {busy && progress ? (
-        <div className="mx-auto flex max-w-80 flex-col gap-kit-related text-left">
-          {/* An indeterminate phase is a bar that only says "working": the
-              step is real work with no measurable fraction, and a bar that
-              resets between phases reads as progress lost. */}
-          <Progress
-            label={PHASE_LABEL[progress.phase]}
-            value={
-              progress.fraction === null
-                ? null
-                : Math.round(progress.fraction * 100)
-            }
-          />
-
-          {progress.deduped ? (
-            <Text variant="small" tone="muted">
-              Already in your library. Nothing to upload.
-            </Text>
-          ) : null}
-        </div>
+        <UploadWorking
+          progress={progress}
+          label={PHASE_LABEL[progress.phase]}
+        />
       ) : (
-        <div className="flex flex-col items-center gap-kit-related">
+        <div className="flex flex-col items-center gap-kit-related py-kit-related">
+          {/* The empty drop is where Quincy waits for something to cut:
+              stuck beside a refusal, otherwise idle, never an upload icon. */}
+          <Friend
+            size={56}
+            state={error ? "stuck" : "idle"}
+            className="text-kit-ink"
+          />
           <Text>
             Drop a recording, or{" "}
             <button

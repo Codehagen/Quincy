@@ -1,7 +1,15 @@
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
-import { ButtonLink, Card, KitPage, List, Mono, NavRow, Stage, Text } from "@/components/kit"
+import {
+  ButtonLink,
+  Card,
+  KitPage,
+  List,
+  Mono,
+  NavRow,
+  Stage,
+} from "@/components/kit"
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { SampleButton } from "@/components/editor/sample-button"
 import { UploadDrop } from "@/components/editor/upload-drop"
@@ -48,7 +56,11 @@ export default function CutsPage({
   )
 }
 
-async function Cuts({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
+async function Cuts({
+  searchParams,
+}: {
+  searchParams: Promise<{ all?: string }>
+}) {
   const session = await getSession()
   if (!session) redirect("/login?next=/cuts")
 
@@ -91,8 +103,10 @@ async function Cuts({ searchParams }: { searchParams: Promise<{ all?: string }> 
         </Card>
       </Stage>
 
-      <Stage lead="Your cuts." aria-label="Your cuts">
-        {projects.length > 0 ? (
+      {/* With nothing cut yet the drop above is the empty state, friend and
+          all; a second "nothing here" under it said the same thing twice. */}
+      {projects.length > 0 ? (
+        <Stage lead="Your cuts." aria-label="Your cuts">
           <List>
             {projects.map((project) => (
               <NavRow
@@ -107,10 +121,8 @@ async function Cuts({ searchParams }: { searchParams: Promise<{ all?: string }> 
               </NavRow>
             ))}
           </List>
-        ) : (
-          <Text tone="muted">Nothing here yet.</Text>
-        )}
-      </Stage>
+        </Stage>
+      ) : null}
     </KitPage>
   )
 }
