@@ -70,6 +70,7 @@ import {
 import {
   emphasisRefusal,
   lineWindow,
+  pushOnLine,
   STRONG_SCALE,
   SUBTLE_SCALE,
   zoomWindows,
@@ -583,64 +584,75 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       ) => {
         const meta = { toolCallId: options?.toolCallId, toolName: "punch_in" }
 
-        let target: { elementId: string; fromUs?: Us; toUs?: Us } | null = null
+        let refusal: string | null = null
+        const said = (scene: Scene) =>
+          `Pushed in${line ? ` on "${line}"` : clipNumber ? ` on clip ${clipNumber}` : ""}. ${describeScene(scene)}`
+
         if (line) {
           const words = await context.words()
-          const scene = onScreen()
-          const mediaId = spineMedia(scene)
-          if (!words || !scene || !mediaId) {
+          const mediaId = spineMedia(onScreen())
+          if (!words || !mediaId) {
             return "This recording has not been transcribed, so there is no line to find."
           }
-          target = lineWindow(scene, words, mediaId, line)
-          if (!target) {
+          let missing = false
+          const out = run(
+            meta,
+            (scene) => {
+              const window = lineWindow(scene, words, mediaId, line)
+              if (!window) {
+                missing = true
+                return []
+              }
+              const pushed = pushOnLine(scene, window, scale ?? SUBTLE_SCALE)
+              refusal = pushed.refusal
+              return pushed.ops
+            },
+            said,
+            "Nothing was changed."
+          )
+          if (missing) {
             return `"${line}" is not in the cut as spoken (it may have been cut out, or worded differently). Nothing was changed.`
           }
-        } else {
-          const current = onScreen()
-          const clip = current
-            ? findMainTrack(current)?.elements[(clipNumber ?? 1) - 1]
-            : undefined
-          if (!clip) {
-            return `There is no clip ${clipNumber ?? 1} on the spine. Nothing was changed.`
-          }
-          target = {
-            elementId: clip.id,
-            fromUs:
-              fromSeconds === undefined ? undefined : secondsToUs(fromSeconds),
-            toUs: toSeconds === undefined ? undefined : secondsToUs(toSeconds),
-          }
+          return refusal
+            ? `${refusal} Nothing was changed; tell the person why, and offer to move the other push instead.`
+            : out
         }
 
-        const found = target
-        let refusal: string | null = null
-        const said = run(
+        const current = onScreen()
+        const clip = current
+          ? findMainTrack(current)?.elements[(clipNumber ?? 1) - 1]
+          : undefined
+        if (!clip) {
+          return `There is no clip ${clipNumber ?? 1} on the spine. Nothing was changed.`
+        }
+        const out = run(
           meta,
           (scene) => {
-            const ops = punchIn(scene, found.elementId, {
+            const ops = punchIn(scene, clip.id, {
               scale,
-              fromUs: found.fromUs,
-              toUs: found.toUs,
+              fromUs:
+                fromSeconds === undefined ? undefined : secondsToUs(fromSeconds),
+              toUs: toSeconds === undefined ? undefined : secondsToUs(toSeconds),
               hold,
             })
             const window =
               ops.length > 0
                 ? zoomWindows(applyToScene(scene, ops, "agent")).find(
-                    (zoom) => zoom.elementId === found.elementId
+                    (zoom) => zoom.elementId === clip.id
                   )
                 : undefined
             if (window) {
-              refusal = emphasisRefusal(scene, found.elementId, window)
+              refusal = emphasisRefusal(scene, clip.id, window)
               if (refusal) return []
             }
             return ops
           },
-          (scene) =>
-            `Pushed in${line ? ` on "${line}"` : clipNumber ? ` on clip ${clipNumber}` : ""}. ${describeScene(scene)}`,
+          said,
           "The window you gave falls outside the clip. Nothing was changed."
         )
         return refusal
           ? `${refusal} Nothing was changed; tell the person why, and offer to move the other push instead.`
-          : said
+          : out
       },
     }),
 
@@ -989,8 +1001,11 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
               ? { pauses: context.cutStyle.pauses }
               : {}
         const chosenPace = pace ?? context.cutStyle?.pace
+        // A named pace replaces saved numbers; numbers named now win over both.
+        const keepNumbers =
+          !pace || minSilenceMs !== undefined || paddingMs !== undefined
         const style = cutStyleOf(scene, {
-          ...pauses,
+          ...(keepNumbers ? pauses : {}),
           ...(chosenPace ? { pace: chosenPace } : {}),
         })
         const lines = describeCutStyle(style)
