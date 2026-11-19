@@ -96,7 +96,7 @@ export function fillerReceipt(removed: readonly string[], savedUs: number): stri
     counts.set(word, (counts.get(word) ?? 0) + 1)
   }
   const named = [...counts]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1] - a[1] || byCodePoint(a[0], b[0]))
     .map(([word, count]) => (count === 1 ? word : `${count} × ${word}`))
     .join(", ")
   const seconds = (Math.max(0, savedUs) / 1_000_000).toFixed(1)
@@ -109,4 +109,13 @@ export function fillerReceiptOf(output: unknown): string | null {
   if (typeof output !== "string") return null
   const first = output.split("\n", 1)[0]
   return /^Removed \d+ fillers?: .+ · \d+\.\d s$/.test(first) ? first : null
+}
+
+/**
+ * Word order by code point, the same on every machine. `localeCompare`
+ * follows the host's locale, so "øh" sorts before "um" on one and after it
+ * on another, and a receipt would read differently in CI than on a laptop.
+ */
+export function byCodePoint(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
 }

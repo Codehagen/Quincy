@@ -1,4 +1,4 @@
-import { isFiller, isSoundFiller, normaliseWord } from "./fillers"
+import { byCodePoint, isFiller, isSoundFiller, normaliseWord } from "./fillers"
 import type { Word } from "./transcript"
 
 /**
@@ -153,7 +153,7 @@ export function noticed(reading: TakeReading): string[] {
 
   if (reading.fillers.count > 0) {
     const named = Object.entries(reading.fillers.byWord)
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .sort((a, b) => b[1] - a[1] || byCodePoint(a[0], b[0]))
       .map(([word, count]) => (count === 1 ? `“${word}”` : `${count} × “${word}”`))
       .join(", ")
     lines.push(`${plural(reading.fillers.count, "filler", "fillers")}: ${named}.`)
@@ -198,7 +198,7 @@ export function startersFor(reading: TakeReading, frame?: Frame): Starter[] {
   // under "What I noticed" but stay in the take unless named (fillers.ts).
   const sounds = Object.entries(reading.fillers.byWord)
     .filter(([word]) => isSoundFiller(word))
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1] - a[1] || byCodePoint(a[0], b[0]))
   const soundCount = sounds.reduce((sum, [, count]) => sum + count, 0)
   if (soundCount > 0) {
     starters.push({
