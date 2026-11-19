@@ -20,7 +20,7 @@ import {
   type ProxyOptions,
 } from "./media"
 import { us, type Us } from "./time"
-import { voiceModelPath } from "./voice-model"
+import { voiceModelState } from "./voice-model"
 
 /**
  * The transcoder, as ffmpeg on the local filesystem.
@@ -234,8 +234,9 @@ export function createFfmpegTranscoder(
     /**
      * The speech model first, the plain chain when it cannot be used.
      *
-     * Three ways to land on the plain chain, each said in `note` so a take
-     * that sounds like it did before the model can be traced: no model file,
+     * Four ways to land on the plain chain, each said in `note` so a take
+     * that sounds like it did before the model can be traced: the model
+     * turned off, no model file,
      * the model pass failing (an ffmpeg built without `arnndn`), and the
      * model taking the voice down with the noise (media.ts
      * `denoiseKeptVoice`). The last two cost a second pass, which only a
@@ -246,11 +247,18 @@ export function createFfmpegTranscoder(
     async voice(source, options): Promise<VoiceTrack | null> {
       const input = await materialise(source, workdir)
       const output = join(workdir, "voice.m4a")
-      const model = await voiceModelPath()
+      const state = await voiceModelState()
+      const model = "path" in state ? state.path : null
 
       let note: string | undefined
-      if (!model) {
-        note = "speech model not found, cleaned without it"
+      if ("off" in state) {
+        note = "speech model turned off (VOICE_DENOISE=off), cleaned without it"
+      } else if ("missing" in state) {
+        note = `speech model not found at ${state.missing}, cleaned without it`
+        // On the row this is one warning among many. A deploy that lost the
+        // file (next.config.ts traces it) files every take under the plain
+        // key for good, so it is said where errors are watched too.
+        console.error("[voice] speech model missing:", state.missing)
       } else {
         const dryMeter = join(workdir, "voice-dry.txt")
         const wetMeter = join(workdir, "voice-wet.txt")
@@ -258,7 +266,11 @@ export function createFfmpegTranscoder(
         try {
           await run(
             ffmpegBinary(),
-            voiceDenoiseArgs(input, output, { model, dryMeter, wetMeter }),
+            voiceDenoiseArgs(input, output, {
+              model: state.path,
+              dryMeter,
+              wetMeter,
+            }),
             { timeout: TRANSCODE_TIMEOUT, encoding: "buffer" }
           )
 

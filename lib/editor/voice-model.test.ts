@@ -4,7 +4,11 @@ import { join } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
-import { DEFAULT_VOICE_MODEL, voiceModelPath } from "./voice-model"
+import {
+  DEFAULT_VOICE_MODEL,
+  voiceModelPath,
+  voiceModelState,
+} from "./voice-model"
 
 describe("voiceModelPath", () => {
   it("finds the model that ships in the repository", async () => {
@@ -40,5 +44,19 @@ describe("voiceModelPath", () => {
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(
       "70bb6685eb0c2a1d18e2918dca3fbfbd39317010b1802eb1b6ea73a92f3fdec0"
     )
+  })
+})
+
+describe("voiceModelState", () => {
+  it("tells off from missing, and names the path it looked for", async () => {
+    expect(await voiceModelState({ VOICE_DENOISE: "off" })).toEqual({
+      off: true,
+    })
+    expect(await voiceModelState({}, "/nowhere")).toEqual({
+      missing: join("/nowhere", DEFAULT_VOICE_MODEL),
+    })
+    expect(await voiceModelState({})).toEqual({
+      path: join(process.cwd(), DEFAULT_VOICE_MODEL),
+    })
   })
 })

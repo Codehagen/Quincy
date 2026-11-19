@@ -28,19 +28,34 @@ import { join } from "node:path"
  */
 export const DEFAULT_VOICE_MODEL = "lib/editor/models/speech.rnnn"
 
-export async function voiceModelPath(
+/** Where the model is, or why there is none. */
+export type VoiceModelState =
+  | { path: string }
+  | { off: true }
+  /** The path that was looked for and not found. */
+  | { missing: string }
+
+export async function voiceModelState(
   env: Record<string, string | undefined> = process.env,
   cwd: string = process.cwd()
-): Promise<string | null> {
-  if (env.VOICE_DENOISE?.trim().toLowerCase() === "off") return null
+): Promise<VoiceModelState> {
+  if (env.VOICE_DENOISE?.trim().toLowerCase() === "off") return { off: true }
 
   const configured = env.VOICE_DENOISE_MODEL?.trim() || DEFAULT_VOICE_MODEL
   const path = configured.startsWith("/") ? configured : join(cwd, configured)
 
   try {
     await access(path)
-    return path
+    return { path }
   } catch {
-    return null
+    return { missing: path }
   }
+}
+
+export async function voiceModelPath(
+  env: Record<string, string | undefined> = process.env,
+  cwd: string = process.cwd()
+): Promise<string | null> {
+  const state = await voiceModelState(env, cwd)
+  return "path" in state ? state.path : null
 }

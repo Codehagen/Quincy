@@ -221,7 +221,7 @@ describe.skipIf(!ffmpegPath || !existsSync(ffmpegPath))(
           })
           expect(track).toMatchObject({
             denoised: false,
-            note: "speech model not found, cleaned without it",
+            note: "speech model turned off (VOICE_DENOISE=off), cleaned without it",
           })
 
           // Without the model there is only one pass, so no deadline
