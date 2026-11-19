@@ -58,6 +58,7 @@ const STEP_RAMP_US = 50_000
 
 export type ZoomWindow = {
   elementId: string
+  effectId: string
   startUs: number
   endUs: number
   /** A still closer frame (a jump-cut step), not a moving push. */
@@ -79,6 +80,7 @@ export function zoomWindows(scene: Scene): ZoomWindow[] {
       if (keys.length === 0) {
         windows.push({
           elementId: element.id,
+          effectId: effect.id,
           startUs: element.startUs,
           endUs: element.startUs + element.durationUs,
           step: false,
@@ -91,6 +93,7 @@ export function zoomWindows(scene: Scene): ZoomWindow[] {
         keys.length === 2 && keys[1].timeUs - keys[0].timeUs <= STEP_RAMP_US
       windows.push({
         elementId: element.id,
+        effectId: effect.id,
         startUs: element.startUs + first,
         // A held push stays in to the end of the clip.
         endUs:
@@ -114,8 +117,9 @@ function channelsOf(element: TimelineElement) {
 /**
  * Why a push over this window would be one too many, or null when it fits.
  *
- * A push on the same clip replaces the one there (`punchIn`), so that clip's
- * own push is not counted against it.
+ * A push on the same clip replaces the ones there that it overlaps
+ * (`punchIn`), so only those are not counted against it. A push elsewhere on
+ * the same clip stays, and counts like any other.
  */
 export function emphasisRefusal(
   scene: Scene,
@@ -126,7 +130,13 @@ export function emphasisRefusal(
     typeof elementIds === "string" ? [elementIds] : elementIds
   )
   const others = zoomWindows(scene).filter(
-    (zoom) => !zoom.step && !replaced.has(zoom.elementId)
+    (zoom) =>
+      !zoom.step &&
+      !(
+        replaced.has(zoom.elementId) &&
+        zoom.startUs < window.endUs &&
+        window.startUs < zoom.endUs
+      )
   )
 
   const near = others.find(

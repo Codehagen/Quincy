@@ -319,15 +319,19 @@ export function resolveVisual(
     switch (effect.type) {
       case "zoom": {
         const defaults = EFFECT_DEFAULTS.zoom
-        visual.scale *= paramAt(
+        const scale = paramAt(
           effect,
           "scale",
           defaults.scale,
           animations,
           localUs
         )
-        // The last zoom on the stack owns the framing. Averaging two origins
-        // would push into a point neither effect asked for.
+        visual.scale *= scale
+        // The last zoom that is pushing owns the framing. Averaging two
+        // origins would push into a point neither effect asked for, and a
+        // zoom resting at 1× elsewhere on the clip must not move the framing
+        // of the one that is.
+        if (Math.abs(scale - 1) < 1e-6) break
         visual.originX = paramAt(
           effect,
           "originX",

@@ -849,6 +849,41 @@ describe("punchIn", () => {
     expect(Object.keys(element.animations.channels)).toHaveLength(2)
   })
 
+  it("replaces a held push, which stays in to the clip's end, in either order", () => {
+    const base = scene()
+    const target = clipAt(base, 0)
+    const start = target.startUs
+
+    const held = applyToScene(
+      base,
+      punchIn(base, target.id, { scale: 1.3, hold: true })
+    )
+    const after = applyToScene(
+      held,
+      punchIn(held, target.id, {
+        scale: 1.2,
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    // Kept, the two would multiply to 1.56 at six seconds.
+    expect(clipAt(after, 0).effects).toHaveLength(1)
+    expect(clipAt(after, 0).effects[0].params.scale).toBe(1.2)
+
+    const brief = applyToScene(
+      base,
+      punchIn(base, target.id, {
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    const heldAfter = applyToScene(
+      brief,
+      punchIn(brief, target.id, { scale: 1.3, hold: true })
+    )
+    expect(clipAt(heldAfter, 0).effects).toHaveLength(1)
+  })
+
   it("stamps the agent on the fields it wrote", () => {
     const base = scene()
     const target = clipAt(base, 0)

@@ -635,10 +635,17 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
               toUs: toSeconds === undefined ? undefined : secondsToUs(toSeconds),
               hold,
             })
+            // The new push is the zoom on this clip that was not there
+            // before: a clip can carry several, and checking an older one
+            // would judge the wrong window.
+            const before = new Set(
+              zoomWindows(scene).map((zoom) => zoom.effectId)
+            )
             const window =
               ops.length > 0
                 ? zoomWindows(applyToScene(scene, ops, "agent")).find(
-                    (zoom) => zoom.elementId === clip.id
+                    (zoom) =>
+                      zoom.elementId === clip.id && !before.has(zoom.effectId)
                   )
                 : undefined
             if (window) {

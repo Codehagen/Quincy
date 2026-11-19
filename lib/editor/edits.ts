@@ -1666,7 +1666,19 @@ function zoomWindowLocal(
     element.animations.channels[`effects.${effectId}.params.scale`]?.keys
   if (!keys || keys.length === 0) return null
   const times = keys.map((key) => key.timeUs)
-  return { fromUs: Math.min(...times), toUs: Math.max(...times) }
+  // A curve holds its end values past its keys (effects.ts `sampleChannel`),
+  // so a push that ends or starts away from 1× acts on the picture to the
+  // clip's edge, and that is the window that counts for overlap.
+  const sorted = [...keys].sort((a, b) => a.timeUs - b.timeUs)
+  const neutral = (value: number) => Math.abs(value - 1) < 1e-6
+  return {
+    fromUs: neutral(sorted[0].value)
+      ? Math.min(...times)
+      : Number.NEGATIVE_INFINITY,
+    toUs: neutral(sorted[sorted.length - 1].value)
+      ? Math.max(...times)
+      : Number.POSITIVE_INFINITY,
+  }
 }
 
 function overlapsWindow(

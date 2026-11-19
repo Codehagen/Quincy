@@ -150,6 +150,34 @@ describe("resolveVisual", () => {
     expect(isNeutral(resolveVisual(clip(), 0))).toBe(true)
   })
 
+  it("keeps a zoom's own framing when another zoom on the clip is at rest", () => {
+    const zoom = (id: string, originX: number): Effect => ({
+      id,
+      type: "zoom",
+      enabled: true,
+      params: { scale: 1.3, originX, originY: 0.5 },
+    })
+    const curve = (id: string, from: number, to: number) =>
+      channel(`effects.${id}.params.scale`, [
+        key(from, 1),
+        key(from + 500_000, 1.3),
+        key(to - 500_000, 1.3),
+        key(to, 1),
+      ])
+    const element = clip({
+      effects: [zoom("a", 0.2), zoom("b", 0.8)],
+      animations: {
+        channels: {
+          "effects.a.params.scale": curve("a", 0, 2_000_000),
+          "effects.b.params.scale": curve("b", 5_000_000, 7_000_000),
+        },
+      },
+    })
+
+    expect(resolveVisual(element, 1_000_000).originX).toBeCloseTo(0.2, 6)
+    expect(resolveVisual(element, 6_000_000).originX).toBeCloseTo(0.8, 6)
+  })
+
   it("draws a keyframed zoom", () => {
     const effect: Effect = {
       id: "vfx-1",
