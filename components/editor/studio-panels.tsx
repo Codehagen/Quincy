@@ -36,7 +36,7 @@ const ROW_BUTTON =
   "flex min-h-11 w-full flex-col items-start justify-center rounded-kit-control px-2 text-left outline-hidden transition-[background-color] duration-150 ease-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50 disabled:hover:bg-transparent"
 
 const FIELD =
-  "h-9 w-full min-w-0 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-body text-kit-ink outline-hidden placeholder:text-kit-ink-muted focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
+  "h-9 w-full min-w-0 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-dense text-kit-ink outline-hidden placeholder:text-kit-ink-muted focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
 
 function Section({
   title,
@@ -50,7 +50,7 @@ function Section({
   return (
     <section className="flex flex-col gap-2 px-3 py-3">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 className="text-kit-body font-kit-strong text-kit-ink">{title}</h2>
+        <h2 className="text-kit-small font-kit-strong text-kit-ink">{title}</h2>
         {aside}
       </div>
       {children}
@@ -457,7 +457,7 @@ export function StudioSettingsPanel({
                   onClick={() => onCaptionPreset(preset.key)}
                   className={cn(ROW_BUTTON, "aria-pressed:bg-kit-row-hover")}
                 >
-                  <span className="text-kit-body text-kit-ink">{preset.label}</span>
+                  <span className="text-kit-small text-kit-ink">{preset.label}</span>
                   <span className="text-kit-small text-kit-ink-muted">{preset.hint}</span>
                 </button>
               </li>
@@ -530,7 +530,7 @@ export function StudioSettingsPanel({
       ) : null}
 
       <Section title="Background">
-        <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-kit-body text-kit-ink">
+        <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-kit-small text-kit-ink">
           Behind the picture
           <input
             type="color"

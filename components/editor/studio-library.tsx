@@ -127,7 +127,7 @@ export function StudioLibrary({
     >
       <div className="flex shrink-0 flex-col gap-3 p-3 pb-2">
         <div className="flex items-center justify-between gap-2 px-1">
-          <h2 className="text-kit-body font-kit-strong text-kit-ink">
+          <h2 className="text-kit-small font-kit-strong text-kit-ink">
             {heading}
           </h2>
           {onAdded ? (

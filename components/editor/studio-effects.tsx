@@ -159,9 +159,9 @@ function EffectRow({
         </span>
         <span
           className={cn(
-            "mt-0.5 block text-kit-small leading-snug",
+            "mt-0.5 block text-kit-meta",
             // Full strength on the filled row, not /75. Dimmed it measured
-            // 3.76:1 against the effect surface — under the 4.5 floor at 11px,
+            // 3.76:1 against the effect surface — under the 4.5 floor at 12px,
             // and the same mistake the caption chip made for the same reason:
             // a quiet surface does not need quiet text on top of it as well.
             on ? "text-kit-ink" : "text-kit-ink-muted"
