@@ -1,3 +1,4 @@
+import type { TextMotion } from "./motion"
 import type { Us } from "./time"
 
 /**
@@ -358,6 +359,11 @@ export type TextElement = ElementBase & {
   role?: "title" | "lower_third" | "end_card" | "hook"
   /** A second, smaller line under the first (a lower third's role). */
   subtitle?: string
+  /**
+   * How it arrives and leaves (motion.ts): a move and a feel picked from a
+   * grid. Absent is the short fade every text had before there was a choice.
+   */
+  motion?: TextMotion
   style: CaptionStyle
   transform: Transform
   animations: Animations

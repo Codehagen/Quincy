@@ -15,7 +15,7 @@ import { isFullFrame } from "@/lib/editor/box"
 import { bedGain, voiceRegions } from "@/lib/editor/ducking"
 import { clipRate } from "@/lib/editor/timeline"
 import { us } from "@/lib/editor/time"
-import { textOpacity } from "@/lib/editor/titles"
+import { textMotion, textPoseAt } from "@/lib/editor/motion"
 import {
   dipOpacity,
   dissolveOpacity,
@@ -684,7 +684,12 @@ function TextLayer({ element }: { element: TextElement }) {
   const { width, height } = useLayoutCanvas()
   const style = element.style
   const role = element.role
-  const opacity = textOpacity(usForFrame(frame, fps), element.durationUs)
+  const pose = textPoseAt(
+    usForFrame(frame, fps),
+    element.durationUs,
+    textMotion(element.motion),
+    { width, height }
+  )
   const lower = role === "lower_third"
   // A hook sits in the top third, over the background rather than the face.
   const top = role === "hook"
@@ -701,7 +706,7 @@ function TextLayer({ element }: { element: TextElement }) {
             ? `${Math.round(height * 0.12)}px ${inset}px 0`
             : inset,
         pointerEvents: "none",
-        opacity,
+        opacity: pose.opacity,
         transform:
           element.transform.position.x || element.transform.position.y
             ? `translate(${element.transform.position.x}px, ${element.transform.position.y}px)`
@@ -712,6 +717,13 @@ function TextLayer({ element }: { element: TextElement }) {
         // The preview's handles find the text by this to draw around it.
         data-text-id={element.id}
         style={{
+          // The entrance (lib/editor/motion.ts). On the text itself rather
+          // than the layer, so a pop grows from the text's own centre.
+          transform:
+            pose.dx || pose.dy || pose.scale !== 1
+              ? `translate(${pose.dx}px, ${pose.dy}px) scale(${pose.scale})`
+              : undefined,
+          filter: pose.blurPx ? `blur(${pose.blurPx}px)` : undefined,
           maxWidth: lower ? "70%" : "86%",
           textAlign: style.textAlign,
           fontFamily: style.fontFamily,

@@ -1,0 +1,60 @@
+/* The little previews in a motion grid (motion-grid.tsx).
+   Each tile plays its move while it is hovered or focused, and rests on the
+   finished pose otherwise, so a grid of six never animates at once. */
+
+.motion-tile-stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.motion-tile-mark {
+  transform-origin: 50% 50%;
+  animation-duration: 900ms;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  animation-play-state: paused;
+  /* Rest on the finished pose: the last frame of every keyframe set below. */
+  animation-delay: -899ms;
+}
+
+.motion-tile:hover .motion-tile-mark,
+.motion-tile:focus-visible .motion-tile-mark {
+  animation-play-state: running;
+  animation-delay: 0ms;
+}
+
+.motion-tile[data-feel="snappy"] .motion-tile-mark {
+  animation-duration: 650ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-tile-mark,
+  .motion-tile:hover .motion-tile-mark,
+  .motion-tile:focus-visible .motion-tile-mark {
+    animation: none;
+  }
+}
+
+/* Text entrances. The first 55% is the move, the rest is the text resting. */
+.motion-tile-mark[data-move="fade"] { animation-name: motion-fade; animation-timing-function: linear; }
+.motion-tile-mark[data-move="rise"] { animation-name: motion-rise; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+.motion-tile-mark[data-move="pop"] { animation-name: motion-pop; animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+.motion-tile-mark[data-move="slide"] { animation-name: motion-slide; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+.motion-tile-mark[data-move="blur"] { animation-name: motion-blur; animation-timing-function: ease-out; }
+.motion-tile-mark[data-move="none"] { animation-name: motion-none; animation-timing-function: step-end; }
+
+@keyframes motion-fade { 0% { opacity: 0 } 55%, 100% { opacity: 1 } }
+@keyframes motion-rise { 0% { opacity: 0; transform: translateY(6px) } 55%, 100% { opacity: 1; transform: none } }
+@keyframes motion-pop { 0% { opacity: 0; transform: scale(0.7) } 55%, 100% { opacity: 1; transform: none } }
+@keyframes motion-slide { 0% { opacity: 0; transform: translateX(-10px) } 55%, 100% { opacity: 1; transform: none } }
+@keyframes motion-blur { 0% { opacity: 0; filter: blur(3px) } 55%, 100% { opacity: 1; filter: none } }
+@keyframes motion-none { 0% { opacity: 0 } 20%, 100% { opacity: 1 } }
+
+/* Zoom kinds, on the whole little frame. */
+.motion-tile-mark[data-move="push"] { animation-name: motion-push; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+.motion-tile-mark[data-move="punch"] { animation-name: motion-punch; animation-timing-function: step-end; }
+.motion-tile-mark[data-move="drift"] { animation-name: motion-drift; animation-timing-function: linear; }
+
+@keyframes motion-push { 0%, 10% { transform: none } 40%, 70% { transform: scale(1.25) } 100% { transform: none } }
+@keyframes motion-punch { 0% { transform: none } 30% { transform: scale(1.25) } 80% { transform: none } }
+@keyframes motion-drift { 0% { transform: none } 100% { transform: scale(1.18) } }
