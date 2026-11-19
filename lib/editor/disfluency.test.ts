@@ -111,6 +111,9 @@ describe("detectDisfluencies", () => {
       ["discourse", "liksom,"],
     ])
     expect(kinds(say("du", "vet", "hvordan", "det", "er"))).toEqual([])
+    expect(kinds(say("det", "er", "verdt", "det,", "ikke", "sant?"))).toEqual(
+      []
+    )
   })
 })
 

@@ -214,6 +214,9 @@ export function detectDisfluencies(words: Word[]): Disfluency[] {
       if (end >= words.length) continue
       if (!phrase.every((part, k) => norm[start + k] === part)) continue
       if (!setOff(start, end)) continue
+      // A tag question ("…, ikke sant?", "…, you know?") asks the listener
+      // something; it is meant, not filler.
+      if (/\?$/.test(words[end].text.trim())) continue
       claim("discourse", start, end)
     }
   }
