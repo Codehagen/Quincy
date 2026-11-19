@@ -82,6 +82,9 @@ export async function POST(
         kind: "path",
         path: source,
       })
+      // No `mayRetry`, so the plain chain always runs when the model does
+      // not give a track: this route has the whole function to itself.
+      if (!voice) throw new Error("no voice track")
       if (!voice.denoised) {
         key = storageKeys.voicePlain(asset.contentHash)
         console.warn(`[voice] ${id}: ${voice.note}`)

@@ -114,6 +114,33 @@ describe("runIngest, the cleaned voice", () => {
     ])
   })
 
+  it("stores nothing, and says so, when there was no time for a second pass", async () => {
+    const base = ports()
+    const voice = vi.fn().mockResolvedValue(null)
+    const p = {
+      ...base,
+      transcoder: { ...base.transcoder, voice },
+      voiceDeadline: () => false,
+    }
+    const result = await runIngest(input, p)
+    const keys = (p.storage.put as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string
+    )
+    expect(keys.some((key) => key.startsWith("derived/voice/"))).toBe(false)
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toMatch(/^voice: .*Sound button/)
+  })
+
+  it("lets the second pass run only while the retry deadline allows", async () => {
+    let late = false
+    const { voice, ports: p } = withVoice(() => false)
+    await runIngest(input, { ...p, voiceRetryDeadline: () => late })
+    const { mayRetry } = voice.mock.calls[0][1] as { mayRetry: () => boolean }
+    expect(mayRetry()).toBe(true)
+    late = true
+    expect(mayRetry()).toBe(false)
+  })
+
   it("does not clean again a take that already has a plain track", async () => {
     const base = ports()
     base.storage.exists = vi.fn(async (key: string) =>

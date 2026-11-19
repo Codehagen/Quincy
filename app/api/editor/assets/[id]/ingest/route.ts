@@ -79,6 +79,14 @@ export const maxDuration = 300
  */
 const VOICE_BUDGET_MS = 150_000
 
+/**
+ * How long into an ingest a second voice pass may still start: the plain
+ * chain, when the speech model did not give a track. The plain pass on a
+ * 20-minute take and `completeIngest` fit in the last 100 seconds; past
+ * this the track is left for the Sound button.
+ */
+const VOICE_RETRY_BUDGET_MS = 200_000
+
 // ffmpeg needs a real filesystem, which only the Node.js runtime has — and
 // Node.js is the default, so this route no longer says so: cacheComponents
 // rejects the `runtime` segment config outright.
@@ -227,6 +235,8 @@ export async function POST(
           transcoder: createFfmpegTranscoder({ workdir }),
           transcriber: meteredTranscriber,
           voiceDeadline: () => Date.now() - startedAt > VOICE_BUDGET_MS,
+          voiceRetryDeadline: () =>
+            Date.now() - startedAt > VOICE_RETRY_BUDGET_MS,
           peaksFromPcm,
           admit: async (probe) => {
             const seconds = probe.durationUs / 1_000_000

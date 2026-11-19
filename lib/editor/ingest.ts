@@ -59,7 +59,17 @@ export type Transcoder = {
    * The voice, cleaned (media.ts `voiceDenoiseArgs`, or `voiceCleanArgs`
    * when the speech model could not be used). Optional like keyframes.
    */
-  voice?(source: MediaSource): Promise<VoiceTrack>
+  voice?(
+    source: MediaSource,
+    options?: {
+      /**
+       * Asked before a second pass. When the speech model did not give a
+       * track and this answers false, `voice` resolves to null instead of
+       * running the plain chain again.
+       */
+      mayRetry?: () => boolean
+    }
+  ): Promise<VoiceTrack | null>
 }
 
 /**
@@ -168,6 +178,13 @@ export type IngestPorts = {
    * not one of them: the studio's Sound button can make it later.
    */
   voiceDeadline?: () => boolean
+  /**
+   * True once there is no longer time for a second voice pass: the plain
+   * chain after the speech model did not give a track. Checked between the
+   * passes, because the first gate only says the step may start, and two
+   * full passes on a long take can outlast the function.
+   */
+  voiceRetryDeadline?: () => boolean
 }
 
 export type IngestStep =
@@ -341,15 +358,23 @@ export async function runIngest(
         voiceKeys(input.contentHash)
       )
       if (!existing) {
-        const track = await transcoder.voice(input.source)
-        await storage.put(
-          track.denoised
-            ? storageKeys.voice(input.contentHash)
-            : storageKeys.voicePlain(input.contentHash),
-          track.bytes,
-          "audio/mp4"
-        )
-        if (track.note) warnings.push(`voice: ${track.note}`)
+        const track = await transcoder.voice(input.source, {
+          mayRetry: () => !ports.voiceRetryDeadline?.(),
+        })
+        if (!track) {
+          warnings.push(
+            "voice: the speech model gave no track and there was no time to clean again, left for the Sound button"
+          )
+        } else {
+          await storage.put(
+            track.denoised
+              ? storageKeys.voice(input.contentHash)
+              : storageKeys.voicePlain(input.contentHash),
+            track.bytes,
+            "audio/mp4"
+          )
+          if (track.note) warnings.push(`voice: ${track.note}`)
+        }
       }
     } catch (error) {
       warnings.push(`voice: ${message(error)}`)

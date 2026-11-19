@@ -193,9 +193,20 @@ describe.skipIf(!ffmpegPath || !existsSync(ffmpegPath))(
           kind: "path",
           path,
         })
-        expect(track.denoised).toBe(false)
-        expect(track.note).toMatch(/^speech model lowered the voice/)
-        expect(track.bytes.byteLength).toBeGreaterThan(0)
+        expect(track?.denoised).toBe(false)
+        expect(track?.note).toMatch(/^speech model lowered the voice/)
+        expect(track?.bytes.byteLength).toBeGreaterThan(0)
+      })
+    })
+
+    it("gives no track rather than a second pass past the deadline", async () => {
+      await withWorkspace(async (workdir) => {
+        const path = await tone(workdir)
+        const track = await createFfmpegTranscoder({ workdir }).voice!(
+          { kind: "path", path },
+          { mayRetry: () => false }
+        )
+        expect(track).toBeNull()
       })
     })
 
@@ -212,6 +223,14 @@ describe.skipIf(!ffmpegPath || !existsSync(ffmpegPath))(
             denoised: false,
             note: "speech model not found, cleaned without it",
           })
+
+          // Without the model there is only one pass, so no deadline
+          // stops it.
+          const gated = await createFfmpegTranscoder({ workdir }).voice!(
+            { kind: "path", path },
+            { mayRetry: () => false }
+          )
+          expect(gated?.denoised).toBe(false)
         })
       } finally {
         vi.unstubAllEnvs()

@@ -238,10 +238,12 @@ export function createFfmpegTranscoder(
      * that sounds like it did before the model can be traced: no model file,
      * the model pass failing (an ffmpeg built without `arnndn`), and the
      * model taking the voice down with the noise (media.ts
-     * `denoiseKeptVoice`). The last one costs a second pass, which only a
-     * take the model could not hear pays.
+     * `denoiseKeptVoice`). The last two cost a second pass, which only a
+     * take the model could not hear pays, and only while `mayRetry` allows
+     * it: otherwise this resolves to null and the Sound button makes the
+     * track later.
      */
-    async voice(source): Promise<VoiceTrack> {
+    async voice(source, options): Promise<VoiceTrack | null> {
       const input = await materialise(source, workdir)
       const output = join(workdir, "voice.m4a")
       const model = await voiceModelPath()
@@ -280,6 +282,10 @@ export function createFfmpegTranscoder(
           note = `speech model failed (${error instanceof Error ? error.message : String(error)}), cleaned without it`
         }
       }
+
+      // A missing model is the plain chain's only pass, so it is never
+      // gated. After a model pass, a second one has to fit the deadline.
+      if (model && options?.mayRetry?.() === false) return null
 
       await run(ffmpegBinary(), voiceCleanArgs(input, output), {
         timeout: TRANSCODE_TIMEOUT,
