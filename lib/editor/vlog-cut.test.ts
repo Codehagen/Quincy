@@ -9,6 +9,7 @@ import {
   frameSteps,
   lineWindow,
   MIN_GAP_US,
+  pushOnLine,
   zoomWindows,
 } from "./emphasis"
 import { HOOK_TEMPLATES, hookSteps, hookTemplate } from "./hooks"
@@ -324,3 +325,86 @@ function splitInto(base: Scene, at: number[]): Scene {
     "agent"
   )
 }
+
+describe("review fixes", () => {
+  it("pushes across the whole line when a cut runs through it", () => {
+    // "Most of | them start slow": a pause inside the line was shortened.
+    const base = splitInto(scene(30), [6])
+    const window = lineWindow(base, TAKE, "va-1", "most of them start slow")!
+    expect(window.segments).toHaveLength(2)
+
+    const { ops, refusal } = pushOnLine(base, window)
+    expect(refusal).toBeNull()
+    const after = applyToScene(base, ops, "agent")
+    const zooms = zoomWindows(after)
+    expect(zooms.map((z) => z.elementId)).toEqual(
+      window.segments.map((s) => s.elementId)
+    )
+    // Pushed in where the first clip ends, still in where the second starts.
+    const [, second] = findMainTrack(after)!.elements
+    const keys = Object.values((second as VideoElement).animations.channels)[0]
+      .keys
+    expect(keys[0].value).toBeGreaterThan(1)
+    expect(keys[keys.length - 1].value).toBe(1)
+  })
+
+  it("finds a line whose last word ends exactly at a cut", () => {
+    // The clip ends at 7.8 s, the end of "slow.".
+    const base = splitInto(scene(30), [7.8])
+    expect(lineWindow(base, TAKE, "va-1", "start slow")).not.toBeNull()
+  })
+
+  it("does not cut speech when the clip starts inside the first word", () => {
+    const words = [word("Hello", 0, 0.8), word("there", 1, 1.4)]
+    const base = scene(10)
+    const main = findMainTrack(base)!
+    const clip = main.elements[0] as VideoElement
+    // Trimmed into "Hello" at 0.2 s.
+    main.elements = [
+      { ...clip, trimStartUs: s(0.2), durationUs: s(9.8) } as VideoElement,
+    ]
+    const { steps } = hookSteps(base, words, {
+      template: hookTemplate("question")!,
+      text: "Why hello?",
+      mediaId: "va-1",
+      author: "agent",
+    })
+    const after = steps.reduce(
+      (sc, ops) => applyToScene(sc, ops, "agent"),
+      base
+    )
+    expect(findMainTrack(after)!.elements[0].durationUs).toBe(s(9.8))
+  })
+
+  it("never holds the hook past the footage", () => {
+    const base = scene(2)
+    const { steps } = hookSteps(base, [word("Hi", 0, 0.5)], {
+      template: hookTemplate("question")!,
+      text: "Why?",
+      mediaId: "va-1",
+      author: "agent",
+    })
+    const after = steps.reduce(
+      (sc, ops) => applyToScene(sc, ops, "agent"),
+      base
+    )
+    expect(sceneDurationUs(after)).toBe(s(2))
+  })
+
+  it("keeps one hook when a second template is picked", () => {
+    const base = scene(30)
+    const apply = (sc: Scene, key: "list" | "question", text: string) =>
+      hookSteps(sc, TAKE, {
+        template: hookTemplate(key)!,
+        text,
+        mediaId: "va-1",
+        author: "agent",
+      }).steps.reduce((acc, ops) => applyToScene(acc, ops, "agent"), sc)
+    const after = apply(apply(base, "list", "3 reasons"), "question", "Why?")
+    const hooks = after.tracks
+      .flatMap((t) => t.elements)
+      .filter((e) => e.kind === "text" && e.role === "hook")
+    expect(hooks).toHaveLength(1)
+    expect((hooks[0] as TextElement).content).toBe("Why?")
+  })
+})

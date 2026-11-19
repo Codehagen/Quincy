@@ -582,3 +582,36 @@ describe("the basics tools", () => {
     )
   })
 })
+
+describe("save_cut_style and a named pace", () => {
+  it("lets a pace named now replace exact numbers saved before", async () => {
+    let saved: unknown = null
+    const base = scene()
+    const run = createRun({
+      initial: snapshot(base),
+      runId: "run-1",
+      onCommit: () => {},
+      loadWords: async () => null,
+      cutStyle: { pauses: { minSilenceMs: 800, paddingMs: 100 }, voice: "clean" },
+      saveCutStyle: async (style) => {
+        saved = style
+      },
+    })
+    // A clean voice gives the style something to keep besides the pace.
+    run.commit(
+      [
+        {
+          op: "update_element",
+          sceneId: base.id,
+          trackId: findMainTrack(base)!.id,
+          elementId: findMainTrack(base)!.elements[0].id,
+          patch: { voice: "clean" },
+        },
+      ],
+      { toolName: "test" }
+    )
+    await call(editorTools(run).save_cut_style, { pace: "snappy" })
+    expect(saved).toMatchObject({ pace: "snappy" })
+    expect(saved).not.toHaveProperty("pauses")
+  })
+})
