@@ -42,11 +42,25 @@ file the user already has comes back as `alreadyIngested` with no URL at all.
 **Fatal:** probe and proxy. Without them there is nothing to edit, so the asset
 goes `failed` with the reason on the row.
 
-**Not fatal:** transcript, seek index, thumbnail, vision. These come back in
+**Not fatal:** transcript, seek index, thumbnail, filmstrip, cleaned voice, vision. These come back in
 `warnings` and the asset still goes `ready`. Deepgram being down should not stop
 you scrubbing footage, and an asset with no speech has no transcript by
 definition — making it fatal would mean music and b-roll could never be
 ingested at all.
+
+## The cleaned voice
+
+With audio, ingest also writes `derived/voice/v2/<hash>.m4a`: the take's sound
+through `aresample=async=1:first_pts=0,highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11`
+(`lib/editor/media.ts`, `voiceCleanArgs`). It is ffmpeg only, so nothing is
+bought. A cut plays it when its spine clips say `voice: "clean"`; the
+composition mutes the clip and plays the track over the same window, and
+without a stored track the clip plays as recorded.
+
+Takes uploaded before this, or whose step failed, are cleaned on the first
+press of Clean sound: `POST /api/editor/assets/[id]/voice`. A stored track is
+returned free; making one sits behind the entitlement and
+`VOICE_COOLDOWN_MS` (one a minute) with a zero-cost `cuts:voice` row.
 
 ## What it may spend
 

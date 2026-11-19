@@ -265,7 +265,12 @@ export function deleteSpeech(
       },
       ...captionsFollowing(scene, spine.id, remaining),
     ],
-    { action: "cut", kind: "range", trackId: spine.id, spans: timelineSpans(spine, cuts) }
+    {
+      action: "cut",
+      kind: "range",
+      trackId: spine.id,
+      spans: timelineSpans(spine, cuts),
+    }
   )
 }
 
@@ -446,7 +451,11 @@ export function reframe(
     return []
   }
 
-  return aimed([{ op: "update_scene", sceneId: scene.id, patch: { canvas } }], { action: "press", kind: "control", control: "frame" })
+  return aimed([{ op: "update_scene", sceneId: scene.id, patch: { canvas } }], {
+    action: "press",
+    kind: "control",
+    control: "frame",
+  })
 }
 
 /**
@@ -515,7 +524,12 @@ export function cropClip(
         patch,
       },
     ],
-    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+    {
+      action: "press",
+      kind: "element",
+      trackId: track.id,
+      elementId: element.id,
+    }
   )
 }
 
@@ -702,7 +716,12 @@ export function punchIn(
         },
       },
     ],
-    { action: "zoom", kind: "range", trackId: track.id, spans: [{ startUs: us(fromUs), endUs: us(toUs) }] }
+    {
+      action: "zoom",
+      kind: "range",
+      trackId: track.id,
+      spans: [{ startUs: us(fromUs), endUs: us(toUs) }],
+    }
   )
 }
 
@@ -761,7 +780,12 @@ export function applyEffect(
         },
       },
     ],
-    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+    {
+      action: "press",
+      kind: "element",
+      trackId: track.id,
+      elementId: element.id,
+    }
   )
 }
 
@@ -793,7 +817,12 @@ export function removeEffectsOfType(
         },
       },
     ],
-    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+    {
+      action: "press",
+      kind: "element",
+      trackId: track.id,
+      elementId: element.id,
+    }
   )
 }
 
@@ -861,7 +890,13 @@ export function setEffectAmount(
         patch: { effects, animations: { channels } },
       },
     ],
-    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+    {
+      action: "press",
+      kind: "effect",
+      trackId: track.id,
+      elementId: element.id,
+      effectId,
+    }
   )
 }
 
@@ -964,7 +999,13 @@ export function resizeEffect(
         },
       },
     ],
-    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+    {
+      action: "press",
+      kind: "effect",
+      trackId: track.id,
+      elementId: element.id,
+      effectId,
+    }
   )
 }
 
@@ -1077,7 +1118,13 @@ export function moveEffect(
           },
         },
       ],
-      { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+      {
+        action: "press",
+        kind: "effect",
+        trackId: track.id,
+        elementId: element.id,
+        effectId,
+      }
     )
   }
 
@@ -1116,7 +1163,13 @@ export function moveEffect(
         },
       },
     ],
-    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+    {
+      action: "press",
+      kind: "effect",
+      trackId: track.id,
+      elementId: element.id,
+      effectId,
+    }
   )
 }
 
@@ -1148,7 +1201,13 @@ export function removeEffect(
         },
       },
     ],
-    { action: "press", kind: "effect", trackId: track.id, elementId: element.id, effectId }
+    {
+      action: "press",
+      kind: "effect",
+      trackId: track.id,
+      elementId: element.id,
+      effectId,
+    }
   )
 }
 
@@ -1176,7 +1235,12 @@ export function clearZoom(scene: Scene, elementId: string): EditOp[] {
         },
       },
     ],
-    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+    {
+      action: "press",
+      kind: "element",
+      trackId: track.id,
+      elementId: element.id,
+    }
   )
 }
 
@@ -1266,7 +1330,12 @@ export function fade(
         },
       },
     ],
-    { action: "press", kind: "element", trackId: track.id, elementId: element.id }
+    {
+      action: "press",
+      kind: "element",
+      trackId: track.id,
+      elementId: element.id,
+    }
   )
 }
 
@@ -1395,4 +1464,23 @@ export function timelineSpans(
 /** The spine, which is what every hand edit here operates on. */
 export function mainTrackId(scene: Scene): string | null {
   return findMainTrack(scene)?.id ?? null
+}
+/** Every spine clip set to play one sound or the other. */
+export function setVoice(scene: Scene, voice: "original" | "clean"): EditOp[] {
+  const spine = findMainTrack(scene)
+  if (!spine) return []
+  const ops: EditOp[] = spine.elements.flatMap((element) =>
+    element.kind === "video" && (element.voice ?? "original") !== voice
+      ? [
+          {
+            op: "update_element" as const,
+            sceneId: scene.id,
+            trackId: spine.id,
+            elementId: element.id,
+            patch: { voice },
+          },
+        ]
+      : []
+  )
+  return aimed(ops, { action: "press", kind: "track", trackId: spine.id })
 }

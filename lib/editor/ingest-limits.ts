@@ -54,6 +54,14 @@ export const DEEPGRAM_USAGE_LABEL = "deepgram:transcribe"
  */
 export const INGEST_USAGE_LABEL = "cuts:ingest"
 
+/**
+ * Cleaning a take's voice after ingest (older uploads, or one whose step
+ * failed). Function time only, so a cooldown and a zero-cost row rather than
+ * a ceiling: one ffmpeg pass per person per minute.
+ */
+export const VOICE_USAGE_LABEL = "cuts:voice"
+export const VOICE_COOLDOWN_MS = 60 * 1000
+
 export type LimitVerdict = { ok: true } | { ok: false; error: string }
 
 function minutes(seconds: number): number {

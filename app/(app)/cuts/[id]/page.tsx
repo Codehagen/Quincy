@@ -5,6 +5,7 @@ import { Studio, type MediaEntry } from "@/components/editor/studio"
 import { getAsset } from "@/lib/editor/assets"
 import { getProject } from "@/lib/editor/projects"
 import { readTake, strongLineSlot } from "@/lib/editor/reading"
+import { storageKeys } from "@/lib/editor/media"
 import { createR2Storage } from "@/lib/editor/storage-r2"
 import { wordsFromDeepgram } from "@/lib/editor/transcript"
 import type { VideoDocument } from "@/lib/editor/types"
@@ -106,11 +107,21 @@ async function resolveMedia(
       const asset = await getAsset(mediaId, userId)
       if (!asset) return null
 
-      const [proxyUrl, seekIndexUrl, filmstripUrl] = await Promise.all([
-        asset.proxyKey ? storage.url(asset.proxyKey) : null,
-        asset.seekIndexKey ? storage.url(asset.seekIndexKey) : null,
-        asset.filmstripKey ? storage.url(asset.filmstripKey) : null,
-      ])
+      const voiceKey = storageKeys.voice(asset.contentHash)
+      const [proxyUrl, seekIndexUrl, filmstripUrl, voiceUrl] =
+        await Promise.all([
+          asset.proxyKey ? storage.url(asset.proxyKey) : null,
+          asset.seekIndexKey ? storage.url(asset.seekIndexKey) : null,
+          asset.filmstripKey ? storage.url(asset.filmstripKey) : null,
+          // The cleaned voice, when ingest made one. A failed check is a take
+          // that plays its own sound, never a page that does not open.
+          asset.hasAudio
+            ? storage
+                .exists(voiceKey)
+                .then((found) => (found ? storage.url(voiceKey) : null))
+                .catch(() => null)
+            : null,
+        ])
 
       return [
         mediaId,
@@ -125,6 +136,7 @@ async function resolveMedia(
           hasAudio: asset.hasAudio,
           proxyUrl,
           seekIndexUrl,
+          voiceUrl,
           // All four or none: a sheet whose geometry did not survive is a sheet
           // nothing can slice into tiles.
           filmstrip:

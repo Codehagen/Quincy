@@ -5,6 +5,7 @@ import { rippleTrack, sceneDurationUs } from "./timeline"
 import type { Us, UsRange } from "./time"
 import type {
   Author,
+  Chapter,
   Effect,
   Keyframe,
   ProjectSnapshot,
@@ -57,21 +58,22 @@ export type EditOp = EditOpBody & {
  * that appears over the selection, `press` clicks it. Times are scene time
  * (the timeline), never source time, because the lanes draw scene time.
  */
-export type OpTarget = { action: "cut" | "zoom" | "press" } & (
+export type OpTarget = { action: "cut" | "zoom" | "press" } &
   /** A clip, caption or text element. `atUs` is a point on it (a split). */
-  | { kind: "element"; trackId: string; elementId: string; atUs?: Us }
-  /** One effect on an element. */
-  | { kind: "effect"; trackId: string; elementId: string; effectId: string }
-  /**
-   * Stretches of a track, in scene time. Usually one; a step that removes
-   * several pauses at once names each, and the cursor drags across the first.
-   */
-  | { kind: "range"; trackId: string; spans: UsRange[] }
-  /** A whole lane: a look or a framing applied to every clip on the spine. */
-  | { kind: "track"; trackId: string }
-  /** A control on the desk rather than something in the document. */
-  | { kind: "control"; control: "captions" | "frame" }
-)
+  (
+    | { kind: "element"; trackId: string; elementId: string; atUs?: Us }
+    /** One effect on an element. */
+    | { kind: "effect"; trackId: string; elementId: string; effectId: string }
+    /**
+     * Stretches of a track, in scene time. Usually one; a step that removes
+     * several pauses at once names each, and the cursor drags across the first.
+     */
+    | { kind: "range"; trackId: string; spans: UsRange[] }
+    /** A whole lane: a look or a framing applied to every clip on the spine. */
+    | { kind: "track"; trackId: string }
+    /** A control on the desk rather than something in the document. */
+    | { kind: "control"; control: "captions" | "frame" }
+  )
 
 /**
  * Give every op in a batch the target its builder knows, keeping any target
@@ -113,7 +115,9 @@ export function targetKey(target: OpTarget): string {
 export function targetInScene(scene: Scene, target: OpTarget): boolean {
   if (target.kind === "control") return true
 
-  const track = scene.tracks.find((candidate) => candidate.id === target.trackId)
+  const track = scene.tracks.find(
+    (candidate) => candidate.id === target.trackId
+  )
   if (!track) return false
 
   switch (target.kind) {
@@ -127,8 +131,8 @@ export function targetInScene(scene: Scene, target: OpTarget): boolean {
       )
       return Boolean(
         element &&
-          "effects" in element &&
-          element.effects.some((effect) => effect.id === target.effectId)
+        "effects" in element &&
+        element.effects.some((effect) => effect.id === target.effectId)
       )
     }
     case "range": {
@@ -136,7 +140,8 @@ export function targetInScene(scene: Scene, target: OpTarget): boolean {
       return (
         target.spans.length > 0 &&
         target.spans.every(
-          (span) => span.startUs >= 0 && span.endUs <= end && span.endUs > span.startUs
+          (span) =>
+            span.startUs >= 0 && span.endUs <= end && span.endUs > span.startUs
         )
       )
     }
@@ -190,6 +195,8 @@ type EditOpBody =
     }
   | { op: "update_settings"; patch: Partial<VideoDocument["settings"]> }
   | { op: "rename"; name: string }
+  /** The project's chapters, whole (chapters.ts validates them). Empty clears. */
+  | { op: "set_chapters"; chapters: Chapter[] }
   /**
    * A whole scene: one more cut over the same assets (plans/036, phase D,
    * three cuts from one recording). Added after the last scene; an id that
@@ -298,12 +305,25 @@ function applyOne(
     case "rename":
       return { ...document, metadata: { ...document.metadata, name: op.name } }
 
+    case "set_chapters":
+      return {
+        ...document,
+        metadata: {
+          ...document.metadata,
+          chapters: op.chapters.length > 0 ? op.chapters : undefined,
+        },
+      }
+
     case "update_settings":
       return { ...document, settings: { ...document.settings, ...op.patch } }
 
     case "add_scene":
-      if (document.scenes.some((scene) => scene.id === op.scene.id)) return document
-      return { ...document, scenes: [...document.scenes, { ...op.scene, isMain: false }] }
+      if (document.scenes.some((scene) => scene.id === op.scene.id))
+        return document
+      return {
+        ...document,
+        scenes: [...document.scenes, { ...op.scene, isMain: false }],
+      }
 
     case "remove_scene": {
       const gone = document.scenes.find((scene) => scene.id === op.sceneId)
@@ -314,12 +334,15 @@ function applyOne(
         ...document,
         scenes,
         currentSceneId:
-          document.currentSceneId === op.sceneId && main ? main.id : document.currentSceneId,
+          document.currentSceneId === op.sceneId && main
+            ? main.id
+            : document.currentSceneId,
       }
     }
 
     case "select_scene":
-      if (!document.scenes.some((scene) => scene.id === op.sceneId)) return document
+      if (!document.scenes.some((scene) => scene.id === op.sceneId))
+        return document
       return { ...document, currentSceneId: op.sceneId }
 
     case "update_scene":
@@ -490,7 +513,12 @@ export function applyToScene(
     {
       document,
       revision: 0,
-      lock: { status: "unlocked", runId: null, lockedBy: null, startedAt: null },
+      lock: {
+        status: "unlocked",
+        runId: null,
+        lockedBy: null,
+        startedAt: null,
+      },
     },
     ops,
     { author }

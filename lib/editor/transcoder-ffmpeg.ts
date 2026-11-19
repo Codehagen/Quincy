@@ -9,6 +9,7 @@ import ffprobeStatic from "ffprobe-static"
 import type { MediaSource, Transcoder } from "./ingest"
 import {
   audioExtractArgs,
+  voiceCleanArgs,
   probeArgs,
   proxyArgs,
   filmstripArgs,
@@ -224,6 +225,18 @@ export function createFfmpegTranscoder(
       })
 
       return pcmFromWav(new Uint8Array(await readFile(output)))
+    },
+
+    async voice(source) {
+      const input = await materialise(source, workdir)
+      const output = join(workdir, "voice.m4a")
+
+      await run(ffmpegBinary(), voiceCleanArgs(input, output), {
+        timeout: TRANSCODE_TIMEOUT,
+        encoding: "buffer",
+      })
+
+      return new Uint8Array(await readFile(output))
     },
 
     async thumbnail(source) {

@@ -8,6 +8,8 @@ import {
   FILLER_PADDING_US,
   fillerCuts,
   groupIntoSegments,
+  groupReadable,
+  MAX_CAPTION_WORD_US,
   snapToQuiet,
   transcriptText,
   wordsFromDeepgram,
@@ -274,17 +276,31 @@ describe("transcriptText", () => {
 
 describe("detectSilences, given options the tool should never pass", () => {
   const words = [word("one", 0.2, 0.6), word("two", 1.6, 2)]
-  const options = { minSilenceUs: s(350 / 1000), paddingUs: s(0.12), trimHead: false, trimTail: false }
+  const options = {
+    minSilenceUs: s(350 / 1000),
+    paddingUs: s(0.12),
+    trimHead: false,
+    trimTail: false,
+  }
 
   it("never lets a negative padding cut into the words", () => {
-    const [gap] = detectSilences(words, s(3), { ...options, paddingUs: us(-300_000) })
+    const [gap] = detectSilences(words, s(3), {
+      ...options,
+      paddingUs: us(-300_000),
+    })
     expect(gap.startUs).toBeGreaterThanOrEqual(words[0].endUs)
     expect(gap.endUs).toBeLessThanOrEqual(words[1].startUs)
   })
 
   it("never treats a gap under 250 ms as a pause", () => {
     const tight = [word("one", 0, 0.4), word("two", 0.6, 1)]
-    expect(detectSilences(tight, s(1), { ...options, minSilenceUs: us(10_000), paddingUs: us(0) })).toEqual([])
+    expect(
+      detectSilences(tight, s(1), {
+        ...options,
+        minSilenceUs: us(10_000),
+        paddingUs: us(0),
+      })
+    ).toEqual([])
   })
 })
 
@@ -293,15 +309,26 @@ describe("fillerCuts: the ranges remove_fillers cuts", () => {
     fillerCuts(words, s(duration), { include }).map((cut) => cut.range)
 
   it("cuts the filler plus padding when the gaps are wide enough", () => {
-    const words = [word("so", 0, 0.3), word("um", 0.5, 0.7), word("yes", 0.9, 1.2)]
+    const words = [
+      word("so", 0, 0.3),
+      word("um", 0.5, 0.7),
+      word("yes", 0.9, 1.2),
+    ]
     expect(ranges(words)).toEqual([
-      { startUs: s(0.5) - FILLER_PADDING_US, endUs: s(0.7) + FILLER_PADDING_US },
+      {
+        startUs: s(0.5) - FILLER_PADDING_US,
+        endUs: s(0.7) + FILLER_PADDING_US,
+      },
     ])
   })
 
   it("holds the padding to the middle of a tight gap, never into a neighbour", () => {
     // 40 ms either side: half of it is 20 ms, less than the padding.
-    const words = [word("so", 0, 0.3), word("um", 0.34, 0.6), word("yes", 0.64, 1)]
+    const words = [
+      word("so", 0, 0.3),
+      word("um", 0.34, 0.6),
+      word("yes", 0.64, 1),
+    ]
     const [range] = ranges(words)
     expect(range).toEqual({ startUs: s(0.32), endUs: s(0.62) })
     expect(range.startUs).toBeGreaterThanOrEqual(words[0].endUs)
@@ -310,21 +337,34 @@ describe("fillerCuts: the ranges remove_fillers cuts", () => {
 
   it("takes the pause beside a filler with it, kept to the pause's padding", () => {
     // A 1 s pause before the um: one cut from 120 ms after "so" to past "um".
-    const words = [word("so", 0, 0.3), word("um", 1.3, 1.5), word("yes", 1.55, 2)]
+    const words = [
+      word("so", 0, 0.3),
+      word("um", 1.3, 1.5),
+      word("yes", 1.55, 2),
+    ]
     const [range] = ranges(words)
     expect(range.startUs).toBe(s(0.42))
     expect(range.endUs).toBe(s(1.525))
   })
 
   it("joins two fillers in a row into one cut, with no sliver between", () => {
-    const words = [word("so", 0, 0.3), word("um", 0.4, 0.6), word("uh", 0.65, 0.8), word("yes", 0.9, 1)]
+    const words = [
+      word("so", 0, 0.3),
+      word("um", 0.4, 0.6),
+      word("uh", 0.65, 0.8),
+      word("yes", 0.9, 1),
+    ]
     const cuts = fillerCuts(words, s(10))
     expect(cuts).toHaveLength(1)
     expect(cuts[0].fillers.map((w) => w.text)).toEqual(["um", "uh"])
   })
 
   it("leaves a filler whose span overlaps a spoken word", () => {
-    const words = [word("so", 0, 0.45), word("um", 0.4, 0.6), word("yes", 0.7, 1)]
+    const words = [
+      word("so", 0, 0.45),
+      word("um", 0.4, 0.6),
+      word("yes", 0.7, 1),
+    ]
     expect(ranges(words)).toEqual([])
   })
 
@@ -333,20 +373,91 @@ describe("fillerCuts: the ranges remove_fillers cuts", () => {
   })
 
   it("keeps liksom and altså unless they are named", () => {
-    const words = [word("det", 0, 0.2), word("liksom", 0.4, 0.7), word("altså", 0.9, 1.2), word("ja", 1.4, 1.6)]
+    const words = [
+      word("det", 0, 0.2),
+      word("liksom", 0.4, 0.7),
+      word("altså", 0.9, 1.2),
+      word("ja", 1.4, 1.6),
+    ]
     expect(ranges(words)).toEqual([])
-    expect(fillerCuts(words, s(10), { include: ["liksom"] }).flatMap((c) => c.fillers.map((w) => w.text))).toEqual([
-      "liksom",
-    ])
+    expect(
+      fillerCuts(words, s(10), { include: ["liksom"] }).flatMap((c) =>
+        c.fillers.map((w) => w.text)
+      )
+    ).toEqual(["liksom"])
   })
 
   it("never cuts a word that is not on the filler lists, whatever is passed", () => {
-    const words = [word("det", 0, 0.2), word("planen", 0.4, 0.7), word("ja", 0.9, 1.2)]
+    const words = [
+      word("det", 0, 0.2),
+      word("planen", 0.4, 0.7),
+      word("ja", 0.9, 1.2),
+    ]
     expect(ranges(words, 10, ["planen", "det"])).toEqual([])
   })
 
   it("reads the Norwegian sounds through their punctuation", () => {
-    const words = [word("Øh,", 0.3, 0.5), word("vi", 0.6, 0.8), word("æh.", 1, 1.2), word("Ja", 1.35, 1.5)]
-    expect(fillerCuts(words, s(10)).flatMap((c) => c.fillers.map((w) => w.text))).toEqual(["Øh,", "æh."])
+    const words = [
+      word("Øh,", 0.3, 0.5),
+      word("vi", 0.6, 0.8),
+      word("æh.", 1, 1.2),
+      word("Ja", 1.35, 1.5),
+    ]
+    expect(
+      fillerCuts(words, s(10)).flatMap((c) => c.fillers.map((w) => w.text))
+    ).toEqual(["Øh,", "æh."])
+  })
+})
+
+describe("groupReadable", () => {
+  const line = (...texts: string[]) =>
+    texts.map((text, index) => word(text, index * 0.4, index * 0.4 + 0.3))
+  const read = (segments: Word[][]) =>
+    segments.map((segment) => segment.map((w) => w.text).join(" "))
+
+  it("never ends a caption on a weak word when more follow", () => {
+    const words = line(
+      "we",
+      "shipped",
+      "the",
+      "new",
+      "editor",
+      "and",
+      "the",
+      "export",
+      "today"
+    )
+    const segments = read(groupReadable(words, 3))
+    for (const segment of segments.slice(0, -1)) {
+      expect(segment.split(" ").at(-1)).not.toMatch(/^(the|and)$/)
+    }
+    expect(segments.join(" ")).toBe(words.map((w) => w.text).join(" "))
+  })
+
+  it("breaks after a sentence whatever the count", () => {
+    expect(
+      read(groupReadable(line("Done.", "Next", "one", "now", "please"), 6))
+    ).toEqual(["Done.", "Next one now please"])
+  })
+
+  it("folds a weak trailing fragment into the caption before it", () => {
+    expect(
+      read(
+        groupReadable(line("vi", "laget", "en", "ny", "editor", "i", "dag"), 5)
+      )
+    ).toEqual(["vi laget en ny editor i dag"])
+  })
+
+  it("leaves the filler sounds off unless asked", () => {
+    const words = line("so", "um", "we", "ummm", "won")
+    expect(read(groupReadable(words, 1))).toEqual(["so", "we", "won"])
+    expect(read(groupReadable(words, 1, { hideFillers: false }))).toHaveLength(
+      5
+    )
+  })
+
+  it("holds no word longer than the ceiling", () => {
+    const [[held]] = groupReadable([word("done.", 0, 9)], 1)
+    expect(held.endUs - held.startUs).toBe(MAX_CAPTION_WORD_US)
   })
 })

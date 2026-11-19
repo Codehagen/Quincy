@@ -12,6 +12,7 @@ import {
   proxyArgs,
   storageKeys,
   thumbnailArgs,
+  voiceCleanArgs,
 } from "./media"
 import { LANDSCAPE_CANVAS, VERTICAL_CANVAS } from "./document"
 import { secondsToUs } from "./time"
@@ -153,6 +154,19 @@ describe("proxyArgs", () => {
 
   it("holds audio sync on sources that drift", () => {
     expect(args).toContain("aresample=async=1")
+  })
+})
+
+describe("voiceCleanArgs", () => {
+  it("resamples against the timestamps before anything else", () => {
+    const args = voiceCleanArgs("in", "out")
+    const filter = args[args.indexOf("-af") + 1]
+    expect(filter.startsWith("aresample=async=1:first_pts=0,")).toBe(true)
+    expect(filter).toMatch(/loudnorm=I=-16:TP=-1\.5:LRA=11$/)
+  })
+
+  it("keys the track by its filter version", () => {
+    expect(storageKeys.voice("h")).toBe("derived/voice/v2/h.m4a")
   })
 })
 

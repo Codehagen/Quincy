@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Video } from "@remotion/media"
+import { Audio, Video } from "@remotion/media"
 import {
   AbsoluteFill,
   Sequence,
@@ -16,6 +16,7 @@ import {
   cssTransformOrigin,
   resolveVisual,
 } from "@/lib/editor/effects"
+import { cutEdges, edgeGain, type AudioEdges } from "@/lib/editor/audio-edges"
 import { durationInFrames, framesFor, usForFrame } from "@/lib/editor/frames"
 import type {
   CaptionElement,
@@ -60,6 +61,8 @@ export type CompositionMedia = {
    */
   localUrl?: string | null
   rotation?: number
+  /** The cleaned voice, played in place of the clip's own sound when asked. */
+  voiceUrl?: string | null
 }
 
 export type CompositionProps = {
@@ -99,8 +102,9 @@ export function EditorComposition({
          * not. Visible only by looking at it.
          */
         .filter((track) => !track.hidden)
-        .map((track) =>
-          track.elements.map((element) => {
+        .map((track) => {
+          const edges = cutEdges(track)
+          return track.elements.map((element) => {
             if (element.hidden) return null
 
             const from = framesFor(element.startUs, fps)
@@ -118,7 +122,12 @@ export function EditorComposition({
                   // the moment something goes wrong.
                   name={element.name}
                 >
-                  <Clip element={element} media={media[element.mediaId]} />
+                  <Clip
+                    element={element}
+                    media={media[element.mediaId]}
+                    edges={edges.get(element.id)}
+                    length={length}
+                  />
                 </Sequence>
               )
             }
@@ -151,7 +160,7 @@ export function EditorComposition({
 
             return null
           })
-        )}
+        })}
     </AbsoluteFill>
   )
 }
@@ -174,9 +183,15 @@ export function EditorComposition({
 function Clip({
   element,
   media,
+  edges,
+  length,
 }: {
   element: VideoElement
   media: CompositionMedia | undefined
+  /** Which ends of this clip are cuts, to soften (audio-edges.ts). */
+  edges?: AudioEdges
+  /** The clip's length in frames, for the ramp at its end. */
+  length: number
 }) {
   const { fps } = useVideoConfig()
   const visual = useVisual(element)
@@ -193,6 +208,17 @@ function Clip({
   // applies the display matrix and strips it — rotating that too is how upright
   // footage ends up on its side.
   const usingOriginal = !media?.proxyUrl && Boolean(media?.localUrl)
+
+  // The sound: the clip's own, or the cleaned voice in its place over the
+  // same window of the recording. Without a stored voice the clip plays as
+  // recorded, which is what "clean" falls back to rather than silence.
+  const cleanVoice =
+    element.voice === "clean" ? (media?.voiceUrl ?? null) : null
+  const volume = element.muted
+    ? 0
+    : edges && (edges.in || edges.out)
+      ? (frame: number) => element.volume * edgeGain(frame, length, edges)
+      : element.volume
   const rotation = usingOriginal ? (media?.rotation ?? 0) : 0
 
   return (
@@ -218,7 +244,7 @@ function Clip({
           src={src}
           trimBefore={framesFor(element.trimStartUs, fps)}
           trimAfter={framesFor(element.trimEndUs, fps)}
-          volume={element.muted ? 0 : element.volume}
+          volume={cleanVoice ? 0 : volume}
           style={{
             width: "100%",
             height: "100%",
@@ -231,6 +257,14 @@ function Clip({
           objectFit={element.fit ?? "contain"}
         />
       </AbsoluteFill>
+      {cleanVoice ? (
+        <Audio
+          src={cleanVoice}
+          trimBefore={framesFor(element.trimStartUs, fps)}
+          trimAfter={framesFor(element.trimEndUs, fps)}
+          volume={volume}
+        />
+      ) : null}
     </AbsoluteFill>
   )
 }

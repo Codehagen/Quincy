@@ -2,13 +2,16 @@
 
 import * as React from "react"
 import {
+  AudioWave01Icon,
   Delete02Icon,
   Redo02Icon,
   ScissorIcon,
   Undo02Icon,
 } from "@hugeicons/core-free-icons"
 
+import { chapterLines, placeChapters } from "@/lib/editor/chapters"
 import {
+  captionRules,
   currentScene,
   LANDSCAPE_CANVAS,
   SQUARE_CANVAS,
@@ -30,10 +33,18 @@ import {
   resizeEffect,
   setEffectAmount,
   splitAt,
+  setVoice,
   trimEdge,
 } from "@/lib/editor/edits"
 import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
-import { addCaptions } from "@/lib/editor/tools"
+import { addCaptions, restoreSpeech } from "@/lib/editor/tools"
+import {
+  cleanUpReview,
+  cutAways,
+  reviewCuts,
+  type CutAway,
+  type ReviewItem,
+} from "@/lib/editor/transcript-edit"
 import type { Word } from "@/lib/editor/transcript"
 import type { TakeReading } from "@/lib/editor/reading"
 import { us } from "@/lib/editor/time"
@@ -58,9 +69,20 @@ import { useDirector } from "./agent-cursor/director"
 import { StudioChat, type StudioHarness } from "./studio-chat"
 import { useStrongLine } from "./use-strong-line"
 import { StudioEffects } from "./studio-effects"
-import { DeskIconButton, FrameMenu, SceneMenu, TimelineZoom, type FrameShape } from "./desk-controls"
+import {
+  DeskIconButton,
+  FrameMenu,
+  SceneMenu,
+  TimelineZoom,
+  type FrameShape,
+} from "./desk-controls"
 import { ProjectName } from "./project-name"
-import { StudioFrame, useWideDesk, type SideView, type StudioTool } from "./studio-frame"
+import {
+  StudioFrame,
+  useWideDesk,
+  type SideView,
+  type StudioTool,
+} from "./studio-frame"
 import { StudioLibrary } from "./studio-library"
 import { formatClockTenths, PlayButton, PlayheadClock } from "./studio-parts"
 import { StudioLanes, type TrimDrag } from "./studio-lanes"
@@ -68,6 +90,7 @@ import { StudioTranscript, type TranscriptSelection } from "./studio-transcript"
 import type { CompositionMedia } from "./composition"
 import { ExportButton } from "./export-button"
 import { StudioPreview } from "./studio-preview"
+import { cycleRate, rateLabel, stepRate } from "./playback-rate"
 import { useZoom } from "./studio-zoom"
 import { ArrivalPasses } from "./arrival/arrival"
 import { scanPasses } from "./arrival/passes"
@@ -98,6 +121,8 @@ export type MediaEntry = {
   hasAudio: boolean
   proxyUrl: string | null
   seekIndexUrl: string | null
+  /** The cleaned voice (media.ts `voiceCleanArgs`), when one is stored. */
+  voiceUrl?: string | null
   filmstrip: Filmstrip | null
   /** What Quincy noticed in the take; null without a transcript. */
   reading: TakeReading | null
@@ -258,6 +283,9 @@ export function Studio({
    * What the composition needs per asset: where to fetch it, and whether it has
    * been through ffmpeg yet.
    */
+  /** Cleaned voices fetched this session, by media id (POST …/voice). */
+  const [voiceUrls, setVoiceUrls] = React.useState<Record<string, string>>({})
+
   const compositionMedia = React.useMemo(() => {
     const entries: Record<string, CompositionMedia> = {}
 
@@ -266,11 +294,12 @@ export function Studio({
         proxyUrl: entry.proxyUrl,
         localUrl: id === asset?.id ? localUrl : null,
         rotation: entry.rotation,
+        voiceUrl: voiceUrls[id] ?? entry.voiceUrl ?? null,
       }
     }
 
     return entries
-  }, [media, asset?.id, localUrl])
+  }, [media, asset?.id, localUrl, voiceUrls])
 
   /**
    * The frame sheets, by media id.
@@ -384,7 +413,10 @@ export function Studio({
     documentRef.current = document
   })
   const sceneById = React.useCallback(
-    (id?: string) => (id ? documentRef.current.scenes.find((s) => s.id === id) : sceneRef.current),
+    (id?: string) =>
+      id
+        ? documentRef.current.scenes.find((s) => s.id === id)
+        : sceneRef.current,
     []
   )
   const spanUs = React.useCallback(
@@ -397,7 +429,9 @@ export function Studio({
   /** Where one of three cuts keeps its targets: its spine, so its cursor never finds another cut's. */
   const scopeOf = React.useCallback(
     (sceneId: string) =>
-      deskRef.current?.querySelector<HTMLElement>(`[data-cut-scene="${CSS.escape(sceneId)}"]`) ?? null,
+      deskRef.current?.querySelector<HTMLElement>(
+        `[data-cut-scene="${CSS.escape(sceneId)}"]`
+      ) ?? null,
     []
   )
   const onLand = React.useCallback(
@@ -416,18 +450,34 @@ export function Studio({
    * panel shows their three spines and the preview the lead cut. Opening
    * one puts it in the full lanes; the spines come back from the switcher.
    */
-  const [cutSet, setCutSet] = React.useState<{ cuts: CutView[]; recommendedId: string | null } | null>(null)
+  const [cutSet, setCutSet] = React.useState<{
+    cuts: CutView[]
+    recommendedId: string | null
+  } | null>(null)
   const [cutsShown, setCutsShown] = React.useState(false)
 
   /** The reading, with the strong line once it has been chosen. */
-  const reading = useStrongLine(asset?.id, asset?.reading ?? null, harness?.fetch)
+  const reading = useStrongLine(
+    asset?.id,
+    asset?.reading ?? null,
+    harness?.fetch
+  )
 
   /** The arrival: the reading played once, the first time this take is opened (phase G). */
-  const arrival = useArrival({ assetId: asset?.id ?? null, hasReading: reading !== null, mode: harness?.arrival })
+  const arrival = useArrival({
+    assetId: asset?.id ?? null,
+    hasReading: reading !== null,
+    mode: harness?.arrival,
+  })
   const passes = React.useMemo(
     () =>
       reading && asset
-        ? scanPasses(reading, { width: asset.width, height: asset.height, rotation: asset.rotation, fps: asset.fps })
+        ? scanPasses(reading, {
+            width: asset.width,
+            height: asset.height,
+            rotation: asset.rotation,
+            fps: asset.fps,
+          })
         : [],
     [reading, asset]
   )
@@ -479,38 +529,56 @@ export function Studio({
         setCutsShown(true)
       },
       onRecommend: (pick: RecommendData) =>
-        setCutSet((prev) => (prev ? { ...prev, recommendedId: pick.sceneId } : prev)),
+        setCutSet((prev) =>
+          prev ? { ...prev, recommendedId: pick.sceneId } : prev
+        ),
       undoCut: (sceneId: string) => commit([{ op: "remove_scene", sceneId }]),
-      hasScene: (sceneId: string) => document.scenes.some((s) => s.id === sceneId),
+      hasScene: (sceneId: string) =>
+        document.scenes.some((s) => s.id === sceneId),
       durationOf: (sceneId: string) => {
         const target = document.scenes.find((s) => s.id === sceneId)
         return target ? sceneDurationUs(target) : 0
       },
       aspectOf: (sceneId: string) => {
-        const c = document.scenes.find((s) => s.id === sceneId)?.canvas ?? document.settings.canvas
+        const c =
+          document.scenes.find((s) => s.id === sceneId)?.canvas ??
+          document.settings.canvas
         return c.width / c.height
       },
     }),
     [commit, document]
   )
-  const liveCuts = cutSet?.cuts.filter((cut) => document.scenes.some((s) => s.id === cut.sceneId)) ?? []
+  const liveCuts =
+    cutSet?.cuts.filter((cut) =>
+      document.scenes.some((s) => s.id === cut.sceneId)
+    ) ?? []
   const showSpines = cutsShown && liveCuts.length > 0
 
   const addCaptionsByHand = React.useCallback(async () => {
-    const clip = scene ? findMainTrack(scene)?.elements.find((e) => e.kind === "video") : undefined
+    const clip = scene
+      ? findMainTrack(scene)?.elements.find((e) => e.kind === "video")
+      : undefined
     if (!scene || !clip || clip.kind !== "video" || captionsPending) return
     setCaptionsPending(true)
     try {
-      const response = await (harness?.fetch ?? fetch)(`/api/editor/assets/${clip.mediaId}/transcript`)
+      const response = await (harness?.fetch ?? fetch)(
+        `/api/editor/assets/${clip.mediaId}/transcript`
+      )
       if (!response.ok) return
       const { words } = (await response.json()) as { words: Word[] }
-      commit(addCaptions(scene, words, { mediaId: clip.mediaId, author: "user" }))
+      commit(
+        addCaptions(scene, words, {
+          mediaId: clip.mediaId,
+          author: "user",
+          rules: captionRules(document),
+        })
+      )
     } catch {
       // Offline: the button is still there to press again.
     } finally {
       setCaptionsPending(false)
     }
-  }, [scene, captionsPending, commit, harness])
+  }, [scene, captionsPending, commit, harness, document])
 
   /**
    * Cut where the pointer is, and fall back to the playhead when it is not over
@@ -780,7 +848,9 @@ export function Studio({
    * it would take the preview's room. Before the width is known the frame
    * decides in CSS (`libraryAuto`), so nothing flashes on load.
    */
-  const [toolChoice, setTool] = React.useState<StudioTool | null | undefined>(undefined)
+  const [toolChoice, setTool] = React.useState<StudioTool | null | undefined>(
+    undefined
+  )
   const wideDesk = useWideDesk()
   const tool: StudioTool | null =
     toolChoice !== undefined ? toolChoice : wideDesk === false ? null : "media"
@@ -859,6 +929,195 @@ export function Studio({
   }, [commit, scene, selectedWords])
 
   /**
+   * The recording's own transcript, for what the captions cannot show: the
+   * words a cut took. Fetched when the transcript panel opens, once per
+   * media, and never paid for again (the asset already holds it).
+   */
+  const mainMediaId = React.useMemo(() => {
+    const clip = scene
+      ? findMainTrack(scene)?.elements.find((e) => e.kind === "video")
+      : undefined
+    return clip && clip.kind === "video" ? clip.mediaId : null
+  }, [scene])
+  const [sourceTranscript, setSourceTranscript] = React.useState<{
+    mediaId: string
+    /** Null when the fetch failed: kept, so the panel does not ask again. */
+    words: Word[] | null
+  } | null>(null)
+
+  /**
+   * One line the studio says when a press could not do what it promised: a
+   * cooldown, a paywall, a stretch that cannot go back. In ink, not red (a
+   * limit is not a failure), and gone after a few seconds.
+   */
+  const [notice, setNotice] = React.useState<{
+    text: string
+    plans?: boolean
+  } | null>(null)
+  React.useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  React.useEffect(() => {
+    if (side !== "transcript" || !mainMediaId) return
+    if (sourceTranscript?.mediaId === mainMediaId) return
+    let live = true
+    void (async () => {
+      try {
+        const response = await (harness?.fetch ?? fetch)(
+          `/api/editor/assets/${mainMediaId}/transcript`
+        )
+        if (!live) return
+        if (!response.ok) {
+          setSourceTranscript({ mediaId: mainMediaId, words: null })
+          return
+        }
+        const { words: fetched } = (await response.json()) as { words: Word[] }
+        if (live) setSourceTranscript({ mediaId: mainMediaId, words: fetched })
+      } catch {
+        // Offline: the panel still reads the captions, and says what it lacks.
+        if (live) setSourceTranscript({ mediaId: mainMediaId, words: null })
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [side, mainMediaId, sourceTranscript, harness])
+
+  const sourceWords =
+    sourceTranscript && sourceTranscript.mediaId === mainMediaId
+      ? sourceTranscript.words
+      : null
+  const sourceTranscriptFailed =
+    sourceTranscript?.mediaId === mainMediaId && sourceTranscript.words === null
+  const sourceDurationUs = mainMediaId
+    ? (media[mainMediaId]?.durationUs ?? null)
+    : null
+
+  const cutList = React.useMemo<CutAway[]>(
+    () =>
+      scene && mainMediaId && sourceWords && sourceDurationUs
+        ? cutAways(scene, mainMediaId, sourceWords, us(sourceDurationUs))
+        : [],
+    [scene, mainMediaId, sourceWords, sourceDurationUs]
+  )
+
+  const review = React.useMemo<ReviewItem[]>(
+    () =>
+      scene && mainMediaId && sourceWords
+        ? cleanUpReview(scene, mainMediaId, sourceWords)
+        : [],
+    [scene, mainMediaId, sourceWords]
+  )
+
+  /** Put a cut stretch back where it was in the recording. */
+  const restoreCut = React.useCallback(
+    (cut: CutAway) => {
+      if (!scene || !sourceDurationUs) return
+      const ops = restoreSpeech(scene, {
+        mediaId: cut.mediaId,
+        atUs: cut.sourceUs,
+        sourceDurationUs: us(sourceDurationUs),
+        words: sourceWords,
+        rules: captionRules(document),
+      })
+      if (ops.length === 0) {
+        setNotice({ text: "That stretch could not be put back here." })
+        return
+      }
+      commit(ops)
+    },
+    [commit, scene, sourceDurationUs, sourceWords, document]
+  )
+
+  /** The reviewed stumbles, cut in one step (and one undo). */
+  const cleanUp = React.useCallback(
+    (items: ReviewItem[]) => {
+      if (!scene || !mainMediaId || !sourceWords || !sourceDurationUs) return
+      const ranges = reviewCuts(items, sourceWords, us(sourceDurationUs))
+      const ops =
+        ranges.length > 0
+          ? deleteSpeech(scene, [{ mediaId: mainMediaId, ranges }])
+          : []
+      if (ops.length === 0) {
+        setNotice({ text: "Nothing left to remove." })
+        return
+      }
+      commit(ops)
+    },
+    [commit, scene, mainMediaId, sourceWords, sourceDurationUs]
+  )
+
+  const placedChapters = React.useMemo(
+    () => (scene ? placeChapters(scene, document.metadata.chapters ?? []) : []),
+    [scene, document.metadata.chapters]
+  )
+
+  /**
+   * Clean sound, as a switch on the cut. The voice track is made at ingest;
+   * a take from before that is cleaned once, here, on the first press.
+   */
+  const cleanSound = React.useMemo(
+    () =>
+      Boolean(
+        scene &&
+        findMainTrack(scene)?.elements.some(
+          (element) => element.kind === "video" && element.voice === "clean"
+        )
+      ),
+    [scene]
+  )
+  const [voicePending, setVoicePending] = React.useState(false)
+  const toggleVoice = React.useCallback(async () => {
+    if (!scene || !mainMediaId || voicePending) return
+    if (cleanSound) {
+      commit(setVoice(scene, "original"))
+      return
+    }
+    if (!voiceUrls[mainMediaId] && !media[mainMediaId]?.voiceUrl) {
+      setVoicePending(true)
+      try {
+        const response = await (harness?.fetch ?? fetch)(
+          `/api/editor/assets/${mainMediaId}/voice`,
+          { method: "POST" }
+        )
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string
+          } | null
+          setNotice({
+            text: body?.error ?? "The sound could not be cleaned right now.",
+            plans: response.status === 402,
+          })
+          return
+        }
+        const { url } = (await response.json()) as { url: string }
+        setVoiceUrls((prev) => ({ ...prev, [mainMediaId]: url }))
+      } catch {
+        setNotice({ text: "The sound could not be cleaned right now." })
+        return
+      } finally {
+        setVoicePending(false)
+      }
+    }
+    commit(setVoice(scene, "clean"))
+  }, [
+    scene,
+    mainMediaId,
+    voicePending,
+    cleanSound,
+    commit,
+    voiceUrls,
+    media,
+    harness,
+  ])
+
+  /** Preview speed: the preview's only, never the document's. */
+  const [rate, setRate] = React.useState(1)
+
+  /**
    * Punch in on what was said.
    *
    * On the clip the selection *starts* in, and `punchIn` clamps the window to
@@ -922,6 +1181,9 @@ export function Studio({
         setSelectedEffect(null)
         setSelectedId(null)
         setTranscriptSelection(null)
+      } else if (event.key === "<" || event.key === ">") {
+        event.preventDefault()
+        setRate((current) => stepRate(current, event.key === ">" ? 1 : -1))
       } else if (event.key === "s" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault()
         split()
@@ -999,6 +1261,7 @@ export function Studio({
           fps={fps}
           durationUs={durationUs}
           background={document.settings.background.color}
+          playbackRate={rate}
         />
       }
       headerEnd={<SaveBadge save={save} onRetry={retry} />}
@@ -1014,7 +1277,45 @@ export function Studio({
       }
       transport={
         <>
-          <PlayButton playing={player.playing} onToggle={player.toggle} size="sm" />
+          <PlayButton
+            playing={player.playing}
+            onToggle={player.toggle}
+            size="sm"
+          />
+          <button
+            type="button"
+            onClick={() => setRate(cycleRate)}
+            title="Preview speed (< and >)"
+            aria-label={`Preview speed ${rateLabel(rate)}`}
+            className={cn(
+              "relative rounded px-1.5 py-0.5 text-kit-small tabular-nums",
+              "before:absolute before:-inset-1",
+              "transition-colors duration-150 ease-out hover:bg-kit-row-hover",
+              "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid",
+              rate === 1 ? "text-kit-ink-muted" : "text-kit-ink"
+            )}
+          >
+            {rateLabel(rate)}
+          </button>
+          {notice ? (
+            <span
+              role="status"
+              className="truncate text-kit-small text-kit-ink"
+            >
+              {notice.text}
+              {notice.plans ? (
+                <>
+                  {" "}
+                  <a
+                    href="/settings?section=plan"
+                    className="underline decoration-kit-link-line underline-offset-4 hover:decoration-kit-ink"
+                  >
+                    See plans
+                  </a>
+                </>
+              ) : null}
+            </span>
+          ) : null}
           {/* One line, fixed-width digits: the clock never wraps or jitters. */}
           <span className="text-kit-small whitespace-nowrap text-kit-ink tabular-nums">
             <PlayheadClock player={player} />
@@ -1031,13 +1332,36 @@ export function Studio({
             <SceneMenu
               scenes={document.scenes}
               currentId={showSpines ? null : scene.id}
-              cutsLabel={liveCuts.length > 0 ? `All ${liveCuts.length} cuts` : null}
+              cutsLabel={
+                liveCuts.length > 0 ? `All ${liveCuts.length} cuts` : null
+              }
               onPick={openScene}
               onShowCuts={() => setCutsShown(true)}
               disabled={running}
             />
           ) : null}
-          <DeskIconButton icon={ScissorIcon} label="Split" shortcut={["S"]} onClick={split} disabled={running} />
+          <DeskIconButton
+            icon={ScissorIcon}
+            label="Split"
+            shortcut={["S"]}
+            onClick={split}
+            disabled={running}
+          />
+          {mainMediaId && media[mainMediaId]?.hasAudio ? (
+            <DeskIconButton
+              icon={AudioWave01Icon}
+              label={
+                voicePending
+                  ? "Cleaning the sound…"
+                  : cleanSound
+                    ? "Play the sound as recorded"
+                    : "Clean the sound"
+              }
+              onClick={() => void toggleVoice()}
+              disabled={running || voicePending}
+              pressed={cleanSound}
+            />
+          ) : null}
           <DeskIconButton
             icon={Delete02Icon}
             label="Delete the selected clip"
@@ -1103,7 +1427,11 @@ export function Studio({
           arrival={arrival}
           passes={
             arrival.played ? (
-              <ArrivalPasses passes={passes} atMs={arrival.atMs} settled={arrival.phase === "settled"} />
+              <ArrivalPasses
+                passes={passes}
+                atMs={arrival.atMs}
+                settled={arrival.phase === "settled"}
+              />
             ) : null
           }
           frame={chatFrame}
@@ -1122,6 +1450,15 @@ export function Studio({
           onDelete={deleteWords}
           onZoom={zoomWords}
           locked={running}
+          cutAways={cutList}
+          onRestore={restoreCut}
+          review={review}
+          onCleanUp={cleanUp}
+          chapters={placedChapters}
+          transcriptMissing={sourceTranscriptFailed}
+          chapterText={
+            placedChapters.length > 0 ? chapterLines(placedChapters) : null
+          }
         />
       }
     >
@@ -1138,7 +1475,9 @@ export function Studio({
           />
         ) : (
           <StudioLanes
-            onAddCaptions={asset?.id ? () => void addCaptionsByHand() : undefined}
+            onAddCaptions={
+              asset?.id ? () => void addCaptionsByHand() : undefined
+            }
             captionsPending={captionsPending}
             scene={scene}
             player={player}
@@ -1337,7 +1676,10 @@ function SaveBadge({
             ? "Could not confirm what Quincy saved — reload to continue"
             : save.message
 
-  const bad = save.status === "conflict" || save.status === "error" || save.status === "unsynced"
+  const bad =
+    save.status === "conflict" ||
+    save.status === "error" ||
+    save.status === "unsynced"
 
   return (
     <span className="flex items-center gap-2">

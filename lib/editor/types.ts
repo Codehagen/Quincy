@@ -35,12 +35,32 @@ export type DocumentMetadata = {
   durationUs: Us
   createdAt: string
   updatedAt: string
+  /**
+   * Chapters, bound to the source instant each one opens on rather than to a
+   * timeline position, for the reason captions are: after a cut moves
+   * everything left, a chapter still knows which sentence it starts at.
+   * Validated on the way in (chapters.ts).
+   */
+  chapters?: Chapter[]
+}
+
+export type Chapter = {
+  title: string
+  mediaId: string
+  sourceUs: Us
 }
 
 export type DocumentSettings = {
   fps: number
   canvas: { width: number; height: number }
   background: { type: "color"; color: string }
+  /**
+   * Which version of each generating rule this project was made with.
+   * Absent means the first. A rule that gets better is a new number, and an
+   * old project keeps the old one, so reopening a cut never quietly re-breaks
+   * its captions (transcript.ts `CAPTION_RULES`).
+   */
+  rules?: { captions?: number }
 }
 
 /**
@@ -140,6 +160,13 @@ export type VideoElement = ElementBase & {
   /** Independent of the element's own audio, which mutes with `muted`. */
   volume: number
   muted: boolean
+  /**
+   * Which sound plays: the recording as it was, or the cleaned voice track
+   * the ingest made beside the proxy (noise down, low rumble off, loudness
+   * evened). Absent is the original. Falls back to the original when the
+   * asset has no cleaned track yet.
+   */
+  voice?: "original" | "clean"
   effects: Effect[]
   animations: Animations
 }
@@ -212,6 +239,8 @@ export type CaptionStyle = {
   inactiveColor: string
   /** 1 gives the word-by-word look. Higher reads as a phrase at a time. */
   wordsPerSegment: number
+  /** Filler sounds shown on the captions (rules 2 hide them by default). */
+  showFillers?: boolean
   textTransform: "none" | "uppercase" | "lowercase"
   textAlign: "left" | "center" | "right"
   lineHeight: number

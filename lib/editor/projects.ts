@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 import { db } from "../db"
 import { videoProject } from "../schema-app"
 import { documentForAsset } from "./document"
+import { sanitizeDocument } from "./sanitize"
 import { RevisionConflictError } from "./ops"
 import { us } from "./time"
 import { UNLOCKED, type Author, type VideoDocument } from "./types"
@@ -86,7 +87,12 @@ export async function getProject(
     .where(and(eq(videoProject.id, id), eq(videoProject.userId, userId)))
     .limit(1)
 
-  return rows[0] ?? null
+  const row = rows[0]
+  if (!row) return null
+  // Repaired on the way out, so every reader (the page, the agent, the
+  // check) opens the same sound document (sanitize.ts).
+  const document = sanitizeDocument(row.document)
+  return document === row.document ? row : { ...row, document }
 }
 
 export async function listProjects(

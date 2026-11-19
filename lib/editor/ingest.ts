@@ -54,6 +54,8 @@ export type Transcoder = {
    * without it the timeline seeks approximately, which is worse but not broken.
    */
   keyframes?(source: MediaSource): Promise<Us[]>
+  /** The voice, cleaned (media.ts `voiceCleanArgs`). Optional like keyframes. */
+  voice?(source: MediaSource): Promise<Uint8Array>
 }
 
 export type Transcriber = {
@@ -143,6 +145,12 @@ export type IngestPorts = {
    * behind `admit`, for containers whose probe reported no duration.
    */
   admitTranscription?: (audioSeconds: number) => Promise<string | null>
+  /**
+   * True once there is no longer time to clean the voice. Ingest shares one
+   * function's deadline with the steps that matter, and the cleaned voice is
+   * not one of them: the studio's Sound button can make it later.
+   */
+  voiceDeadline?: () => boolean
 }
 
 export type IngestStep =
@@ -300,6 +308,28 @@ export async function runIngest(
     filmstrip = plan
   } catch (error) {
     warnings.push(`filmstrip: ${message(error)}`)
+  }
+
+  /**
+   * The cleaned voice, made now so "Clean sound" is a switch and not a wait.
+   * Non-fatal like the filmstrip: a take without it plays its own sound, and
+   * the studio can still ask for it later.
+   */
+  if (probe.hasAudio && transcoder.voice && ports.voiceDeadline?.()) {
+    warnings.push("voice: skipped, left for the Sound button")
+  } else if (probe.hasAudio && transcoder.voice) {
+    try {
+      const voiceKey = storageKeys.voice(input.contentHash)
+      if (!(await storage.exists(voiceKey))) {
+        await storage.put(
+          voiceKey,
+          await transcoder.voice(input.source),
+          "audio/mp4"
+        )
+      }
+    } catch (error) {
+      warnings.push(`voice: ${message(error)}`)
+    }
   }
 
   /**

@@ -3,12 +3,14 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { Progress, Text, TextLink } from "@/components/kit"
+import { Progress, Text, TextButton, TextLink } from "@/components/kit"
 import {
   UploadError,
   uploadAndOpen,
   type UploadProgress,
 } from "@/lib/editor/upload-client"
+
+import { RecordTakePanel } from "./record-take-panel"
 
 /**
  * Drop a recording here and end up in the editor.
@@ -46,6 +48,23 @@ export function UploadDrop({
   // The paywall is a refusal with somewhere to go, unlike the others.
   const [paywalled, setPaywalled] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
+  const [recording, setRecording] = React.useState(false)
+  /**
+   * A take recorded here, kept until it is safely uploaded. Unlike a dropped
+   * file it has no copy on disk, so a failed upload must not be the end of
+   * it: the error offers to try again or to save the take.
+   */
+  const [take, setTake] = React.useState<File | null>(null)
+
+  const saveTake = React.useCallback(() => {
+    if (!take) return
+    const url = URL.createObjectURL(take)
+    const link = window.document.createElement("a")
+    link.href = url
+    link.download = take.name
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }, [take])
 
   const busy = progress !== null && progress.phase !== "done"
 
@@ -77,6 +96,21 @@ export function UploadDrop({
     [onFileChosen, router]
   )
 
+  if (recording && !busy) {
+    return (
+      <div className="rounded-kit-chip border border-kit-hairline p-kit-pad">
+        <RecordTakePanel
+          onCancel={() => setRecording(false)}
+          onDone={(file) => {
+            setTake(file)
+            setRecording(false)
+            void start(file)
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       onDragOver={(event) => {
@@ -90,7 +124,10 @@ export function UploadDrop({
         if (busy) return
 
         const file = event.dataTransfer.files[0]
-        if (file) void start(file)
+        if (file) {
+          setTake(null)
+          void start(file)
+        }
       }}
       // A dashed recess inside the Card, so the drop target reads as a place
       // to put something rather than another object. Nested radius: the
@@ -106,7 +143,10 @@ export function UploadDrop({
         className="sr-only"
         onChange={(event) => {
           const file = event.target.files?.[0]
-          if (file) void start(file)
+          if (file) {
+            setTake(null)
+            void start(file)
+          }
           // Cleared so choosing the same file twice fires a change event the
           // second time — otherwise a retry after a failure does nothing.
           event.target.value = ""
@@ -140,9 +180,17 @@ export function UploadDrop({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
+              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
             >
               choose a file
+            </button>
+            , or{" "}
+            <button
+              type="button"
+              onClick={() => setRecording(true)}
+              className="relative font-kit-strong text-kit-ink underline decoration-kit-link-line underline-offset-4 outline-hidden hover:decoration-kit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kit-focus focus-visible:outline-solid pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:top-1/2 pointer-coarse:after:h-11 pointer-coarse:after:-translate-y-1/2"
+            >
+              record a take
             </button>
           </Text>
           <Text variant="small" tone="muted">
@@ -163,6 +211,16 @@ export function UploadDrop({
               <>
                 {" "}
                 <TextLink href="/settings?section=plan">See plans</TextLink>
+              </>
+            ) : null}
+            {take ? (
+              <>
+                {" "}
+                <TextButton onClick={() => void start(take)}>
+                  Try again
+                </TextButton>
+                {" or "}
+                <TextButton onClick={saveTake}>save the take</TextButton>.
               </>
             ) : null}
           </Text>

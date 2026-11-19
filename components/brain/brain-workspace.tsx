@@ -203,7 +203,8 @@ export function BrainWorkspace({
           corrected: page?.provenance === "user",
         }
       }),
-      about: "One plan per channel: what it is for, who reads it, and the split Quincy writes to.",
+      about:
+        "One plan per channel: what it is for, who reads it, and the split Quincy writes to.",
       empty: "Connect a channel and Quincy proposes a plan for it.",
     },
     {
@@ -218,6 +219,18 @@ export function BrainWorkspace({
       empty: "Nothing published yet.",
     },
     {
+      value: CUTS_GROUP,
+      label: "Cuts",
+      items: byKind("cut_style").map((p) => ({
+        slug: p.slug,
+        label: p.title,
+        corrected: p.provenance === "user",
+      })),
+      about: "How you like a video cut. Quincy uses it on every cut in Cuts.",
+      empty:
+        "Nothing yet. In Cuts, ask Quincy to make the cut you like your style.",
+    },
+    {
       value: NOTES_GROUP,
       label: "Notes",
       items: memories.map((p) => ({
@@ -225,8 +238,10 @@ export function BrainWorkspace({
         label: label(p),
         corrected: p.provenance === "user",
       })),
-      about: "What Quincy picks up from your conversations, written on Monday night.",
-      empty: "Nothing yet. Talk to Quincy in Studio and the first notes arrive after Monday.",
+      about:
+        "What Quincy picks up from your conversations, written on Monday night.",
+      empty:
+        "Nothing yet. Talk to Quincy in Studio and the first notes arrive after Monday.",
     },
   ]
 
@@ -296,6 +311,7 @@ export function BrainWorkspace({
 /** The branch rows that open an overview rather than a page. */
 const STRATEGY_GROUP = "strategy"
 const NOTES_GROUP = "notes"
+const CUTS_GROUP = "cuts"
 
 type GroupItem = { slug: string; label: string; corrected?: boolean }
 
@@ -336,7 +352,9 @@ function GroupOverview({
             <Text>{group.empty}</Text>
             {group.value === STRATEGY_GROUP ? (
               <div className="flex">
-                <ButtonLink href="/connectors?show=channels">Connect a channel</ButtonLink>
+                <ButtonLink href="/connectors?show=channels">
+                  Connect a channel
+                </ButtonLink>
               </div>
             ) : null}
           </div>
@@ -392,14 +410,19 @@ function renderEditor({
 }) {
   const singleton = SINGLETONS.find((s) => s.slug === active)
   const page = find(active)
-  const group = groups.find((g) => g.value === active && g.value !== STORY_INDEX)
+  const group = groups.find(
+    (g) => g.value === active && g.value !== STORY_INDEX
+  )
 
   // First, not just before the empty state: with no pages read, every branch
   // below would draw a blank editor or an empty group, and a blank editor
   // saved would write over a page that is there.
   if (failed) {
     return (
-      <EmptyState bold="Couldn’t load the brain." rest="Nothing is lost. Check your connection, then try again.">
+      <EmptyState
+        bold="Couldn’t load the brain."
+        rest="Nothing is lost. Check your connection, then try again."
+      >
         <Button onClick={onRetry}>Try again</Button>
       </EmptyState>
     )
@@ -469,6 +492,36 @@ function renderEditor({
     )
   }
 
+  // The cut style is data the editor reads, so it is shown, not typed into:
+  // a free-text edit here would be prose nobody's code can follow. It is
+  // changed where it is made, in Cuts.
+  if (page?.kind === "cut_style") {
+    const lines = page.body.split("\n").filter(Boolean)
+    return (
+      <Card key={page.slug}>
+        <div className="flex flex-col gap-kit-group">
+          <header className="flex flex-col gap-kit-tight">
+            <Text as="h2" weight="strong">
+              {page.title}
+            </Text>
+            <Text tone="muted">
+              Quincy cuts your videos this way unless you ask for something
+              else. To change it, make a cut you like in Cuts and say
+              &ldquo;make this my style&rdquo;.
+            </Text>
+          </header>
+          <ul className="flex list-disc flex-col gap-kit-tight pl-5">
+            {lines.map((line) => (
+              <li key={line}>
+                <Text>{line}</Text>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Card>
+    )
+  }
+
   if (page?.kind === "memory") {
     return (
       <ProseEditor
@@ -502,9 +555,7 @@ function renderEditor({
         <Text as="div" role="status">
           <span className="inline-flex items-center gap-2">
             <Friend size={20} state="reading" className="shrink-0" />
-            <span className="min-w-0">
-              Reading the brain.
-            </span>
+            <span className="min-w-0">Reading the brain.</span>
           </span>
         </Text>
       </Card>

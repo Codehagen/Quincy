@@ -81,6 +81,9 @@ export const BRAIN_KINDS = [
   "policy",
   "story",
   "memory",
+  // How the person likes a video cut (lib/editor/cut-style.ts). Structured,
+  // read by the editor; not rendered into the writer's prompt.
+  "cut_style",
 ] as const
 
 export type BrainKind = (typeof BRAIN_KINDS)[number]

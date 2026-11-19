@@ -49,6 +49,16 @@ export const EXEMPT_TOOLS = new Set([
   "describe_timeline",
   // A split removes nothing; it only makes a later delete possible.
   "split_clip",
+  // The first copy of a repeat and an abandoned start, never the sentence
+  // said after them (disfluency.ts): the rule names fillers and pauses, and
+  // these are the same kind of cut. A clean-up of the whole take lands as one
+  // run with one undo, and its receipt names every kind it took.
+  "clean_up_speech",
+  // Reading, labelling and switching the sound remove nothing.
+  "read_transcript",
+  "set_chapters",
+  "clean_sound",
+  "save_cut_style",
 ])
 
 /** The tools whose built ops are measured before they land. */
@@ -213,7 +223,8 @@ export function gateLedger({
       const sentences = Math.max(0, gone - acceptedSentences)
 
       const tooLong = share > GATE_SHARE
-      if (!tooLong && sentences === 0) return { verdict: { ask: false }, clipIds }
+      if (!tooLong && sentences === 0)
+        return { verdict: { ask: false }, clipIds }
 
       const percent = Math.round(share * 100)
       return {
@@ -289,11 +300,7 @@ export function spokenSentences(words: Word[]): Word[][] {
  * words is gone after and at least one played before, so a sentence already
  * half-cut and finished off by this edit is counted, and one cut earlier is not.
  */
-function sentencesRemoved(
-  words: Word[],
-  before: Scene,
-  after: Scene
-): number {
+function sentencesRemoved(words: Word[], before: Scene, after: Scene): number {
   const spineBefore = findMainTrack(before)
   const spineAfter = findMainTrack(after)
   if (!spineBefore || !spineAfter) return 0
@@ -316,4 +323,3 @@ function sentencesRemoved(
       sentence.every((word) => !plays(spineAfter, word))
   ).length
 }
-

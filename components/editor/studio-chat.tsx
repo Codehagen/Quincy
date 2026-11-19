@@ -23,7 +23,13 @@ import { TaskFold, type TaskStep } from "@/components/ai-elements/task"
 import { ToolRow } from "@/components/ai-elements/tool"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Markdown } from "@/components/ui/markdown"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -44,6 +50,7 @@ import {
   type TakeReading,
 } from "@/lib/editor/reading"
 
+import { cleanUpReceiptOf } from "@/lib/editor/disfluency"
 import { fillerReceiptOf } from "@/lib/editor/fillers"
 import type { CutsMessage } from "@/lib/editor/stream-parts"
 
@@ -57,7 +64,12 @@ import type { Arrival } from "./arrival/use-arrival"
 import type { LookSource } from "./self-check/use-self-check"
 import { formatClockTenths } from "./studio-parts"
 import { entryState } from "./history"
-import { useCutsStream, type CutsDesk, type RunControls, type StudioHarness } from "./use-cuts-stream"
+import {
+  useCutsStream,
+  type CutsDesk,
+  type RunControls,
+  type StudioHarness,
+} from "./use-cuts-stream"
 import "./cuts-shadcn.css"
 
 /**
@@ -96,10 +108,26 @@ import "./cuts-shadcn.css"
  * its reason (lib/editor/reading.ts).
  */
 const STARTERS: readonly Starter[] = [
-  { text: "Tighten the edit", tool: "remove_silences", read: "Cuts the pauses and closes the gaps" },
-  { text: "Add captions", tool: "add_captions", read: "Word by word, from the transcript" },
-  { text: "Make it vertical", tool: "reframe", read: "9:16 for TikTok and Reels" },
-  { text: "Push in on the first line", tool: "punch_in", read: "A slow zoom for emphasis" },
+  {
+    text: "Tighten the edit",
+    tool: "remove_silences",
+    read: "Cuts the pauses and closes the gaps",
+  },
+  {
+    text: "Add captions",
+    tool: "add_captions",
+    read: "Word by word, from the transcript",
+  },
+  {
+    text: "Make it vertical",
+    tool: "reframe",
+    read: "9:16 for TikTok and Reels",
+  },
+  {
+    text: "Push in on the first line",
+    tool: "punch_in",
+    read: "A slow zoom for emphasis",
+  },
 ]
 
 /**
@@ -168,7 +196,16 @@ export function StudioChat({
     halt,
     retry,
     respond,
-  } = useCutsStream({ projectId, director, controls, onSaved, onRunningChange, look, desk, harness })
+  } = useCutsStream({
+    projectId,
+    director,
+    controls,
+    onSaved,
+    onRunningChange,
+    look,
+    desk,
+    harness,
+  })
 
   const send = ({ text }: { text: string }) => {
     if (sendText(text)) setInput("")
@@ -190,18 +227,25 @@ export function StudioChat({
     const timer = window.setTimeout(() => setLeaving(false), 150)
     return () => window.clearTimeout(timer)
   }, [leaving])
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
-  const waitingOnGate = messages.some((m) => m.parts.some((p) => isToolUIPart(p) && p.state === "approval-requested"))
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant")
+  const waitingOnGate = messages.some((m) =>
+    m.parts.some((p) => isToolUIPart(p) && p.state === "approval-requested")
+  )
 
   // Next steps never offer a request whose edits are already in the cut.
   const done = new Set(
-    director.beats.filter((b) => b.landed && b.toolName).map((b) => b.toolName as string)
+    director.beats
+      .filter((b) => b.landed && b.toolName)
+      .map((b) => b.toolName as string)
   )
   const starters = [
     ...(reading ? startersFor(reading, frame) : STARTERS),
     ...(controls.durationUs > 0 ? [THREE_CUTS] : []),
   ]
-  if (messages.some((m) => m.role === "assistant" && cutsOf(m))) done.add(THREE_CUTS.tool)
+  if (messages.some((m) => m.role === "assistant" && cutsOf(m)))
+    done.add(THREE_CUTS.tool)
   const nextSteps = starters.filter((s) => !done.has(s.tool))
   const record = lastAssistant ? runs[lastAssistant.id] : undefined
 
@@ -220,12 +264,12 @@ export function StudioChat({
       ? `Read the take. ${noticed(reading).join(" ")}`
       : ""
     : record && !isBusy && pick
-    ? `Three cuts made. ${pick.reason}`
-    : record && !isBusy
-    ? `${record.edits} ${record.edits === 1 ? "edit" : "edits"}, ${formatClockTenths(record.startUs)} to ${formatClockTenths(record.endUs)}.`
-    : waitingOnGate
-      ? "Quincy asks before this cut."
-      : ""
+      ? `Three cuts made. ${pick.reason}`
+      : record && !isBusy
+        ? `${record.edits} ${record.edits === 1 ? "edit" : "edits"}, ${formatClockTenths(record.startUs)} to ${formatClockTenths(record.endUs)}.`
+        : waitingOnGate
+          ? "Quincy asks before this cut."
+          : ""
 
   // The empty state, as the Chat pattern has it: rendered while there are no
   // messages. On the first send it leaves as the thread arrives (one
@@ -237,12 +281,14 @@ export function StudioChat({
       <EmptyHeader>
         <EmptyTitle>What should we cut?</EmptyTitle>
         <EmptyDescription>
-          You can still edit by hand: split with <Kbd keys={["S"]} />, trim by dragging a clip edge, undo with{" "}
-          <Kbd keys={["mod", "Z"]} />.
+          You can still edit by hand: split with <Kbd keys={["S"]} />, trim by
+          dragging a clip edge, undo with <Kbd keys={["mod", "Z"]} />.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="relative">
-        {passes ? <div className="absolute inset-x-0 top-0">{passes}</div> : null}
+        {passes ? (
+          <div className="absolute inset-x-0 top-0">{passes}</div>
+        ) : null}
         {/* One entrance for what the reading found and what it offers:
             held back (and inert) while the passes read, then together. */}
         <div
@@ -252,7 +298,10 @@ export function StudioChat({
           className="arrival-enter flex w-full flex-col items-center gap-4"
         >
           {reading ? (
-            <section aria-labelledby={noticedId} className="flex flex-col gap-1">
+            <section
+              aria-labelledby={noticedId}
+              className="flex flex-col gap-1"
+            >
               <h3 id={noticedId} className="font-medium">
                 What I noticed
               </h3>
@@ -297,11 +346,19 @@ export function StudioChat({
           <MessageScrollerProvider scrollPreviousItemPeek={48}>
             <MessageScroller className="min-h-0 flex-1">
               <MessageScrollerViewport aria-label="Cutting with Quincy">
-                <MessageScrollerContent aria-busy={isBusy} className="gap-5 px-kit-row-x py-3">
+                <MessageScrollerContent
+                  aria-busy={isBusy}
+                  className="gap-5 px-kit-row-x py-3"
+                >
                   {messages.map((message) =>
                     message.role === "user" ? (
                       // Only the person's message animates in (the Chat demo's slide-up).
-                      <MessageScrollerItem key={message.id} messageId={message.id} scrollAnchor className="cuts-msg-in">
+                      <MessageScrollerItem
+                        key={message.id}
+                        messageId={message.id}
+                        scrollAnchor
+                        className="cuts-msg-in"
+                      >
                         <Message align="end">
                           <MessageContent>
                             <Bubble align="end" variant="muted">
@@ -314,14 +371,18 @@ export function StudioChat({
                             swapped for the reply would leave the scroller's count
                             unchanged, and it would re-anchor to an older request. The
                             reply's row opens with the same line, a row gap below. */}
-                        {status === "submitted" && message.id === messages.at(-1)?.id ? (
+                        {status === "submitted" &&
+                        message.id === messages.at(-1)?.id ? (
                           <div className="mt-5">
                             <ReadingLine />
                           </div>
                         ) : null}
                       </MessageScrollerItem>
                     ) : (
-                      <MessageScrollerItem key={message.id} messageId={message.id}>
+                      <MessageScrollerItem
+                        key={message.id}
+                        messageId={message.id}
+                      >
                         {cutsOf(message) ? (
                           <CutsTurn
                             message={message}
@@ -355,26 +416,37 @@ export function StudioChat({
                             row, and arrive with the receipt. A send takes them out at
                             once; being part of the row (not a row of their own) keeps
                             the scroller's count honest, so the new request anchors. */}
-                        {message.id === lastAssistant?.id && !isBusy && !waitingOnGate && record && nextSteps.length > 0 ? (
+                        {message.id === lastAssistant?.id &&
+                        !isBusy &&
+                        !waitingOnGate &&
+                        record &&
+                        nextSteps.length > 0 ? (
                           <div className="agent-appear mt-5">
-                            <Suggestions items={withIcons(nextSteps)} onPick={(text) => send({ text })} />
+                            <Suggestions
+                              items={withIcons(nextSteps)}
+                              onPick={(text) => send({ text })}
+                            />
                           </div>
                         ) : null}
                       </MessageScrollerItem>
                     )
                   )}
 
-
                   {failure || error ? (
                     <MessageScrollerItem messageId="failed">
-                      <div role="alert" className="flex flex-col items-start gap-2">
+                      <div
+                        role="alert"
+                        className="flex flex-col items-start gap-2"
+                      >
                         <p>{failure ?? readableChatError(error!)}</p>
                         {error && !failure ? (
                           <Button
                             size="xs"
                             variant="outline"
                             onClick={() => {
-                              const asked = [...messages].reverse().find((m) => m.role === "user")
+                              const asked = [...messages]
+                                .reverse()
+                                .find((m) => m.role === "user")
                               retry(asked ? textOf(asked) : null)
                             }}
                           >
@@ -384,7 +456,6 @@ export function StudioChat({
                       </div>
                     </MessageScrollerItem>
                   ) : null}
-
                 </MessageScrollerContent>
               </MessageScrollerViewport>
               <MessageScrollerButton />
@@ -392,7 +463,11 @@ export function StudioChat({
           </MessageScrollerProvider>
         )}
         {leaving ? (
-          <div aria-hidden="true" inert className="cuts-empty-leave pointer-events-none absolute inset-0 flex flex-col">
+          <div
+            aria-hidden="true"
+            inert
+            className="cuts-empty-leave pointer-events-none absolute inset-0 flex flex-col"
+          >
             {emptyState}
           </div>
         ) : null}
@@ -443,7 +518,9 @@ function Turn({
   controls: RunControls
   onRespond: (approvalId: string, approved: boolean) => void
 }) {
-  const tools = message.parts.filter(isToolUIPart).filter((p) => !READS.has(toolNameOf(p.type)))
+  const tools = message.parts
+    .filter(isToolUIPart)
+    .filter((p) => !READS.has(toolNameOf(p.type)))
   const gates = new Map(
     message.parts.flatMap((p) =>
       p.type === "data-gate" ? [[p.data.toolCallId, p.data] as const] : []
@@ -452,17 +529,28 @@ function Turn({
 
   const steps: TaskStep[] = []
   for (const part of tools) {
-    if (part.state === "approval-requested" || part.state === "output-denied") continue
+    if (part.state === "approval-requested" || part.state === "output-denied")
+      continue
     const mine = beats.filter((b) => b.toolCallId === part.toolCallId)
     if (mine.length === 0) {
       // A call that produced no batch: it changed nothing, is still running,
       // or never answered before Stop.
-      const finished = part.state === "output-available" || part.state === "output-error"
+      const finished =
+        part.state === "output-available" || part.state === "output-error"
       if (finished && part.state === "output-available") continue
       steps.push({
         id: part.toolCallId,
-        title: sentenceFor(toolNameOf(part.type), finished ? "done" : "running"),
-        status: stopped ? "pending" : live ? "running" : part.state === "output-error" ? "error" : "pending",
+        title: sentenceFor(
+          toolNameOf(part.type),
+          finished ? "done" : "running"
+        ),
+        status: stopped
+          ? "pending"
+          : live
+            ? "running"
+            : part.state === "output-error"
+              ? "error"
+              : "pending",
         description: stopped || (!live && !finished) ? "skipped" : undefined,
       })
       continue
@@ -472,7 +560,11 @@ function Turn({
         id: beat.id,
         title: stepTitle(beat),
         status: beat.landed ? undefined : live ? "running" : "pending",
-        description: beat.landed ? stepDetail(beat) : live ? undefined : "skipped",
+        description: beat.landed
+          ? stepDetail(beat)
+          : live
+            ? undefined
+            : "skipped",
       })
     }
   }
@@ -485,17 +577,31 @@ function Turn({
   const startUs = record?.startUs ?? controls.durationUs + removed
   const settled = !live
 
-  const text = message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n\n")
-  const pending = message.parts.filter(isToolUIPart).filter((p) => p.state === "approval-requested")
+  const text = message.parts
+    .flatMap((p) => (p.type === "text" ? [p.text] : []))
+    .join("\n\n")
+  const pending = message.parts
+    .filter(isToolUIPart)
+    .filter((p) => p.state === "approval-requested")
   // A filler cut names what it took ("Removed 7 fillers: 4 × øh, 3 × um ·
   // 2.1 s"), from the tool's own first line: the owner wanted the words by
   // name, so the person sees sounds went and no speech.
-  const fillerLines = tools.flatMap((p) =>
-    toolNameOf(p.type) === "remove_fillers" && p.state === "output-available"
-      ? [fillerReceiptOf(p.output)].filter((line): line is string => line !== null)
-      : []
-  )
-  const answered = message.parts.filter(isToolUIPart).filter((p) => p.state === "output-denied")
+  // A clean-up names its kinds the same way ("Cleaned up 5: 3 repeated
+  // words, 2 false starts · 1.8 s").
+  const fillerLines = tools.flatMap((p) => {
+    if (p.state !== "output-available") return []
+    const name = toolNameOf(p.type)
+    const line =
+      name === "remove_fillers"
+        ? fillerReceiptOf(p.output)
+        : name === "clean_up_speech"
+          ? cleanUpReceiptOf(p.output)
+          : null
+    return line ? [line] : []
+  })
+  const answered = message.parts
+    .filter(isToolUIPart)
+    .filter((p) => p.state === "output-denied")
 
   // Undo and Redo act on the top of a stack, so the checkpoint acts only
   // while its own entry is there; otherwise it would take back another run.
@@ -511,7 +617,9 @@ function Turn({
       <MessageContent className="w-full gap-3">
         {/* Until the first step or word: the same line the waiting row
             showed, so the hand-over from it to the turn moves nothing. */}
-        {live && steps.length === 0 && !text && pending.length === 0 ? <ReadingLine /> : null}
+        {live && steps.length === 0 && !text && pending.length === 0 ? (
+          <ReadingLine />
+        ) : null}
 
         {steps.length > 0 ? (
           <TaskFold
@@ -530,7 +638,10 @@ function Turn({
             <Confirmation
               key={part.toolCallId}
               title="This is a big cut. Go ahead?"
-              description={gates.get(part.toolCallId)?.reason ?? "This removes a lot of the take, so I ask first."}
+              description={
+                gates.get(part.toolCallId)?.reason ??
+                "This removes a lot of the take, so I ask first."
+              }
               approveLabel="Cut it"
               denyLabel="Leave it"
               onRespond={(approved) => onRespond(part.approval!.id, approved)}
@@ -605,6 +716,7 @@ function ReadingLine() {
 const STARTER_ICON: Record<string, IconSvgElement> = {
   remove_silences: Scissor01Icon,
   remove_fillers: TextStrikethroughIcon,
+  clean_up_speech: TextStrikethroughIcon,
   add_captions: SubtitleIcon,
   reframe: AspectRatioIcon,
   punch_in: ZoomInAreaIcon,
@@ -620,5 +732,7 @@ function toolNameOf(type: string): string {
 }
 
 function textOf(message: CutsMessage): string {
-  return message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join(" ")
+  return message.parts
+    .flatMap((p) => (p.type === "text" ? [p.text] : []))
+    .join(" ")
 }
