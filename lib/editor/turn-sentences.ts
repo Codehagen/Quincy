@@ -96,6 +96,16 @@ export const EDITOR_TOOL_SENTENCES = {
     done: "Faded the clip",
     failed: "Could not fade the clip.",
   },
+  apply_edit_style: {
+    running: "Cutting it in the style",
+    done: "Cut it in the style",
+    failed: "Could not apply the style.",
+  },
+  apply_hook: {
+    running: "Cutting the opening",
+    done: "Cut the opening to the hook",
+    failed: "Could not cut the opening.",
+  },
   add_text: {
     running: "Adding the text",
     done: "Added the text",

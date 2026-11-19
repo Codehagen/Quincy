@@ -25,7 +25,7 @@ import {
 } from "./edits"
 import { aimed, applyOps, applyToScene, type EditOp } from "./ops"
 import { findMainTrack, sceneDurationUs, sourceToTimelineUs } from "./timeline"
-import { secondsToUs, us } from "./time"
+import { secondsToUs, us, type Us } from "./time"
 import { fillerReceipt, WORD_FILLERS } from "./fillers"
 import { chapterLines, chaptersFor, placeChapters } from "./chapters"
 import {
@@ -47,7 +47,33 @@ import {
   removeFillerSteps,
   removeSilenceSteps,
 } from "./tools"
-import { DEFAULT_SILENCE, type AudioPeaks, type Word } from "./transcript"
+import {
+  DEFAULT_SILENCE,
+  type AudioPeaks,
+  type SilenceOptions,
+  type Word,
+} from "./transcript"
+import { DEFAULT_PACE, PACES, silenceForPace, type Pace } from "./pacing"
+import {
+  EDIT_STYLE_KEYS,
+  editStyle,
+  editStyleSteps,
+  emphasisNote,
+} from "./edit-styles"
+import {
+  HOOK_KEYS,
+  HOOK_TEMPLATES,
+  hookSteps,
+  hookTemplate,
+  MAX_HOOK_LENGTH,
+} from "./hooks"
+import {
+  emphasisRefusal,
+  lineWindow,
+  STRONG_SCALE,
+  SUBTLE_SCALE,
+  zoomWindows,
+} from "./emphasis"
 import type {
   ProjectSnapshot,
   Scene,
@@ -216,34 +242,38 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
   return {
     remove_silences: tool({
       description:
-        "Cut the pauses out of the recording and close the gaps, keeping the captions in sync. Use for 'tighten this', 'remove the dead air', 'cut the silences'.",
+        "Shorten the pauses in the recording and close the gaps, keeping the captions in sync. Use for 'tighten this', 'remove the dead air', 'cut the silences'. It keeps a beat in every pause it shortens, and a longer one after a sentence, so the talk keeps its rhythm. Pick the pace by what the person asked: 'relaxed' for a story or explainer, 'natural' (the default) for most talking, 'snappy' for a fast vlog or a short.",
       inputSchema: z.object({
+        pace: z
+          .enum(PACES as [Pace, ...Pace[]])
+          .optional()
+          .describe(
+            "relaxed, natural or snappy. Leave it out for natural, or for the person's saved style."
+          ),
         minSilenceMs: z
           .number()
           .min(250)
           .optional()
           .describe(
-            "Pauses shorter than this stay. Default 350. Below 250 the tightening becomes audible as clipping."
+            "Only when the person names a number. Pauses shorter than this stay. Below 250 the tightening becomes audible as clipping."
           ),
         paddingMs: z
           .number()
           .min(0)
           .optional()
           .describe(
-            "Silence left at each end of a cut. Default 120. Zero produces jump-cut voice."
+            "Only when the person names a number. Silence left at each end of a cut. Zero produces jump-cut voice."
           ),
       }),
-      execute: async ({ minSilenceMs, paddingMs }, options?: CallOptions) =>
+      execute: async (
+        { pace, minSilenceMs, paddingMs },
+        options?: CallOptions
+      ) =>
         withWords(
           { toolCallId: options?.toolCallId, toolName: "remove_silences" },
           (scene, words, mediaId, peaks) => {
             const source = spineClip(scene, mediaId)
             if (!source) return []
-
-            // Unasked, the person's own style decides how hard to tighten.
-            const style = context.cutStyle?.pauses
-            const minMs = minSilenceMs ?? style?.minSilenceMs
-            const padMs = paddingMs ?? style?.paddingMs
 
             // In steps, one pause per press, so the cursor can cut each one.
             return removeSilenceSteps(scene, words, {
@@ -251,17 +281,10 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
               author: "agent",
               sourceDurationUs: source.sourceDurationUs,
               peaks,
-              silence: {
-                ...DEFAULT_SILENCE,
-                minSilenceUs:
-                  minMs === undefined
-                    ? DEFAULT_SILENCE.minSilenceUs
-                    : us(Math.round(minMs * 1000)),
-                paddingUs:
-                  padMs === undefined
-                    ? DEFAULT_SILENCE.paddingUs
-                    : us(Math.round(padMs * 1000)),
-              },
+              silence: silenceFor(
+                { pace, minSilenceMs, paddingMs },
+                context.cutStyle
+              ),
             })
           },
           (scene, before) => {
@@ -285,7 +308,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
               share >= 50
                 ? ` That is most of the recording — the transcript found ${seconds(
                     nowUs
-                  )} of speech in ${seconds(wasUs)}. Tell the user plainly, and offer a longer minSilenceMs if it looks wrong.`
+                  )} of speech in ${seconds(wasUs)}. Tell the user plainly, and offer the relaxed pace if it looks wrong.`
                 : ""
 
             return `Tightened: removed ${seconds(cutUs)} of ${seconds(
@@ -509,33 +532,44 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     punch_in: tool({
       description:
-        "Push the picture in on one clip for emphasis, and let it back out. Use for 'zoom in on that', 'punch in when they say X', 'emphasise the second clip'. Clips are numbered from 1, in the order describe_timeline lists them. This is a framing move, not a cut: nothing changes length and nothing after it moves.",
+        "Push the picture in on one line for emphasis, and let it back out. Use for 'zoom in on that', 'punch in when they say X', 'emphasise the strong line'. Give the line (the words as spoken) and the push sits on it; or give a clip number. Zoom is emphasis, and emphasis that repeats stops working: never push in unasked, at most one push in any 8 seconds, and the tool refuses one that would be too many. This is a framing move, not a cut: nothing changes length and nothing after it moves.",
       inputSchema: z.object({
+        line: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "The words to push in on, as spoken in the take. The push starts just before them and releases just after."
+          ),
         clipNumber: z
           .number()
           .int()
           .min(1)
-          .describe("1 for the first clip on the spine."),
+          .optional()
+          .describe("Without a line: 1 for the first clip on the spine."),
         scale: z
           .number()
           .min(1.05)
-          .max(2)
+          .max(1.35)
           .optional()
           .describe(
-            "How far in. 1.3 is a normal emphasis; past 1.6 the picture is visibly soft."
+            `How far in. Leave it out for ${SUBTLE_SCALE}, a closer shot that does not read as a crop. Above ${STRONG_SCALE} only when the person asks for a strong zoom.`
           ),
         fromSeconds: z
           .number()
           .min(0)
           .optional()
           .describe(
-            "When the push starts, in seconds from the start of the cut. Defaults to the clip's own start."
+            "Without a line: when the push starts, in seconds from the start of the cut. Defaults to the clip's own start."
           ),
         toSeconds: z
           .number()
           .min(0)
           .optional()
-          .describe("When it is fully back out. Defaults to the clip's end."),
+          .describe(
+            "Without a line: when it is fully back out. Defaults to three seconds after it starts."
+          ),
         hold: z
           .boolean()
           .optional()
@@ -544,30 +578,70 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
           ),
       }),
       execute: async (
-        { clipNumber, scale, fromSeconds, toSeconds, hold },
+        { line, clipNumber, scale, fromSeconds, toSeconds, hold },
         options?: CallOptions
-      ) =>
-        run(
-          { toolCallId: options?.toolCallId, toolName: "punch_in" },
-          (scene) => {
-            const clip = findMainTrack(scene)?.elements[clipNumber - 1]
-            if (!clip) return []
+      ) => {
+        const meta = { toolCallId: options?.toolCallId, toolName: "punch_in" }
 
-            return punchIn(scene, clip.id, {
+        let target: { elementId: string; fromUs?: Us; toUs?: Us } | null = null
+        if (line) {
+          const words = await context.words()
+          const scene = onScreen()
+          const mediaId = spineMedia(scene)
+          if (!words || !scene || !mediaId) {
+            return "This recording has not been transcribed, so there is no line to find."
+          }
+          target = lineWindow(scene, words, mediaId, line)
+          if (!target) {
+            return `"${line}" is not in the cut as spoken (it may have been cut out, or worded differently). Nothing was changed.`
+          }
+        } else {
+          const current = onScreen()
+          const clip = current
+            ? findMainTrack(current)?.elements[(clipNumber ?? 1) - 1]
+            : undefined
+          if (!clip) {
+            return `There is no clip ${clipNumber ?? 1} on the spine. Nothing was changed.`
+          }
+          target = {
+            elementId: clip.id,
+            fromUs:
+              fromSeconds === undefined ? undefined : secondsToUs(fromSeconds),
+            toUs: toSeconds === undefined ? undefined : secondsToUs(toSeconds),
+          }
+        }
+
+        const found = target
+        let refusal: string | null = null
+        const said = run(
+          meta,
+          (scene) => {
+            const ops = punchIn(scene, found.elementId, {
               scale,
-              fromUs:
-                fromSeconds === undefined
-                  ? undefined
-                  : secondsToUs(fromSeconds),
-              toUs:
-                toSeconds === undefined ? undefined : secondsToUs(toSeconds),
+              fromUs: found.fromUs,
+              toUs: found.toUs,
               hold,
             })
+            const window =
+              ops.length > 0
+                ? zoomWindows(applyToScene(scene, ops, "agent")).find(
+                    (zoom) => zoom.elementId === found.elementId
+                  )
+                : undefined
+            if (window) {
+              refusal = emphasisRefusal(scene, found.elementId, window)
+              if (refusal) return []
+            }
+            return ops
           },
           (scene) =>
-            `Punched in on clip ${clipNumber}. ${describeScene(scene)}`,
-          `There is no clip ${clipNumber} on the spine, or the window you gave falls outside it.`
-        ),
+            `Pushed in${line ? ` on "${line}"` : clipNumber ? ` on clip ${clipNumber}` : ""}. ${describeScene(scene)}`,
+          "The window you gave falls outside the clip. Nothing was changed."
+        )
+        return refusal
+          ? `${refusal} Nothing was changed; tell the person why, and offer to move the other push instead.`
+          : said
+      },
     }),
 
     /**
@@ -894,10 +968,11 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       description:
         "Keep how this cut looks as the person's own style: the caption look, the looks on the picture, which sound plays, and (when given) how hard pauses are tightened. Quincy uses it on every cut after. Only when the person asks: 'make this my style', 'remember this look', 'bruk dette som standard'.",
       inputSchema: z.object({
+        pace: z.enum(PACES as [Pace, ...Pace[]]).optional(),
         minSilenceMs: z.number().min(250).max(3000).optional(),
         paddingMs: z.number().min(0).max(500).optional(),
       }),
-      execute: async ({ minSilenceMs, paddingMs }) => {
+      execute: async ({ pace, minSilenceMs, paddingMs }) => {
         const scene = onScreen()
         if (!scene) return "This project has no scene."
         if (!context.saveCutStyle) return "Styles cannot be saved from here."
@@ -913,7 +988,11 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
             : context.cutStyle?.pauses
               ? { pauses: context.cutStyle.pauses }
               : {}
-        const style = cutStyleOf(scene, pauses)
+        const chosenPace = pace ?? context.cutStyle?.pace
+        const style = cutStyleOf(scene, {
+          ...pauses,
+          ...(chosenPace ? { pace: chosenPace } : {}),
+        })
         const lines = describeCutStyle(style)
         if (lines.length === 0) {
           return "This cut has no captions, looks or sound choice yet, so there is nothing to keep as a style."
@@ -923,11 +1002,101 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
       },
     }),
 
+    apply_edit_style: tool({
+      description:
+        "Cut the whole video in one style: the pace of the pauses, the caption look, the sound and how much zoom is allowed, chosen together. Use for 'make this a vlog', 'edit it like a fast vlog', 'make it a podcast clip', 'style this as a tutorial'. talking_head: natural pace, clean captions. fast_vlog: snappy pace, bold word-by-word captions, jump cuts hidden by a slightly closer frame on every other clip. story: relaxed pace, quiet subtitles, no zoom. tutorial: natural pace, boxed captions, picture left alone. podcast_clip: natural pace, cleaned voice, boxed captions. It adds no text and no music, and no push-ins.",
+      inputSchema: z.object({
+        style: z.enum(EDIT_STYLE_KEYS),
+      }),
+      execute: async ({ style: key }, options?: CallOptions) => {
+        const style = editStyle(key)
+        if (!style) return "There is no such style."
+        return withWords(
+          { toolCallId: options?.toolCallId, toolName: "apply_edit_style" },
+          (scene, words, mediaId, peaks) => {
+            const source = spineClip(scene, mediaId)
+            if (!source) return []
+            return editStyleSteps(scene, words, {
+              style,
+              mediaId,
+              sourceDurationUs: source.sourceDurationUs,
+              author: "agent",
+              peaks,
+              rules: captionRules(context.snapshot().document),
+            })
+          },
+          (scene, before) => {
+            const cutUs = Math.max(
+              0,
+              sceneDurationUs(before) - sceneDurationUs(scene)
+            )
+            return `Cut as ${style.label}: ${style.hint.toLowerCase()}. Pauses took ${seconds(cutUs)}. ${emphasisNote(style)} ${describeScene(scene)}`
+          },
+          "The style changed nothing: the pauses, captions and sound are already as it would set them."
+        )
+      },
+    }),
+
+    apply_hook: tool({
+      description:
+        "Cut the opening to a hook template: speech from the first frame, the hook on screen in the top third for the first seconds, and for some templates one subtle push-in on the spoken hook. Use for 'add a hook', 'make the opening stronger', 'use the question hook'. Pick the template that fits what the take says, or the one the person named. Write the on-screen text yourself from the take, in its language, a few words in the template's shape. When the person has not said which, read_transcript first.",
+      inputSchema: z.object({
+        template: z
+          .enum(HOOK_KEYS)
+          .describe(
+            HOOK_TEMPLATES.map(
+              (hook) => `${hook.key}: ${hook.when} ("${hook.pattern}")`
+            ).join(". ")
+          ),
+        text: z
+          .string()
+          .min(1)
+          .max(MAX_HOOK_LENGTH)
+          .describe(
+            "The hook on screen: a few words, in the template's shape, in the take's language."
+          ),
+        line: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "The spoken line the hook is about, as said in the take, for the push-in and how long the text stays up."
+          ),
+      }),
+      execute: async ({ template: key, text, line }, options?: CallOptions) => {
+        const template = hookTemplate(key)
+        if (!template) return "There is no such hook template."
+        let notes: string[] = []
+        return withWords(
+          { toolCallId: options?.toolCallId, toolName: "apply_hook" },
+          (scene, words, mediaId) => {
+            const result = hookSteps(scene, words, {
+              template,
+              text,
+              line,
+              mediaId,
+              author: "agent",
+            })
+            notes = result.notes
+            return result.steps
+          },
+          (scene) =>
+            [
+              `Opened on the ${template.label.toLowerCase()} hook: "${text}".`,
+              ...notes,
+              describeScene(scene),
+            ].join(" "),
+          "The opening could not be changed: there is no footage on the spine."
+        )
+      },
+    }),
+
     add_text: tool({
       description:
-        "Put text over the picture: a title card at the start, a name and role (lower third) at a moment, or an end card at the end. Use for 'add a title', 'put my name on screen', 'end with a call to action'. Keep it short: a title is a few words.",
+        "Put text over the picture: a title card at the start, a name and role (lower third) at a moment, an end card at the end, or a hook across the top in the opening seconds (apply_hook does a whole opening). Use for 'add a title', 'put my name on screen', 'end with a call to action'. Keep it short: a title is a few words.",
       inputSchema: z.object({
-        role: z.enum(["title", "lower_third", "end_card"]),
+        role: z.enum(["title", "lower_third", "end_card", "hook"]),
         text: z.string().min(1).max(MAX_TEXT_LENGTH).describe("What it says. For a lower third, the name."),
         subtitle: z
           .string()
@@ -1357,5 +1526,41 @@ export function createRun(options: {
         : Promise.resolve(null)),
     cutStyle: options.cutStyle ?? null,
     saveCutStyle: options.saveCutStyle,
+  }
+}
+
+/**
+ * The pause rule a tighten runs with. Numbers the person named win; then a
+ * pace they named; then their saved style (exact numbers before a pace); and
+ * otherwise the natural pace (pacing.ts).
+ */
+export function silenceFor(
+  asked: { pace?: Pace; minSilenceMs?: number; paddingMs?: number },
+  style?: CutStyle | null
+): SilenceOptions {
+  if (asked.minSilenceMs !== undefined || asked.paddingMs !== undefined) {
+    return exactSilence(asked.minSilenceMs, asked.paddingMs)
+  }
+  if (asked.pace) return silenceForPace(asked.pace)
+  if (style?.pauses) {
+    return exactSilence(style.pauses.minSilenceMs, style.pauses.paddingMs)
+  }
+  return silenceForPace(style?.pace ?? DEFAULT_PACE)
+}
+
+function exactSilence(
+  minSilenceMs: number | undefined,
+  paddingMs: number | undefined
+): SilenceOptions {
+  return {
+    ...DEFAULT_SILENCE,
+    minSilenceUs:
+      minSilenceMs === undefined
+        ? DEFAULT_SILENCE.minSilenceUs
+        : us(Math.round(minSilenceMs * 1000)),
+    paddingUs:
+      paddingMs === undefined
+        ? DEFAULT_SILENCE.paddingUs
+        : us(Math.round(paddingMs * 1000)),
   }
 }
