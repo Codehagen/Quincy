@@ -22,7 +22,13 @@ import {
   trimEdge,
   trimPreviewDeltaUs,
 } from "./edits"
-import { applyOps, applyToScene, newElement, targetInScene, type EditOp } from "./ops"
+import {
+  applyOps,
+  applyToScene,
+  newElement,
+  targetInScene,
+  type EditOp,
+} from "./ops"
 import { findMainTrack } from "./timeline"
 import { secondsToUs, us } from "./time"
 import {
@@ -769,6 +775,33 @@ describe("punchIn", () => {
     expect(Object.keys(element.animations.channels)[0]).toContain(
       element.effects[0].id
     )
+  })
+
+  it("keeps an earlier zoom elsewhere on the same clip", () => {
+    const base = scene()
+    const target = clipAt(base, 0)
+    const start = target.startUs
+
+    const once = applyToScene(
+      base,
+      punchIn(base, target.id, {
+        fromUs: us(start),
+        toUs: us(start + 2_000_000),
+      })
+    )
+    const twice = applyToScene(
+      once,
+      punchIn(once, target.id, {
+        fromUs: us(start + 5_000_000),
+        toUs: us(start + 7_000_000),
+      })
+    )
+    const element = clipAt(twice, 0)
+
+    // Outside its window each is back at 1, so the two never multiply; dropping
+    // the first silently threw away an emphasis the person had made.
+    expect(element.effects.filter((e) => e.type === "zoom")).toHaveLength(2)
+    expect(Object.keys(element.animations.channels)).toHaveLength(2)
   })
 
   it("stamps the agent on the fields it wrote", () => {
@@ -1758,14 +1791,22 @@ describe("every builder aims its ops", () => {
       "user"
     )
     const element = findMainTrack(zoomed)!.elements[0] as VideoElement
-    return { scene: zoomed, clipId: element.id, effectId: element.effects[0].id }
+    return {
+      scene: zoomed,
+      clipId: element.id,
+      effectId: element.effects[0].id,
+    }
   }
 
   it("splitAt names the clip and the point it cuts at", () => {
     const base = scene()
     const ops = splitAt(base, findMainTrack(base)!.id, secondsToUs(5))
     expectAimed(base, ops)
-    expect(ops[0].target).toMatchObject({ kind: "element", action: "press", atUs: secondsToUs(5) })
+    expect(ops[0].target).toMatchObject({
+      kind: "element",
+      action: "press",
+      atUs: secondsToUs(5),
+    })
   })
 
   it("deleteAndRipple names the clip it cuts", () => {
@@ -1779,7 +1820,10 @@ describe("every builder aims its ops", () => {
   it("deleteSpeech names the stretch of the timeline it removes", () => {
     const base = scene()
     const ops = deleteSpeech(base, [
-      { mediaId: "va-1", ranges: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }] },
+      {
+        mediaId: "va-1",
+        ranges: [{ startUs: secondsToUs(12), endUs: secondsToUs(14) }],
+      },
     ])
     expectAimed(base, ops)
     expect(ops[0].target).toMatchObject({
@@ -1806,7 +1850,10 @@ describe("every builder aims its ops", () => {
   it("punchIn drag-selects its window and presses Zoom", () => {
     const base = scene()
     const clip = findMainTrack(base)!.elements[1]
-    const ops = punchIn(base, clip.id, { fromUs: secondsToUs(12), toUs: secondsToUs(15) })
+    const ops = punchIn(base, clip.id, {
+      fromUs: secondsToUs(12),
+      toUs: secondsToUs(15),
+    })
     expectAimed(base, ops)
     expect(ops[0].target).toMatchObject({
       kind: "range",
@@ -1822,9 +1869,6 @@ describe("every builder aims its ops", () => {
     expectAimed(base, moveEffect(base, clipId, effectId, 1_000_000))
     expectAimed(base, removeEffect(base, clipId, effectId))
     expectAimed(base, clearZoom(base, clipId))
-    expectAimed(
-      base,
-      removeEffectsOfType(base, clipId, "zoom")
-    )
+    expectAimed(base, removeEffectsOfType(base, clipId, "zoom"))
   })
 })

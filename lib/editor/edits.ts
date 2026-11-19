@@ -620,10 +620,12 @@ export type PunchInOptions = {
  * transform is where a person's framing lives, and an agent adding emphasis
  * must not overwrite it. They multiply at render time in `effects.ts`.
  *
- * An existing zoom on the same clip is *replaced*, not stacked. Effects
- * compose, so a second punch-in on a clip that already had one would push to
- * 1.69 and the agent would have no way to know it had — asking twice for a
- * punch-in should look like asking once.
+ * An existing zoom whose window overlaps this one is *replaced*, not
+ * stacked. Effects compose, so a second punch-in over the same words would
+ * push to 1.25 and nobody would know why — asking twice for a punch-in on
+ * the same line should look like asking once. A zoom elsewhere on the clip
+ * stays: outside its window it is back at 1, so the two never multiply, and
+ * dropping it silently threw away an earlier emphasis on a long clip.
  */
 export function punchIn(
   scene: Scene,
@@ -710,47 +712,53 @@ export function punchIn(
   const keys = continued
     ? continued
     : options.hold
-    ? [
-        newKeyframe({
-          timeUs: us(startLocalUs),
-          value: 1,
-          interpolation: "bezier",
-          easing: PUSH_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(startLocalUs + rampUs),
-          value: scale,
-          interpolation: "linear",
-        }),
-      ]
-    : [
-        newKeyframe({
-          timeUs: us(startLocalUs),
-          value: 1,
-          interpolation: "bezier",
-          easing: PUSH_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(startLocalUs + rampUs),
-          value: scale,
-          interpolation: "linear",
-        }),
-        newKeyframe({
-          timeUs: us(endLocalUs - rampUs),
-          value: scale,
-          interpolation: "bezier",
-          easing: RELEASE_EASING,
-        }),
-        newKeyframe({
-          timeUs: us(endLocalUs),
-          value: 1,
-          interpolation: "linear",
-        }),
-      ]
+      ? [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: 1,
+            interpolation: "bezier",
+            easing: PUSH_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(startLocalUs + rampUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+        ]
+      : [
+          newKeyframe({
+            timeUs: us(startLocalUs),
+            value: 1,
+            interpolation: "bezier",
+            easing: PUSH_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(startLocalUs + rampUs),
+            value: scale,
+            interpolation: "linear",
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs - rampUs),
+            value: scale,
+            interpolation: "bezier",
+            easing: RELEASE_EASING,
+          }),
+          newKeyframe({
+            timeUs: us(endLocalUs),
+            value: 1,
+            interpolation: "linear",
+          }),
+        ]
 
   const without = withoutEffects(
     element,
-    (candidate) => candidate.type === "zoom"
+    (candidate) =>
+      candidate.type === "zoom" &&
+      overlapsWindow(
+        zoomWindowLocal(element, candidate.id),
+        startLocalUs,
+        endLocalUs
+      )
   )
 
   return aimed(
@@ -1406,6 +1414,30 @@ export function fade(
  * animates anything and that every later read has to step over. Nothing would
  * ever look wrong, which is why it would survive.
  */
+/**
+ * The element-local span a zoom's curve covers: its first key to its last.
+ * A zoom with no curve covers the whole clip, so it overlaps everything.
+ */
+function zoomWindowLocal(
+  element: TimelineElement & { animations: Animations },
+  effectId: string
+): { fromUs: number; toUs: number } | null {
+  const keys =
+    element.animations.channels[`effects.${effectId}.params.scale`]?.keys
+  if (!keys || keys.length === 0) return null
+  const times = keys.map((key) => key.timeUs)
+  return { fromUs: Math.min(...times), toUs: Math.max(...times) }
+}
+
+function overlapsWindow(
+  window: { fromUs: number; toUs: number } | null,
+  fromUs: number,
+  toUs: number
+): boolean {
+  if (!window) return true
+  return window.fromUs < toUs && fromUs < window.toUs
+}
+
 function withoutEffects(
   element: TimelineElement & { effects: Effect[]; animations: Animations },
   matches: (effect: Effect) => boolean
@@ -1564,11 +1596,14 @@ export function setSpeed(
   speed: number
 ): EditOp[] {
   const track = scene.tracks.find((candidate) => candidate.id === trackId)
-  const element = track?.elements.find((candidate) => candidate.id === elementId)
+  const element = track?.elements.find(
+    (candidate) => candidate.id === elementId
+  )
   if (!track || !element || element.kind !== "video") return []
   if (!Number.isFinite(speed)) return []
 
-  const rate = Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100
+  const rate =
+    Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100
   if (rate === clipRate(element)) return []
   const span = element.trimEndUs - element.trimStartUs
   const durationUs = us(Math.max(MINIMUM_CLIP_US, Math.round(span / rate)))
@@ -1582,5 +1617,7 @@ export function setSpeed(
   }
   if (findMainTrack(scene)?.id === trackId)
     return withRipple(scene, trackId, elementId, op)
-  return [{ ...op, target: { action: "press", kind: "element", trackId, elementId } }]
+  return [
+    { ...op, target: { action: "press", kind: "element", trackId, elementId } },
+  ]
 }

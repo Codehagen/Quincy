@@ -7,6 +7,7 @@ import {
   Redo02Icon,
   ScissorIcon,
   Undo02Icon,
+  ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 
 import { chapterLines, placeChapters } from "@/lib/editor/chapters"
@@ -84,7 +85,11 @@ import {
   type StudioTool,
 } from "./studio-frame"
 import { useStudioTools } from "./use-studio-tools"
-import { correctWords, findWords, replaceWords } from "@/lib/editor/correct-words"
+import {
+  correctWords,
+  findWords,
+  replaceWords,
+} from "@/lib/editor/correct-words"
 import { speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
 import { formatClockTenths, PlayButton, PlayheadClock } from "./studio-parts"
 import { StudioLanes, type TrimDrag } from "./studio-lanes"
@@ -799,6 +804,12 @@ export function Studio({
    * Two seconds, or whatever is left of the clip, because a punch-in is an
    * emphasis and one that runs a whole minute is a different framing rather
    * than a beat.
+   *
+   * The push starts at 1, so with the playhead parked on its first frame the
+   * press used to change nothing you could see: a small chip appeared on the
+   * lane and the picture stayed as it was. So the new zoom is selected (its
+   * amount and Remove come up) and the playhead moves to the top of the
+   * push, where the preview shows what the press did.
    */
   const addZoom = React.useCallback(() => {
     if (!scene || !clipAtPlayhead) return
@@ -809,12 +820,21 @@ export function Studio({
       atUs + DEFAULT_ZOOM_US
     )
 
-    commit(
-      punchIn(scene, clipAtPlayhead.id, {
-        fromUs: us(Math.round(atUs)),
-        toUs: us(Math.round(endUs)),
-      })
-    )
+    const ops = punchIn(scene, clipAtPlayhead.id, {
+      fromUs: us(Math.round(atUs)),
+      toUs: us(Math.round(endUs)),
+    })
+    if (ops.length === 0) return
+    commit(ops)
+
+    const added = addedZoomId(ops)
+    if (added) {
+      // Only the id is read back: liveEffect finds the chip in the scene the
+      // commit just wrote, so the rest is filled in from the document.
+      setSelectedEffect({ id: `${clipAtPlayhead.id}:${added}` } as EffectChip)
+    }
+    const peakUs = atUs + Math.min(ZOOM_RAMP_US, (endUs - atUs) / 2)
+    player.seekTo(us(Math.round(peakUs)))
   }, [commit, scene, clipAtPlayhead, player])
 
   /**
@@ -1207,7 +1227,15 @@ export function Studio({
     }
     commit(deleteAndRipple(scene, trackId, selectedId))
     setSelectedId(null)
-  }, [commit, scene, trackId, selectedId, selectedWords, deleteWords, studioTools.selected])
+  }, [
+    commit,
+    scene,
+    trackId,
+    selectedId,
+    selectedWords,
+    deleteWords,
+    studioTools.selected,
+  ])
 
   /**
    * Keyboard, because this is an editor. Who owns a press (a text field, a
@@ -1423,14 +1451,22 @@ export function Studio({
             onClick={remove}
             disabled={running || !selectedId}
           />
-          <EffectControls
-            chip={liveEffect}
-            onAdd={addZoom}
-            onAmount={setAmount}
-            onRemove={dropEffect}
-            disabled={running}
+          <DeskIconButton
+            icon={ZoomInAreaIcon}
+            label="Add a zoom at the playhead"
+            shortcut={["Z"]}
+            onClick={addZoom}
+            disabled={running || !clipAtPlayhead}
           />
         </>
+      }
+      selection={
+        <EffectControls
+          chip={liveEffect}
+          onAmount={setAmount}
+          onRemove={dropEffect}
+          disabled={running}
+        />
       }
       toolbarEnd={
         <TimelineZoom
@@ -1519,7 +1555,9 @@ export function Studio({
           onCorrect={(tokenId, text) =>
             commit(correctWords(scene, [{ tokenId, text }]))
           }
-          onReplace={(find, replace) => commit(replaceWords(scene, find, replace))}
+          onReplace={(find, replace) =>
+            commit(replaceWords(scene, find, replace))
+          }
           countMatches={(find) => findWords(scene, find).length}
           speakerName={
             speakerNumbers(scene).length > 1
@@ -1617,64 +1655,74 @@ const SEGMENT_OFF = "text-kit-ink-muted hover:text-kit-ink"
 /** Two seconds of push, which is an emphasis rather than a new framing. */
 const DEFAULT_ZOOM_US = 2_000_000
 
+/** The push-in ramp punchIn draws by default, so the playhead lands on its top. */
+const ZOOM_RAMP_US = 600_000
+
+/** The id of the zoom a punchIn's ops wrote: the last effect on the patch. */
+function addedZoomId(ops: ReturnType<typeof punchIn>): string | null {
+  const op = ops[0]
+  if (!op || op.op !== "update_element") return null
+  const effects = (op.patch as { effects?: { id: string; type: string }[] })
+    .effects
+  const zoom = effects?.filter((effect) => effect.type === "zoom").at(-1)
+  return zoom?.id ?? null
+}
+
 /**
- * Add a zoom, and change the one that is selected.
+ * The selected effect's name, its amount and Remove.
  *
- * The amount field only appears once something on the lane is selected, because
- * "how far" has no answer otherwise, and a disabled input sitting in the toolbar
- * permanently is chrome that teaches you nothing. Adding is always available:
- * that is the thing you cannot currently do without typing a sentence.
+ * Nothing at all until a chip on the lane is selected, because "how far" has
+ * no answer otherwise. It used to sit among the tools on the right, sized for
+ * its widest state so selecting a chip did not shove Split and Delete
+ * sideways — which left a wide empty well beside "+ Zoom" that read as a
+ * search field. It now stands on the left after the clock, where appearing
+ * moves nothing: the row's spacer takes the room. Adding a zoom is a tool
+ * button like Split.
  *
  * The step, the range and the unit come from the catalogue rather than being
- * one shared 0.05. They were one shared 0.05 when zoom was the only effect you
- * could make, and it does not survive the others: 0.05 of a blur is a
- * twentieth of a pixel, and 0.05 of a hue rotation is a fifth of a degree.
+ * one shared 0.05: 0.05 of a blur is a twentieth of a pixel, and 0.05 of a
+ * hue rotation is a fifth of a degree.
  *
  * A fade is selectable and has no amount — its length is the whole of it — so
- * the field is absent rather than showing a number that edits nothing.
+ * only its name and Remove show.
  */
 function EffectControls({
   chip,
-  onAdd,
   onAmount,
   onRemove,
   disabled,
 }: {
   chip: EffectChip | null
-  onAdd: () => void
   onAmount: (amount: number) => void
   onRemove: () => void
   disabled?: boolean
 }) {
+  if (!chip) return null
+
   // Both halves have to be checked against the chip existing, not just against
   // null: `undefined !== null` is true, so a missing chip read as adjustable.
-  const adjustable =
-    chip !== null && chip.effectId !== null && chip.amount !== null
+  const adjustable = chip.effectId !== null && chip.amount !== null
 
   // A fade's kind is not an effect type, so it has no spec. Guarded on
   // `adjustable` rather than on the kind, because that is the same question.
   const spec = adjustable ? effectSpec(chip.kind as EffectType) : null
+  const name =
+    spec?.label ??
+    (chip.kind === "fade-in"
+      ? "Fade in"
+      : chip.kind === "fade-out"
+        ? "Fade out"
+        : "Effect")
 
   return (
     <div
       role="group"
-      aria-label="Effects"
-      // Sized for its widest state, not its current one. Selecting a chip adds
-      // − ×1.20 + Remove, and in a right-aligned toolbar that pushed Split,
-      // Delete, Undo and Redo 120px to the left — so the button under the
-      // cursor after clicking a chip was not the button that had been there a
-      // moment earlier, and Undo and Redo are one apart.
-      className="flex min-w-[196px] items-center gap-0.5 rounded-md bg-kit-well p-0.5"
+      aria-label={`Selected effect: ${name}`}
+      className="flex flex-none items-center gap-0.5 rounded-md bg-kit-well p-0.5"
     >
-      <button
-        type="button"
-        onClick={onAdd}
-        disabled={disabled}
-        title="Add a zoom at the playhead"
-        className={cn(SEGMENT, SEGMENT_OFF)}
-      >
-        + Zoom
-      </button>
+      <span className="px-2 text-kit-small font-kit-strong text-kit-ink">
+        {name}
+      </span>
 
       {adjustable && spec ? (
         <>
@@ -1705,7 +1753,7 @@ function EffectControls({
         </>
       ) : null}
 
-      {chip?.effectId ? (
+      {chip.effectId ? (
         <button
           type="button"
           onClick={onRemove}
