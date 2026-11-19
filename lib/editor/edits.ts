@@ -850,7 +850,16 @@ export type PunchInOptions = {
    * began on the clip before (a line that crosses a cut). No ramp in.
    */
   startIn?: boolean
+  /**
+   * `drift` creeps in across the whole window and cuts back out at its end,
+   * the slow push a camera operator makes during a line. Absent is the push:
+   * in, hold, back out.
+   */
+  shape?: "push" | "drift"
 }
+
+/** A drift's creep: no landing, it is still moving when the line ends. */
+const DRIFT_EASING: [number, number, number, number] = [0.4, 0, 0.6, 1]
 
 /**
  * Push into a clip and back out.
@@ -949,39 +958,24 @@ export function punchIn(
         ]
     : null
 
-  const keys = continued
-    ? continued
-    : options.hold
+  const drift =
+    options.shape === "drift" &&
+    !options.startIn &&
+    !options.hold &&
+    windowUs > 2
       ? [
           newKeyframe({
             timeUs: us(startLocalUs),
             value: 1,
             interpolation: "bezier",
-            easing: PUSH_EASING,
+            easing: DRIFT_EASING,
           }),
+          // Step, so the drift holds its last value to the window's end and
+          // cuts back to the full frame there, on the next line.
           newKeyframe({
-            timeUs: us(startLocalUs + rampUs),
+            timeUs: us(endLocalUs - 1),
             value: scale,
-            interpolation: "linear",
-          }),
-        ]
-      : [
-          newKeyframe({
-            timeUs: us(startLocalUs),
-            value: 1,
-            interpolation: "bezier",
-            easing: PUSH_EASING,
-          }),
-          newKeyframe({
-            timeUs: us(startLocalUs + rampUs),
-            value: scale,
-            interpolation: "linear",
-          }),
-          newKeyframe({
-            timeUs: us(endLocalUs - rampUs),
-            value: scale,
-            interpolation: "bezier",
-            easing: RELEASE_EASING,
+            interpolation: "step",
           }),
           newKeyframe({
             timeUs: us(endLocalUs),
@@ -989,6 +983,50 @@ export function punchIn(
             interpolation: "linear",
           }),
         ]
+      : null
+
+  const keys = continued
+    ? continued
+    : drift
+      ? drift
+      : options.hold
+        ? [
+            newKeyframe({
+              timeUs: us(startLocalUs),
+              value: 1,
+              interpolation: "bezier",
+              easing: PUSH_EASING,
+            }),
+            newKeyframe({
+              timeUs: us(startLocalUs + rampUs),
+              value: scale,
+              interpolation: "linear",
+            }),
+          ]
+        : [
+            newKeyframe({
+              timeUs: us(startLocalUs),
+              value: 1,
+              interpolation: "bezier",
+              easing: PUSH_EASING,
+            }),
+            newKeyframe({
+              timeUs: us(startLocalUs + rampUs),
+              value: scale,
+              interpolation: "linear",
+            }),
+            newKeyframe({
+              timeUs: us(endLocalUs - rampUs),
+              value: scale,
+              interpolation: "bezier",
+              easing: RELEASE_EASING,
+            }),
+            newKeyframe({
+              timeUs: us(endLocalUs),
+              value: 1,
+              interpolation: "linear",
+            }),
+          ]
 
   const without = withoutEffects(
     element,
@@ -1403,6 +1441,28 @@ export function moveEffect(
     channel.keys.map((key) => ({ ...key, timeUs: us(key.timeUs + shift) })),
     host.durationUs
   )
+  // The effect's other curves (where a zoom looks, zoom-aim.ts) travel with
+  // it, or a moved close-up would keep following points from where it was.
+  const companions = Object.fromEntries(
+    Object.entries(element.animations.channels)
+      .filter(
+        ([candidate]) =>
+          candidate !== path && candidate.startsWith(`effects.${effect.id}.`)
+      )
+      .map(([candidate, other]) => [
+        candidate,
+        {
+          ...other,
+          keys: truncateKeys(
+            other.keys.map((key) => ({
+              ...key,
+              timeUs: us(Math.max(0, key.timeUs + shift)),
+            })),
+            host.durationUs
+          ),
+        },
+      ])
+  )
 
   if (host.id === element.id) {
     if (shift === 0) return []
@@ -1418,6 +1478,7 @@ export function moveEffect(
             animations: {
               channels: {
                 ...element.animations.channels,
+                ...companions,
                 [path]: { ...channel, keys },
               },
             },
@@ -1463,6 +1524,7 @@ export function moveEffect(
           animations: {
             channels: {
               ...host.animations.channels,
+              ...companions,
               [path]: { ...channel, keys },
             },
           },

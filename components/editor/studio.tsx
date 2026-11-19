@@ -82,7 +82,11 @@ import type { CutsData, RecommendData } from "@/lib/editor/stream-parts"
 import { useDirector } from "./agent-cursor/director"
 import { StudioChat, type StudioHarness } from "./studio-chat"
 import { useStrongLine } from "./use-strong-line"
+import { zoomKindOptions, zoomPeakUs, type ZoomKind } from "@/lib/editor/zoom-kinds"
+import { aimPoints, aimZoom, clearAim } from "@/lib/editor/zoom-aim"
+import { sampleChannel } from "@/lib/editor/effects"
 import { StudioEffects } from "./studio-effects"
+import { ZoomAimOverlay } from "./zoom-aim-overlay"
 import {
   DeskIconButton,
   FrameMenu,
@@ -789,6 +793,71 @@ export function Studio({
     [commit, scene, liveEffect]
   )
 
+  /**
+   * Where the selected zoom looks: a click on the preview while a zoom is
+   * selected (zoom-aim.ts). The click lands on the picture as it is shown,
+   * which may already be pushed in, so it is turned back into the full frame
+   * before it is stored: shown = origin + (point - origin) * scale.
+   */
+  const selectedZoomAt = React.useCallback(
+    (atUs: number) => {
+      if (!scene || liveEffect?.kind !== "zoom" || !liveEffect.effectId) return null
+      const element = scene.tracks
+        .flatMap((track) => track.elements)
+        .find((candidate) => candidate.id === liveEffect.elementId)
+      const effect =
+        element && "effects" in element
+          ? element.effects.find((candidate) => candidate.id === liveEffect.effectId)
+          : undefined
+      if (!element || !effect || !("animations" in element)) return null
+      const localUs = atUs - element.startUs
+      const read = (param: string, fallback: number) =>
+        sampleChannel(
+          element.animations.channels[`effects.${effect.id}.params.${param}`],
+          localUs
+        ) ??
+        effect.params[param] ??
+        fallback
+      return {
+        elementId: element.id,
+        effectId: effect.id,
+        scale: Math.max(1, read("scale", 1)),
+        originX: read("originX", 0.5),
+        originY: read("originY", 0.5),
+      }
+    },
+    [scene, liveEffect]
+  )
+
+  const aimSelectedZoom = React.useCallback(
+    (shown: { x: number; y: number }) => {
+      if (!scene) return
+      const atUs = player.readPlayhead()
+      const zoom = selectedZoomAt(atUs)
+      if (!zoom) return
+      commit(
+        aimZoom(scene, zoom.elementId, zoom.effectId, atUs, {
+          x: zoom.originX + (shown.x - zoom.originX) / zoom.scale,
+          y: zoom.originY + (shown.y - zoom.originY) / zoom.scale,
+        })
+      )
+    },
+    [commit, scene, player, selectedZoomAt]
+  )
+
+  /** A point on the full frame, where it shows on the pushed-in picture. */
+  const showSelectedZoomPoint = React.useCallback(
+    (point: { x: number; y: number }, atUs: number) => {
+      const zoom = selectedZoomAt(atUs)
+      if (!zoom) return point
+      return {
+        x: zoom.originX + (point.x - zoom.originX) * zoom.scale,
+        y: zoom.originY + (point.y - zoom.originY) * zoom.scale,
+      }
+    },
+    [selectedZoomAt]
+  )
+
   const dropEffect = React.useCallback(() => {
     if (!scene || !liveEffect?.effectId) return
     commit(removeEffect(scene, liveEffect.elementId, liveEffect.effectId))
@@ -855,7 +924,7 @@ export function Studio({
    * amount and Remove come up) and the playhead moves to the top of the
    * push, where the preview shows what the press did.
    */
-  const addZoom = React.useCallback(() => {
+  const addZoom = React.useCallback((kind: ZoomKind = "push") => {
     if (!scene || !clipAtPlayhead) return
 
     const atUs = player.readPlayhead()
@@ -867,6 +936,7 @@ export function Studio({
     const ops = punchIn(scene, clipAtPlayhead.id, {
       fromUs: us(Math.round(atUs)),
       toUs: us(Math.round(endUs)),
+      ...zoomKindOptions(kind),
     })
     if (ops.length === 0) return
     commit(ops)
@@ -877,7 +947,7 @@ export function Studio({
       // commit just wrote, so the rest is filled in from the document.
       setSelectedEffect({ id: `${clipAtPlayhead.id}:${added}` } as EffectChip)
     }
-    const peakUs = atUs + Math.min(ZOOM_RAMP_US, (endUs - atUs) / 2)
+    const peakUs = zoomPeakUs(kind, atUs, endUs, ZOOM_RAMP_US)
     player.seekTo(us(Math.round(peakUs)))
   }, [commit, scene, clipAtPlayhead, player])
 
@@ -1623,7 +1693,32 @@ export function Studio({
           durationUs={durationUs}
           background={document.settings.background.color}
           playbackRate={rate}
-          overlay={studioTools.previewOverlay}
+          overlay={
+            liveEffect?.kind === "zoom" && liveEffect.effectId && !running
+              ? (frame) => (
+                  <ZoomAimOverlay
+                    player={player}
+                    frame={frame}
+                    windowUs={{
+                      startUs: liveEffect.startUs,
+                      endUs: liveEffect.startUs + liveEffect.durationUs,
+                    }}
+                    points={aimPoints(
+                      scene,
+                      liveEffect.elementId,
+                      liveEffect.effectId!
+                    )}
+                    onAim={aimSelectedZoom}
+                    toShown={showSelectedZoomPoint}
+                    onClear={() =>
+                      commit(
+                        clearAim(scene, liveEffect.elementId, liveEffect.effectId!)
+                      )
+                    }
+                  />
+                )
+              : studioTools.previewOverlay
+          }
         />
       }
       headerEnd={<SaveBadge save={save} onRetry={retry} />}
@@ -1742,7 +1837,7 @@ export function Studio({
             icon={ZoomInAreaIcon}
             label="Add a zoom at the playhead"
             shortcut={hintFor("add-zoom")}
-            onClick={addZoom}
+            onClick={() => addZoom()}
             disabled={running || !clipAtPlayhead}
           />
         </>
@@ -1774,6 +1869,7 @@ export function Studio({
             applied={appliedEffects}
             hasClip={clipAtPlayhead !== null}
             onApply={applyFromPanel}
+            onZoom={addZoom}
             onRemove={removeFromPanel}
             locked={running}
           />
