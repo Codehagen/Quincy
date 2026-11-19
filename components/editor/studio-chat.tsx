@@ -222,7 +222,7 @@ export function StudioChat({
     : record && !isBusy && pick
     ? `Three cuts made. ${pick.reason}`
     : record && !isBusy
-    ? `${record.edits} ${record.edits === 1 ? "edit" : "edits"}, ${formatClockTenths(record.startUs)} to ${formatClockTenths(record.endUs)}.`
+    ? `${record.edits} ${record.edits === 1 ? "edit" : "edits"}, ${lengthChange(record.startUs, record.endUs).replace(" → ", " to ")}.`
     : waitingOnGate
       ? "Quincy asks before this cut."
       : ""
@@ -518,7 +518,7 @@ function Turn({
             settled={settled}
             title={
               settled
-                ? `Cut · ${settledEdits} ${settledEdits === 1 ? "edit" : "edits"} · ${formatClockTenths(startUs)} → ${formatClockTenths(record?.endUs ?? controls.durationUs)}`
+                ? `Cut · ${settledEdits} ${settledEdits === 1 ? "edit" : "edits"} · ${lengthChange(startUs, record?.endUs ?? controls.durationUs)}`
                 : `Cutting · ${landed} of ${steps.length} · ${formatClockTenths(controls.durationUs)}`
             }
             steps={steps}
@@ -613,6 +613,18 @@ const STARTER_ICON: Record<string, IconSvgElement> = {
 
 function withIcons<T extends { tool: string }>(items: readonly T[]) {
   return items.map((s) => ({ ...s, icon: STARTER_ICON[s.tool] }))
+}
+
+/**
+ * The receipt's length: "00:37.0 → 00:32.5" when the run changed it, one
+ * clock when it did not. A punch-in or captions keep the length, and
+ * "00:18.0 → 00:18.0" read as a cut that failed. Compared at the precision
+ * shown, so a change under a tenth does not print two equal clocks.
+ */
+function lengthChange(startUs: number, endUs: number): string {
+  const start = formatClockTenths(startUs)
+  const end = formatClockTenths(endUs)
+  return start === end ? end : `${start} → ${end}`
 }
 
 function toolNameOf(type: string): string {

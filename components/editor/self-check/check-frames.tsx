@@ -46,9 +46,13 @@ export function CheckFrames({
         description={looking ? undefined : check.say}
       />
       {count > 0 ? (
-        <ul className="agent-frames flex gap-1.5" aria-label="Frames Quincy looked at">
+        // One row per frame: the thumbnail, and beside it the time and what
+        // Quincy saw. A caption under a 68px thumbnail wrapped one or two
+        // words a line. The list sits in the title's column (16px icon + 8px
+        // gap), under the line it belongs to.
+        <ul className="agent-frames flex flex-col gap-2 pl-6" aria-label="Frames Quincy looked at">
           {check.frames.map((frame) => (
-            <li key={frame.atUs} className="flex w-[68px] min-w-0 flex-col gap-1">
+            <li key={frame.atUs} className="grid grid-cols-[68px_minmax(0,1fr)] items-start gap-2.5">
               {/* oxlint-disable-next-line nextjs/no-img-element -- a data URL drawn in this tab */}
               <img
                 src={frame.dataUrl}
@@ -61,10 +65,10 @@ export function CheckFrames({
                 className="block w-full rounded-kit-chip bg-kit-stage object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
               />
               {/* The alt text already says this; read once, not twice. */}
-              <span aria-hidden className="text-kit-meta leading-tight text-pretty text-muted-foreground tabular-nums">
-                {atLabel(frame.atUs)}
-                {frame.note ? ` · ${frame.note}` : null}
-              </span>
+              <p aria-hidden className="flex min-w-0 flex-col gap-0.5 text-kit-meta text-pretty text-muted-foreground">
+                <span className="tabular-nums">{atLabel(frame.atUs)}</span>
+                {frame.note ? <span>{frame.note}</span> : null}
+              </p>
             </li>
           ))}
         </ul>
