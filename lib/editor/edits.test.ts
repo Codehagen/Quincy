@@ -682,7 +682,18 @@ describe("punchIn", () => {
     const channel = Object.values(element.animations.channels)[0]
 
     expect(channel.keys[0].timeUs).toBe(0)
-    expect(channel.keys[channel.keys.length - 1].timeUs).toBe(secondsToUs(10))
+    // Unasked, a push lasts a line (three seconds), not the whole clip.
+    expect(channel.keys[channel.keys.length - 1].timeUs).toBe(secondsToUs(3))
+  })
+
+  it("is subtle unless asked: a closer shot, not a crop", () => {
+    const base = scene()
+    const target = clipAt(base, 0)
+
+    const after = applyToScene(base, punchIn(base, target.id))
+    const channel = Object.values(clipAt(after, 0).animations.channels)[0]
+
+    expect(Math.max(...channel.keys.map((key) => key.value))).toBe(1.12)
   })
 
   it("takes a window inside the clip", () => {
@@ -737,7 +748,7 @@ describe("punchIn", () => {
     const after = applyToScene(base, punchIn(base, target.id, { hold: true }))
     const channel = Object.values(clipAt(after, 0).animations.channels)[0]
 
-    expect(channel.keys.map((key) => key.value)).toEqual([1, 1.3])
+    expect(channel.keys.map((key) => key.value)).toEqual([1, 1.12])
   })
 
   it("replaces an existing zoom instead of stacking one", () => {
@@ -1691,7 +1702,12 @@ describe("resizeEffect", () => {
     // Already at the clip's end: dragging further right is a revision that
     // changes nothing and still costs an undo.
     const base = scene()
-    const full = applyToScene(base, punchIn(base, firstClip(base).id))
+    const full = applyToScene(
+      base,
+      punchIn(base, firstClip(base).id, {
+        toUs: us(firstClip(base).startUs + firstClip(base).durationUs),
+      })
+    )
 
     expect(
       resizeEffect(
