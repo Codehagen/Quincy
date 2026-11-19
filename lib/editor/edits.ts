@@ -526,7 +526,9 @@ export function trimEdge(
   const clip = element as VideoElement
   const delta = Math.round(clampTrimDelta(clip, edge, deltaUs))
   if (delta === 0) return []
-  const sourceDelta = Math.round(delta * clipRate(clip))
+  // A still has no footage to move through: trimming it only changes how long
+  // it holds.
+  const sourceDelta = clip.frozen ? 0 : Math.round(delta * clipRate(clip))
 
   if (edge === "end") {
     return withRipple(scene, trackId, elementId, {
@@ -559,6 +561,9 @@ export function trimEdge(
 /** Roughly a frame at 25fps. A clip shorter than this is a slip, not an edit. */
 export const MINIMUM_CLIP_US = 40_000
 
+/** The longest a still holds. Past this it is a slideshow, not a beat. */
+export const MAX_FREEZE_US = 30_000_000
+
 /**
  * How far this edge can actually move, given where the source runs out.
  *
@@ -572,6 +577,19 @@ export function clampTrimDelta(
   edge: "start" | "end",
   deltaUs: number
 ): number {
+  if (clip.frozen) {
+    const longest = MAX_FREEZE_US - clip.durationUs
+    if (edge === "end")
+      return Math.max(
+        MINIMUM_CLIP_US - clip.durationUs,
+        Math.min(deltaUs, longest)
+      )
+    return Math.max(
+      -longest,
+      Math.min(deltaUs, clip.durationUs - MINIMUM_CLIP_US)
+    )
+  }
+
   // The delta is timeline time; the source moves by `rate` times as much.
   const rate = clipRate(clip)
   if (edge === "end") {
@@ -1822,7 +1840,7 @@ export function setSpeed(
     (candidate) => candidate.id === elementId
   )
   if (!track || !element || element.kind !== "video") return []
-  if (!Number.isFinite(speed)) return []
+  if (element.frozen || !Number.isFinite(speed)) return []
 
   const rate =
     Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100

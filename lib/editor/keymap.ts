@@ -40,6 +40,7 @@ export type KeyAction =
   | "trim-end"
   | "delete"
   | "add-zoom"
+  | "freeze"
   | "undo"
   | "redo"
   | "deselect"
@@ -266,6 +267,13 @@ export const KEYMAP: readonly KeyEntry[] = [
     group: "Editing",
     hints: [["Z"]],
     bindings: [b("add-zoom", "z", { mod: false, shift: false, alt: false })],
+  },
+  {
+    action: "freeze",
+    label: "Hold the frame at the playhead for two seconds",
+    group: "Editing",
+    hints: [["F"]],
+    bindings: [b("freeze", "f", { mod: false, shift: false, alt: false })],
   },
   {
     action: "add-marker",

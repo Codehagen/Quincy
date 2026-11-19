@@ -216,6 +216,14 @@ export type VideoElement = ElementBase & {
    * Fractions of the canvas: x and y are the top-left corner.
    */
   box?: Box
+  /**
+   * A still: the clip holds one frame of its source for its whole length and
+   * makes no sound. The frame is `trimStartUs`, and the window is empty
+   * (`trimEndUs === trimStartUs`) on purpose, so no word of the transcript maps
+   * into the hold: the words at that instant belong to the clip that plays on
+   * after it. The length is the timeline's, not the source's.
+   */
+  frozen?: boolean
   effects: Effect[]
   animations: Animations
 }

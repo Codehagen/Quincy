@@ -1767,7 +1767,10 @@ function Clip({
       >
         <ClipFace
           strip={trimmable ? strip : null}
-          wave={trimmable ? seekIndex : null}
+          // A held frame is silent: no wave to draw under it.
+          wave={
+            trimmable && !("frozen" in clip && clip.frozen) ? seekIndex : null
+          }
           trimStartUs={clip.trimStartUs ?? 0}
           trimEndUs={clip.trimEndUs ?? 0}
           widthPx={widthPx}

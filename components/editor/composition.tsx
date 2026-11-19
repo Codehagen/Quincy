@@ -4,6 +4,7 @@ import * as React from "react"
 import { Audio, Video } from "@remotion/media"
 import {
   AbsoluteFill,
+  Freeze,
   Img,
   Sequence,
   useCurrentFrame,
@@ -485,9 +486,10 @@ function Clip({
   // The sound: the clip's own, or the cleaned voice in its place over the
   // same window of the recording. Without a stored voice the clip plays as
   // recorded, which is what "clean" falls back to rather than silence.
+  const frozen = Boolean(element.frozen)
   const cleanVoice =
-    element.voice === "clean" ? (media?.voiceUrl ?? null) : null
-  const volume = element.muted || trackMuted
+    element.voice === "clean" && !frozen ? (media?.voiceUrl ?? null) : null
+  const volume = frozen || element.muted || trackMuted
     ? 0
     : edges && (edges.in || edges.out)
       ? (frame: number) => element.volume * edgeGain(frame, length, edges)
@@ -517,23 +519,32 @@ function Clip({
       <AbsoluteFill
         style={rotation ? { transform: `rotate(${rotation}deg)` } : undefined}
       >
-        <Video
-          src={src}
-          trimBefore={framesFor(element.trimStartUs, fps)}
-          trimAfter={framesFor(element.trimEndUs, fps)}
-          volume={cleanVoice ? 0 : volume}
-          playbackRate={speed}
-          style={{
-            width: "100%",
-            height: "100%",
-            // Which part of an overflowing source is kept. The browser resolves
-            // it against the intrinsic size, so nothing here needs to know how
-            // big the footage is — which is why the document can store the crop
-            // as a fraction and stay honest about footage it has never measured.
-            objectPosition: cssObjectPosition(visual),
-          }}
-          objectFit={element.fit ?? "contain"}
-        />
+        {/* A still holds the first frame of a one-frame window (types.ts
+            `frozen`): the window in the document is empty, and the player
+            wants something to seek into. */}
+        <Freeze frame={0} active={frozen}>
+          <Video
+            src={src}
+            trimBefore={framesFor(element.trimStartUs, fps)}
+            trimAfter={
+              frozen
+                ? framesFor(element.trimStartUs, fps) + 1
+                : framesFor(element.trimEndUs, fps)
+            }
+            volume={cleanVoice ? 0 : volume}
+            playbackRate={frozen ? 1 : speed}
+            style={{
+              width: "100%",
+              height: "100%",
+              // Which part of an overflowing source is kept. The browser resolves
+              // it against the intrinsic size, so nothing here needs to know how
+              // big the footage is — which is why the document can store the crop
+              // as a fraction and stay honest about footage it has never measured.
+              objectPosition: cssObjectPosition(visual),
+            }}
+            objectFit={element.fit ?? "contain"}
+          />
+        </Freeze>
       </AbsoluteFill>
       {cleanVoice ? (
         <Audio

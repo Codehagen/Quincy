@@ -11,7 +11,7 @@ import { applyToScene, newElement, type EditOp } from "./ops"
 import { mergeLibrary, moveElement, placeMedia } from "./placement"
 import { applyCaptionPreset, applyLookPreset, restyleCaptions } from "./presets"
 import { snap, snapPoints } from "./snapping"
-import { nameSpeaker, speakerNumbers } from "./speakers"
+import { cutSpeaker, nameSpeaker, speakerNumbers } from "./speakers"
 import { cuesToWords, parseSubtitles, subtitleCues, toSrt, toVtt } from "./subtitles"
 import { findMainTrack, sceneDurationUs } from "./timeline"
 import { secondsToUs, us } from "./time"
@@ -463,6 +463,28 @@ describe("speakers", () => {
     expect(nameSpeaker({ ...metadata, speakers: { "0": "Kari" } }, 0, "")).toEqual([
       { op: "update_metadata", patch: { speakers: {} } },
     ])
+  })
+})
+
+describe("cutSpeaker", () => {
+  it("cuts a speaker's turns up to where the other voice starts", () => {
+    const base = scene()
+    const after = apply(base, cutSpeaker(base, 0))
+    expect(sceneDurationUs(after)).toBe(secondsToUs(15))
+    const spine = findMainTrack(after)!.elements as VideoElement[]
+    expect(spine[0].trimStartUs).toBe(secondsToUs(15))
+    expect(speakerNumbers(after)).toEqual([1])
+  })
+
+  it("ends the last turn on its own last word", () => {
+    const base = scene()
+    const after = apply(base, cutSpeaker(base, 1))
+    // 15s of the first voice, and the half second after the last word.
+    expect(sceneDurationUs(after)).toBe(secondsToUs(15.5))
+  })
+
+  it("does nothing for a speaker who never talks", () => {
+    expect(cutSpeaker(scene(), 7)).toEqual([])
   })
 })
 

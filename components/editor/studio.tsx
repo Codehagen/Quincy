@@ -29,6 +29,7 @@ import {
 } from "@/lib/editor/clipboard"
 import { hintFor, keyActionFor } from "@/lib/editor/keymap"
 import { placeMarkers, toggleMarker } from "@/lib/editor/markers"
+import { freezeFrame } from "@/lib/editor/freeze"
 import { setAudioFades } from "@/lib/editor/audio-fades"
 import {
   applyEffect,
@@ -1388,6 +1389,7 @@ export function Studio({
       action === "trim-end" ||
       action === "delete" ||
       action === "add-zoom" ||
+      action === "freeze" ||
       action === "add-marker" ||
       action === "paste" ||
       action === "duplicate" ||
@@ -1404,6 +1406,7 @@ export function Studio({
       action === "trim-end" ||
       action === "paste" ||
       action === "duplicate" ||
+      action === "freeze" ||
       action === "delete"
     if (spineEdit && scene && findMainTrack(scene)?.locked) return
 
@@ -1491,6 +1494,12 @@ export function Studio({
         break
       case "add-zoom":
         addZoom()
+        break
+      case "freeze":
+        if (scene) {
+          player.pause()
+          commit(freezeFrame(scene, at))
+        }
         break
       case "undo":
         undo()
