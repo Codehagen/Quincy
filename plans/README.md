@@ -414,9 +414,9 @@ dependencies, UI, and whether a real Vercel build carries the model file.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [049](049-the-second-voice-pass-respects-the-deadline.md) | The second voice pass respects the ingest deadline | P1 | S | — | TODO |
-| [050](050-a-missing-voice-model-is-loud.md) | A missing voice model is caught before deploy and loud after it | P2 | S | 049 | TODO |
-| [051](051-test-that-finished-cuts-keep-their-sound.md) | Test that finished cuts keep their sound | P2 | S | 049 | TODO |
+| [049](049-the-second-voice-pass-respects-the-deadline.md) | The second voice pass respects the ingest deadline | P1 | S | — | DONE — on PR #7 |
+| [050](050-a-missing-voice-model-is-loud.md) | A missing voice model is caught before deploy and loud after it | P2 | S | 049 | DONE — on PR #7 |
+| [051](051-test-that-finished-cuts-keep-their-sound.md) | Test that finished cuts keep their sound | P2 | S | 049 | DONE — on PR #7 |
 
 Not planned (low leverage): none beyond what 050 and 051 fold in (the
 "turned off" note, the parallel HEADs).

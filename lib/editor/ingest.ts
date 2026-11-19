@@ -449,10 +449,10 @@ export async function firstExisting(
   storage: Pick<Storage, "exists">,
   keys: string[]
 ): Promise<string | null> {
-  for (const key of keys) {
-    if (await storage.exists(key)) return key
-  }
-  return null
+  // Asked together, one round trip rather than one per key: a page with many
+  // takes runs this for every one of them.
+  const found = await Promise.all(keys.map((key) => storage.exists(key)))
+  return keys[found.indexOf(true)] ?? null
 }
 
 function message(error: unknown): string {
