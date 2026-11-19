@@ -124,6 +124,12 @@ export type Track = {
   muted?: boolean
   hidden?: boolean
   /**
+   * Locked from hand edits on the timeline: its clips cannot be selected,
+   * moved, trimmed or deleted there. A guard against a stray drag, not a
+   * permission — the agent and the transcript still reach it.
+   */
+  locked?: boolean
+  /**
    * Ordered by startUs, and the ordering is an invariant the ops maintain
    * rather than something callers re-sort. Half the timeline reads reduce to
    * a binary search over this array; an unsorted array makes them all linear.

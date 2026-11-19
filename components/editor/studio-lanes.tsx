@@ -9,7 +9,11 @@ import {
   PaintBoardIcon,
   PaintBucketIcon,
   SparklesIcon,
+  SquareLock02Icon,
+  SquareUnlock02Icon,
   SunIcon,
+  VolumeHighIcon,
+  VolumeMute02Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
@@ -32,7 +36,9 @@ import {
 } from "@/lib/editor/snapping"
 import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
 import { us, type Us } from "@/lib/editor/time"
+import { audioFades, type AudioFades } from "@/lib/editor/audio-fades"
 import type {
+  AudioElement,
   Scene,
   TimelineElement,
   Track,
@@ -171,7 +177,19 @@ export function StudioLanes({
   marks,
   alsoSelected = [],
   markerTimes = [],
+  onTrackChange,
+  onAudioVolume,
+  onAudioFades,
 }: {
+  /** Mute or lock a lane from its header. Absent: the header only names it. */
+  onTrackChange?: (
+    trackId: string,
+    patch: { muted?: boolean; locked?: boolean }
+  ) => void
+  /** Drag the level line on a sound clip. */
+  onAudioVolume?: (trackId: string, elementId: string, volume: number) => void
+  /** Drag the fade handles on a sound clip. */
+  onAudioFades?: (trackId: string, elementId: string, fades: AudioFades) => void
   /**
    * The in and out marks (I and O). Either may be unset; with both, the
    * stretch between them is what X cuts out.
@@ -642,7 +660,7 @@ export function StudioLanes({
     <div className="flex">
       {/* Outside the scroll container, so the headers stay put while the lanes
           scroll under them. */}
-      <div className="w-[88px] shrink-0 pt-5 pointer-coarse:pt-11">
+      <div className="w-[112px] shrink-0 pt-5 pointer-coarse:pt-11">
         {scene.tracks.map((track) => (
           <React.Fragment key={track.id}>
             {/* One header for the group, and blanks under it. Repeating
@@ -668,7 +686,7 @@ export function StudioLanes({
 
             <div
               className={cn(
-                "flex items-center gap-1.5 truncate text-kit-small text-kit-ink-muted",
+                "group/lane flex items-center gap-1.5 truncate pr-1 text-kit-small text-kit-ink-muted",
                 LANE_HEIGHT[track.kind]
               )}
             >
@@ -676,8 +694,16 @@ export function StudioLanes({
                 aria-hidden="true"
                 icon={TRACK_ICON[track.kind]}
                 size={13}
+                className="shrink-0"
               />
-              <span className="truncate">{track.name}</span>
+              <span className="min-w-0 flex-1 truncate">{track.name}</span>
+              {onTrackChange ? (
+                <LaneSwitches
+                  track={track}
+                  disabled={locked}
+                  onChange={(patch) => onTrackChange(track.id, patch)}
+                />
+              ) : null}
             </div>
           </React.Fragment>
         ))}
@@ -907,7 +933,22 @@ export function StudioLanes({
                       onTrim={onTrim}
                       onTrimCommit={onTrimCommit}
                       movable={
-                        Boolean(onMoveElement) && !locked && !track.isMain
+                        Boolean(onMoveElement) &&
+                        !locked &&
+                        !track.isMain &&
+                        !track.locked
+                      }
+                      laneLocked={Boolean(track.locked)}
+                      onAudioVolume={
+                        onAudioVolume && !locked && !track.locked
+                          ? (volume) =>
+                              onAudioVolume(track.id, element.id, volume)
+                          : undefined
+                      }
+                      onAudioFades={
+                        onAudioFades && !locked && !track.locked
+                          ? (fades) => onAudioFades(track.id, element.id, fades)
+                          : undefined
                       }
                       snapStart={snapStart}
                       onMove={(startUs, toTrackId) =>
@@ -1546,7 +1587,14 @@ function Clip({
   movable = false,
   snapStart,
   onMove,
+  laneLocked = false,
+  onAudioVolume,
+  onAudioFades,
 }: {
+  /** The lane is locked: the clip shows, and answers nothing. */
+  laneLocked?: boolean
+  onAudioVolume?: (volume: number) => void
+  onAudioFades?: (fades: AudioFades) => void
   element: TimelineElement
   geometry: Geometry
   trackId: string
@@ -1573,7 +1621,7 @@ function Clip({
   laneWidth: number
 }) {
   const clip = element as VideoElement
-  const trimmable = element.kind === "video"
+  const trimmable = element.kind === "video" && !laneLocked
   const widthPx = (geometry.durationUs / span) * laneWidth
 
   /**
@@ -1643,6 +1691,7 @@ function Clip({
             swallow.current = false
             return
           }
+          if (laneLocked) return
           onSelect(element.id, event.shiftKey || event.metaKey || event.ctrlKey)
         }}
         data-owns-drag={movable ? "" : undefined}
@@ -1751,6 +1800,15 @@ function Clip({
           {element.name}
         </span>
       </button>
+
+      {element.kind === "audio" ? (
+        <AudioLevel
+          element={element as AudioElement}
+          widthPx={widthPx}
+          onVolume={onAudioVolume}
+          onFades={onAudioFades}
+        />
+      ) : null}
 
       {/* Hidden until hover so 22 clips are not 44 permanent grab targets. */}
       {trimmable ? (
@@ -2070,5 +2128,289 @@ function MarkedRange({
         </div>
       ) : null}
     </>
+  )
+}
+
+/**
+ * Mute and lock, at the end of a lane's header.
+ *
+ * Quiet until they mean something: an unmuted, unlocked lane shows them only
+ * on hover or focus, so six lanes are not twelve permanent icons; a muted or
+ * locked lane shows its switch all the time, because that state is the thing
+ * you need to see when the lane does not answer. Mute only where the lane has
+ * sound to mute.
+ */
+function LaneSwitches({
+  track,
+  disabled,
+  onChange,
+}: {
+  track: Track
+  disabled?: boolean
+  onChange: (patch: { muted?: boolean; locked?: boolean }) => void
+}) {
+  const hasSound =
+    track.kind === "video" || track.kind === "audio" || track.kind === "broll"
+  const button =
+    "grid size-5 shrink-0 place-items-center rounded-[4px] outline-hidden transition-[background-color,color,opacity] duration-150 ease-out hover:bg-kit-row-hover hover:text-kit-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:pointer-events-none"
+  return (
+    <span className="group/switches flex shrink-0 items-center">
+      {hasSound ? (
+        <button
+          type="button"
+          aria-label={
+            track.muted ? `Unmute ${track.name}` : `Mute ${track.name}`
+          }
+          aria-pressed={Boolean(track.muted)}
+          title={track.muted ? "Unmute" : "Mute"}
+          disabled={disabled}
+          onClick={() => onChange({ muted: !track.muted })}
+          className={cn(
+            button,
+            track.muted
+              ? "text-kit-ink"
+              : "opacity-0 group-hover/lane:opacity-100"
+          )}
+        >
+          <HugeiconsIcon
+            aria-hidden="true"
+            icon={track.muted ? VolumeMute02Icon : VolumeHighIcon}
+            size={13}
+          />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        aria-label={
+          track.locked ? `Unlock ${track.name}` : `Lock ${track.name}`
+        }
+        aria-pressed={Boolean(track.locked)}
+        title={track.locked ? "Unlock" : "Lock"}
+        disabled={disabled}
+        onClick={() => onChange({ locked: !track.locked })}
+        className={cn(
+          button,
+          track.locked
+            ? "text-kit-ink"
+            : "opacity-0 group-hover/lane:opacity-100"
+        )}
+      >
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={track.locked ? SquareLock02Icon : SquareUnlock02Icon}
+          size={13}
+        />
+      </button>
+    </span>
+  )
+}
+
+/** The highest a level line goes: the same 200% the volume slider reaches. */
+const MAX_LEVEL = 2
+
+/**
+ * The level line and the fades, drawn on a sound clip.
+ *
+ * The line sits at the clip's volume (the top is 200%, the middle 100%) and
+ * drags up and down; the two small squares at the top corners drag inward to
+ * fade in and out, and the line slopes to match. One drag is one commit, on
+ * release, like a trim: the preview follows the pointer and the document
+ * hears about it once.
+ */
+function AudioLevel({
+  element,
+  widthPx,
+  onVolume,
+  onFades,
+}: {
+  element: AudioElement
+  widthPx: number
+  onVolume?: (volume: number) => void
+  onFades?: (fades: AudioFades) => void
+}) {
+  const stored = audioFades(element)
+  const [draft, setDraft] = React.useState<{
+    volume?: number
+    fades?: AudioFades
+  } | null>(null)
+  const volume = draft?.volume ?? (element.muted ? 0 : element.volume)
+  const fades = draft?.fades ?? stored
+  const length = Math.max(1, element.durationUs)
+
+  const y = (1 - Math.min(MAX_LEVEL, volume) / MAX_LEVEL) * 100
+  const inX = (fades.inUs / length) * 100
+  const outX = 100 - (fades.outUs / length) * 100
+  const editable = Boolean(onVolume || onFades)
+
+  /**
+   * One drag: `next` turns the pointer's travel into a draft, drawn as it
+   * goes, and `commit` gets the last draft once, on release. The last draft
+   * is held in this closure rather than in state, which would be a frame
+   * behind at the release.
+   */
+  const drag = <T,>(
+    event: React.PointerEvent<HTMLElement>,
+    next: (dx: number, dy: number, box: DOMRect) => T | null,
+    show: (value: T) => void,
+    commit: (value: T) => void
+  ) => {
+    event.stopPropagation()
+    event.preventDefault()
+    const box = (
+      event.currentTarget.closest("[data-audio-level]") as HTMLElement
+    ).getBoundingClientRect()
+    const x0 = event.clientX
+    const y0 = event.clientY
+    let last: T | null = null
+    const onMove = (e: PointerEvent) => {
+      const value = next(e.clientX - x0, e.clientY - y0, box)
+      if (value === null) return
+      last = value
+      show(value)
+    }
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      setDraft(null)
+      if (last !== null) commit(last)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
+
+  return (
+    <div
+      data-audio-level=""
+      className="pointer-events-none absolute inset-0 overflow-hidden rounded-[3px]"
+    >
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 size-full"
+        preserveAspectRatio="none"
+        viewBox="0 0 100 100"
+      >
+        <polyline
+          points={`0,100 ${inX},${y} ${outX},${y} 100,100`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+          className="text-kit-ink"
+        />
+      </svg>
+      {editable && widthPx >= 32 ? (
+        <>
+          {onVolume ? (
+            <div
+              role="slider"
+              data-owns-drag=""
+              aria-label={`Volume of ${element.name}`}
+              aria-valuemin={0}
+              aria-valuemax={MAX_LEVEL * 100}
+              aria-valuenow={Math.round(volume * 100)}
+              tabIndex={0}
+              title={`${Math.round(volume * 100)}%`}
+              className="pointer-events-auto absolute h-2 -translate-y-1/2 cursor-ns-resize"
+              style={{ top: `${y}%`, left: `${inX}%`, right: `${100 - outX}%` }}
+              onPointerDown={(event) =>
+                drag(
+                  event,
+                  (_dx, dy, box) => {
+                    const start = element.muted ? 0 : element.volume
+                    const next = Math.min(
+                      MAX_LEVEL,
+                      Math.max(0, start - (dy / box.height) * MAX_LEVEL)
+                    )
+                    return Math.round(next * 20) / 20
+                  },
+                  (value) => setDraft({ volume: value }),
+                  onVolume
+                )
+              }
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowUp"
+                    ? 0.05
+                    : event.key === "ArrowDown"
+                      ? -0.05
+                      : 0
+                if (!step) return
+                event.preventDefault()
+                event.stopPropagation()
+                onVolume(
+                  Math.min(
+                    MAX_LEVEL,
+                    Math.max(0, Math.round((volume + step) * 20) / 20)
+                  )
+                )
+              }}
+            />
+          ) : null}
+          {onFades
+            ? (["in", "out"] as const).map((edge) => (
+                <div
+                  key={edge}
+                  role="slider"
+                  data-owns-drag=""
+                  aria-label={`Fade ${edge} of ${element.name}`}
+                  aria-valuemin={0}
+                  aria-valuemax={Math.round(length / 1000)}
+                  aria-valuenow={Math.round(
+                    (edge === "in" ? fades.inUs : fades.outUs) / 1000
+                  )}
+                  tabIndex={0}
+                  title={edge === "in" ? "Fade in" : "Fade out"}
+                  className="pointer-events-auto absolute top-0.5 size-2.5 -translate-x-1/2 cursor-ew-resize rounded-[2px] border border-kit-ink bg-kit-object"
+                  style={{ left: `${edge === "in" ? inX : outX}%` }}
+                  onPointerDown={(event) =>
+                    drag(
+                      event,
+                      (dx, _dy, box) => {
+                        const deltaUs = (dx / box.width) * length
+                        const next =
+                          edge === "in"
+                            ? {
+                                inUs: Math.max(0, stored.inUs + deltaUs),
+                                outUs: stored.outUs,
+                              }
+                            : {
+                                inUs: stored.inUs,
+                                outUs: Math.max(0, stored.outUs - deltaUs),
+                              }
+                        return next.inUs + next.outUs > length ? null : next
+                      },
+                      (value) => setDraft({ fades: value }),
+                      onFades
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    const sign =
+                      event.key === "ArrowRight"
+                        ? 1
+                        : event.key === "ArrowLeft"
+                          ? -1
+                          : 0
+                    if (!sign) return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const stepUs = 250_000 * (edge === "in" ? sign : -sign)
+                    onFades(
+                      edge === "in"
+                        ? {
+                            inUs: Math.max(0, fades.inUs + stepUs),
+                            outUs: fades.outUs,
+                          }
+                        : {
+                            inUs: fades.inUs,
+                            outUs: Math.max(0, fades.outUs + stepUs),
+                          }
+                    )
+                  }}
+                />
+              ))
+            : null}
+        </>
+      ) : null}
+    </div>
   )
 }

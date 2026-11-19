@@ -228,7 +228,9 @@ type EditOpBody =
   /** Which scene the editor shows and a request edits. */
   | { op: "select_scene"; sceneId: string }
 
-export type TrackPatch = Partial<Pick<Track, "name" | "muted" | "hidden">>
+export type TrackPatch = Partial<
+  Pick<Track, "name" | "muted" | "hidden" | "locked">
+>
 
 export type ScenePatch = Partial<Pick<Scene, "name" | "canvas">>
 
@@ -441,7 +443,10 @@ function applyOne(
 
             // A null in a patch takes the field off. Undefined cannot say
             // that: it does not survive JSON, and every op crosses the wire.
-            const merged = { ...element, ...op.patch } as Record<string, unknown>
+            const merged = { ...element, ...op.patch } as Record<
+              string,
+              unknown
+            >
             for (const [key, value] of Object.entries(op.patch))
               if (value === null) delete merged[key]
             // Diff rather than trusting the patch keys: setting volume to the

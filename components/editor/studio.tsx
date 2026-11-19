@@ -29,6 +29,7 @@ import {
 } from "@/lib/editor/clipboard"
 import { hintFor, keyActionFor } from "@/lib/editor/keymap"
 import { placeMarkers, toggleMarker } from "@/lib/editor/markers"
+import { setAudioFades } from "@/lib/editor/audio-fades"
 import {
   applyEffect,
   cropSpine,
@@ -1394,6 +1395,18 @@ export function Studio({
       action === "redo"
     if (edits && running) return
 
+    // A locked spine answers no edit by hand: the guard is against a stray
+    // key as much as a stray drag.
+    const spineEdit =
+      action === "split" ||
+      action === "delete-range" ||
+      action === "trim-start" ||
+      action === "trim-end" ||
+      action === "paste" ||
+      action === "duplicate" ||
+      action === "delete"
+    if (spineEdit && scene && findMainTrack(scene)?.locked) return
+
     const frameUs = 1_000_000 / fps
     const at = player.readPlayhead()
 
@@ -1858,6 +1871,30 @@ export function Studio({
             selectedId={selectedId}
             onSelect={selectClip}
             alsoSelected={selectedId ? alsoSelected : []}
+            onTrackChange={(laneId, patch) =>
+              commit([
+                {
+                  op: "update_track",
+                  sceneId: scene.id,
+                  trackId: laneId,
+                  patch,
+                },
+              ])
+            }
+            onAudioVolume={(laneId, elementId, volume) =>
+              commit([
+                {
+                  op: "update_element",
+                  sceneId: scene.id,
+                  trackId: laneId,
+                  elementId,
+                  patch: { volume, muted: volume === 0 },
+                },
+              ])
+            }
+            onAudioFades={(laneId, elementId, fades) =>
+              commit(setAudioFades(scene, laneId, elementId, fades))
+            }
             markerTimes={markerTimes}
             seekIndex={seekIndex}
             filmstrips={filmstrips}
