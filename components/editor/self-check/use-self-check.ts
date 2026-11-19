@@ -111,7 +111,9 @@ export function useSelfCheck({
         const times = checkTimes(scene, targetsOf(sceneId))
         const frames: CheckFrame[] = await grabFrames({
           scene,
-          canvas: source.canvas,
+          // The cut's own shape: in three cuts, B can be square while A
+          // (on screen) is vertical, and the route judges B on its canvas.
+          canvas: scene.canvas ?? source.canvas,
           proxyUrls: source.proxyUrls,
           times,
           signal: controller.signal,
