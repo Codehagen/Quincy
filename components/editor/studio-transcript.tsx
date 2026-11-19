@@ -235,7 +235,7 @@ export function StudioTranscript({
         />
       ) : null}
 
-      {lines.length === 0 ? (
+      {rows.length === 0 ? (
         <Empty />
       ) : (
         <div

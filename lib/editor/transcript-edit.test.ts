@@ -93,6 +93,20 @@ describe("cutAways", () => {
 })
 
 describe("cleanUpReview", () => {
+  it("never offers the only copy left after a hand edit", () => {
+    const words = said("we", "we", "shipped")
+    let scene = take()
+    // The person took the second "we" by hand.
+    scene = applyToScene(
+      scene,
+      deleteSpeech(scene, [
+        { mediaId: "m", ranges: [{ startUs: s(0.9), endUs: s(1.6) }] },
+      ]),
+      "user"
+    )
+    expect(cleanUpReview(scene, "m", words)).toEqual([])
+  })
+
   it("lists stumbles that still play, and cuts the ticked ones", () => {
     const words = said("we", "we", "shipped,", "like,", "fast")
     const scene = take()

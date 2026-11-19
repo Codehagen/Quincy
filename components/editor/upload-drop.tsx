@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { Progress, Text, TextLink } from "@/components/kit"
+import { Progress, Text, TextButton, TextLink } from "@/components/kit"
 import {
   UploadError,
   uploadAndOpen,
@@ -49,6 +49,22 @@ export function UploadDrop({
   const [paywalled, setPaywalled] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
   const [recording, setRecording] = React.useState(false)
+  /**
+   * A take recorded here, kept until it is safely uploaded. Unlike a dropped
+   * file it has no copy on disk, so a failed upload must not be the end of
+   * it: the error offers to try again or to save the take.
+   */
+  const [take, setTake] = React.useState<File | null>(null)
+
+  const saveTake = React.useCallback(() => {
+    if (!take) return
+    const url = URL.createObjectURL(take)
+    const link = window.document.createElement("a")
+    link.href = url
+    link.download = take.name
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }, [take])
 
   const busy = progress !== null && progress.phase !== "done"
 
@@ -86,6 +102,7 @@ export function UploadDrop({
         <RecordTakePanel
           onCancel={() => setRecording(false)}
           onDone={(file) => {
+            setTake(file)
             setRecording(false)
             void start(file)
           }}
@@ -107,7 +124,10 @@ export function UploadDrop({
         if (busy) return
 
         const file = event.dataTransfer.files[0]
-        if (file) void start(file)
+        if (file) {
+          setTake(null)
+          void start(file)
+        }
       }}
       // A dashed recess inside the Card, so the drop target reads as a place
       // to put something rather than another object. Nested radius: the
@@ -123,7 +143,10 @@ export function UploadDrop({
         className="sr-only"
         onChange={(event) => {
           const file = event.target.files?.[0]
-          if (file) void start(file)
+          if (file) {
+            setTake(null)
+            void start(file)
+          }
           // Cleared so choosing the same file twice fires a change event the
           // second time — otherwise a retry after a failure does nothing.
           event.target.value = ""
@@ -188,6 +211,16 @@ export function UploadDrop({
               <>
                 {" "}
                 <TextLink href="/settings?section=plan">See plans</TextLink>
+              </>
+            ) : null}
+            {take ? (
+              <>
+                {" "}
+                <TextButton onClick={() => void start(take)}>
+                  Try again
+                </TextButton>
+                {" or "}
+                <TextButton onClick={saveTake}>save the take</TextButton>.
               </>
             ) : null}
           </Text>

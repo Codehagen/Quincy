@@ -90,6 +90,15 @@ describe("detectDisfluencies", () => {
     ])
   })
 
+  it("never calls a finished sentence a false start", () => {
+    expect(
+      kinds(say("We", "shipped.", "Um,", "we", "need", "feedback."))
+    ).toEqual([["hesitation", "Um,"]])
+    expect(kinds(say("we", "should...", "we", "need", "to"))).toEqual([
+      ["false_start", "we should..."],
+    ])
+  })
+
   it("finds a cut-off fragment", () => {
     expect(kinds(say("the", "bu-", "the", "bug", "report"))).toEqual([
       ["false_start", "bu-"],
@@ -133,6 +142,25 @@ describe("cleanUpCuts", () => {
     const [cut] = cleanUpCuts(words, s(2), ["repetition"])
     expect(cut.range.endUs).toBeLessThanOrEqual(words[1].startUs)
     expect(cut.range.startUs).toBeLessThanOrEqual(words[0].startUs)
+  })
+})
+
+describe("cleanUpCuts and neighbouring speech", () => {
+  it("leaves a stumble whose timing overlaps a word it does not cover", () => {
+    const words: Word[] = [
+      { text: "we", startUs: s(0), endUs: s(0.3), confidence: 1 },
+      { text: "we", startUs: s(0.4), endUs: s(0.7), confidence: 1 },
+      { text: "shipped", startUs: s(0.6), endUs: s(1), confidence: 1 },
+    ]
+    // The first "we" is clear of everything; the kept one overlaps "shipped",
+    // which is fine. A repeat that itself overlapped a kept word would not be cut.
+    expect(cleanUpCuts(words, s(2), ["repetition"])).toHaveLength(1)
+    const overlapping: Word[] = [
+      { text: "we", startUs: s(0), endUs: s(0.45), confidence: 1 },
+      { text: "we", startUs: s(0.4), endUs: s(0.7), confidence: 1 },
+      { text: "shipped", startUs: s(0.8), endUs: s(1.1), confidence: 1 },
+    ]
+    expect(cleanUpCuts(overlapping, s(2), ["repetition"])).toEqual([])
   })
 })
 

@@ -44,6 +44,7 @@ export function cutStyleOf(
       wordsPerSegment: caption.style.wordsPerSegment,
       textTransform: caption.style.textTransform,
       background: caption.style.background.enabled,
+      ...(caption.style.showFillers ? { showFillers: true } : {}),
     }
   }
 

@@ -239,6 +239,8 @@ export type CaptionStyle = {
   inactiveColor: string
   /** 1 gives the word-by-word look. Higher reads as a phrase at a time. */
   wordsPerSegment: number
+  /** Filler sounds shown on the captions (rules 2 hide them by default). */
+  showFillers?: boolean
   textTransform: "none" | "uppercase" | "lowercase"
   textAlign: "left" | "center" | "right"
   lineHeight: number

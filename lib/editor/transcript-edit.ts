@@ -2,6 +2,7 @@ import {
   cleanUpCuts,
   DEFAULT_CLEAN_UP,
   detectDisfluencies,
+  keptWordIndex,
   type Disfluency,
   type DisfluencyKind,
 } from "./disfluency"
@@ -133,6 +134,9 @@ export function cleanUpReview(
   return detectDisfluencies(words).flatMap((found) => {
     const span = words.slice(found.from, found.to + 1)
     if (!span.every((word) => plays(pieces, word))) return []
+    // Never the only copy left: the word it leans on must still play.
+    const kept = keptWordIndex(words, found)
+    if (kept !== null && !plays(pieces, words[kept])) return []
     const atUs = sourceToTimelineUs(spine, mediaId, span[0].startUs)
     if (atUs === null) return []
     return [

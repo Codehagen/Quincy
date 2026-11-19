@@ -24,6 +24,7 @@ import {
 import {
   cleanUpCuts,
   DEFAULT_CLEAN_UP,
+  keptWordIndex,
   type Disfluency,
   type DisfluencyKind,
 } from "./disfluency"
@@ -104,13 +105,23 @@ export function addCaptions(
   )
   if (!anchor) return []
 
-  const style = options.style ?? DEFAULT_CAPTION_STYLE
+  // The settings the captions were built with, stored on them, so a
+  // rebuild (restoreSpeech) and a saved style read what was asked for and
+  // not the default the style started from.
+  const base = options.style ?? DEFAULT_CAPTION_STYLE
+  const style: CaptionStyle = {
+    ...base,
+    wordsPerSegment: options.wordsPerSegment ?? base.wordsPerSegment,
+    ...(options.showFillers !== undefined
+      ? { showFillers: options.showFillers }
+      : {}),
+  }
   const seeds = buildCaptionSeeds(words, {
     mediaId: options.mediaId,
     elementId: anchor.id,
-    wordsPerSegment: options.wordsPerSegment ?? style.wordsPerSegment,
+    wordsPerSegment: style.wordsPerSegment,
     rules: options.rules,
-    showFillers: options.showFillers,
+    showFillers: style.showFillers,
   })
 
   const built = seeds.map((seed) =>
@@ -352,17 +363,21 @@ export function cleanUpSteps(
   const spine = findMainTrack(scene)
   if (!spine) return { steps: [], removed: [] }
 
-  const plays = (item: Disfluency) =>
-    words
-      .slice(item.from, item.to + 1)
-      .some(
-        (word) =>
-          sourceToTimelineUs(
-            spine,
-            options.mediaId,
-            us(Math.round((word.startUs + word.endUs) / 2))
-          ) !== null
-      )
+  const wordPlays = (word: Word) =>
+    sourceToTimelineUs(
+      spine,
+      options.mediaId,
+      us(Math.round((word.startUs + word.endUs) / 2))
+    ) !== null
+  // Still in the cut, and so is the word it leans on (disfluency.ts
+  // `keptWordIndex`): never the last copy left after a hand edit.
+  const plays = (item: Disfluency) => {
+    const kept = keptWordIndex(words, item)
+    return (
+      words.slice(item.from, item.to + 1).some(wordPlays) &&
+      (kept === null || wordPlays(words[kept]))
+    )
+  }
 
   const cuts = cleanUpCuts(
     words,
@@ -488,6 +503,7 @@ export function restoreSpeech(
         elementId: anchor.id,
         wordsPerSegment: style.wordsPerSegment,
         rules: options.rules,
+        showFillers: style.showFillers,
       })
       const others = captions.filter(
         (caption) => caption.tokens[0]?.sourceMediaId !== options.mediaId

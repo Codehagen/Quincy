@@ -186,6 +186,11 @@ export function detectDisfluencies(words: Word[]): Disfluency[] {
       const end = start + length - 1
       if (end >= words.length - 1) break
       if (hesitation[end]) break
+      // A clause that reached a full stop was finished, not abandoned: "We
+      // shipped. Um, we need feedback." is two sentences. An ellipsis is the
+      // one trailing mark that means the speaker stopped short.
+      const said = words[end].text.trim()
+      if (endsSentence(said) && !/(\.\.\.|…)$/.test(said)) break
       // Abandoned: a hesitation, a dash or an ellipsis right after the clause.
       let restart = end + 1
       const trailing = words[end].text.trim()
@@ -266,6 +271,19 @@ function endsSentence(text: string): boolean {
   return /[.!?]$/.test(text.trim())
 }
 
+/**
+ * The word a stumble leans on: the copy kept after a repetition, the restart
+ * after a false start. Cutting the stumble is only right while that word is
+ * still in the cut; after a hand edit took it, the stumble is the only copy
+ * left. Null for the kinds that lean on nothing.
+ */
+export function keptWordIndex(words: Word[], item: Disfluency): number | null {
+  if (item.kind !== "repetition" && item.kind !== "false_start") return null
+  let at = item.to + 1
+  while (at < words.length && isSoundFiller(words[at].text)) at++
+  return at < words.length ? at : null
+}
+
 /** What a clean-up may take when nothing narrower was asked for. */
 export const DEFAULT_CLEAN_UP: readonly DisfluencyKind[] = [
   "hesitation",
@@ -290,8 +308,22 @@ export function cleanUpCuts(
   const wanted = new Set(kinds)
   const minPauseUs = Math.max(MIN_SILENCE_US, DEFAULT_SILENCE.minSilenceUs)
 
+  // A stumble whose words overlap a word outside it in time cannot be cut
+  // without clipping that word, so it is left, as a filler is (fillerCuts).
+  const overlapsNeighbour = (item: Disfluency) => {
+    const startUs = words[item.from].startUs
+    const endUs = words[item.to].endUs
+    return words.some(
+      (other, at) =>
+        (at < item.from || at > item.to) &&
+        !isSoundFiller(other.text) &&
+        other.startUs < endUs &&
+        other.endUs > startUs
+    )
+  }
+
   const cuts = found
-    .filter((item) => wanted.has(item.kind))
+    .filter((item) => wanted.has(item.kind) && !overlapsNeighbour(item))
     .map((item) => ({
       range: paddedCut(words, item.from, item.to, durationUs, {
         paddingUs: FILLER_PADDING_US,

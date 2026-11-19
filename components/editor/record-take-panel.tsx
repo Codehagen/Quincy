@@ -43,6 +43,7 @@ export function RecordTakePanel({
   const chunksRef = React.useRef<Blob[]>([])
   const prompterRef = React.useRef<HTMLDivElement | null>(null)
   const quietSinceRef = React.useRef<number | null>(null)
+  const startedAtRef = React.useRef<number | null>(null)
 
   // Only ever rendered after a press, in the browser, so this reads the
   // browser on first render rather than in an effect.
@@ -149,8 +150,10 @@ export function RecordTakePanel({
   // While recording: the clock, the silence warning and the prompter scroll.
   React.useEffect(() => {
     if (phase !== "recording") return
-    const started = performance.now()
-    let last = started
+    // From when the take started, not from this effect: moving a slider
+    // mid-take restarts the effect and must not restart the clock.
+    const started = startedAtRef.current ?? performance.now()
+    let last = performance.now()
     let frame = 0
     const tick = (now: number) => {
       setElapsedMs(now - started)
@@ -192,6 +195,7 @@ export function RecordTakePanel({
     recorderRef.current = recorder
     if (prompterRef.current) prompterRef.current.scrollTop = 0
     recorder.start(1000)
+    startedAtRef.current = performance.now()
     setPhase("recording")
   }, [onDone])
 

@@ -524,6 +524,22 @@ describe("restoreSpeech", () => {
     )
     expect(words(back)).toBe(4)
   })
+
+  it("keeps the caption settings that were asked for", () => {
+    const base = scene()
+    const ops = addCaptions(base, WORDS, {
+      mediaId: "va-1",
+      author: "user",
+      wordsPerSegment: 4,
+      showFillers: true,
+    })
+    const captioned = applyToScene(base, ops, "user")
+    const caption = captioned.tracks
+      .filter((t) => t.kind === "caption")
+      .flatMap((t) => t.elements)[0] as CaptionElement
+    expect(caption.style.wordsPerSegment).toBe(4)
+    expect(caption.style.showFillers).toBe(true)
+  })
 })
 
 describe("cutGapAround", () => {
