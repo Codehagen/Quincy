@@ -59,6 +59,13 @@ export const EXEMPT_TOOLS = new Set([
   "set_chapters",
   "clean_sound",
   "save_cut_style",
+  // Plan 042: they add, restyle or retime; none removes a word.
+  "add_text",
+  "add_transition",
+  "set_speed",
+  "correct_words",
+  "style_captions",
+  "name_speaker",
 ])
 
 /** The tools whose built ops are measured before they land. */

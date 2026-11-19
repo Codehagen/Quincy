@@ -24,6 +24,12 @@ import {
   type EffectHost,
 } from "@/lib/editor/effect-lane"
 import { trimPreviewDeltaUs } from "@/lib/editor/edits"
+import {
+  snap,
+  snapPoints,
+  snapSpan,
+  snapThresholdUs,
+} from "@/lib/editor/snapping"
 import { findMainTrack, sceneDurationUs } from "@/lib/editor/timeline"
 import { us, type Us } from "@/lib/editor/time"
 import type {
@@ -65,6 +71,9 @@ import {
  * the spine and an empty caption lane — the row is drawn even when empty, so
  * the timeline does not change height the moment a tool returns.
  */
+
+/** The drag type a library item carries; the lanes accept nothing else. */
+export const MEDIA_DRAG_TYPE = "application/x-quincy-media"
 
 export type LaneSeekIndex = {
   intervalUs: number
@@ -160,6 +169,9 @@ export function StudioLanes({
   onAddCaptions,
   captionsPending = false,
   scanning = false,
+  onDropMedia,
+  onMoveElement,
+  wordEdgesUs,
 }: {
   scene: Scene
   player: Player
@@ -202,6 +214,20 @@ export function StudioLanes({
   /** Build captions from the stored transcript; absent when there is none. */
   onAddCaptions?: () => void
   captionsPending?: boolean
+  /**
+   * A library item dropped on the lanes: where in time, and on which lane
+   * when the pointer was over one (placement.ts decides if it fits there).
+   */
+  onDropMedia?: (mediaId: string, atUs: number, trackId: string | null) => void
+  /** An overlay, title or music clip dragged to a new time (or lane). */
+  onMoveElement?: (
+    trackId: string,
+    elementId: string,
+    startUs: number,
+    toTrackId: string | null
+  ) => void
+  /** Where spoken words start and end on the timeline, for snapping. */
+  wordEdgesUs?: number[]
 }) {
   /**
    * The clip being trimmed, and by how much the cut would change if the drag
@@ -290,6 +316,48 @@ export function StudioLanes({
   }, [])
 
   const laneWidth = containerWidth * zoom
+
+  /**
+   * Snapping for anything dragged along the lanes: clip edges, the playhead,
+   * word edges. Ten screen pixels at the current zoom; Shift turns it off.
+   */
+  const snapThreshold = snapThresholdUs(laneWidth > 0 ? laneWidth / span : 0)
+  const pointsFor = (excludeElementId?: string) =>
+    snapPoints(scene, {
+      playheadUs: player.readPlayhead(),
+      wordEdgesUs,
+      excludeElementId,
+    })
+  const snapStart = (
+    startUs: number,
+    durationUs: number,
+    excludeElementId: string,
+    free: boolean
+  ) =>
+    snapSpan(startUs, durationUs, pointsFor(excludeElementId), snapThreshold, free)
+      .atUs
+
+  /* ── Drop from the library ──────────────────────────────────────────── */
+  const dropLine = React.useRef<HTMLDivElement | null>(null)
+  const isMediaDrag = (event: React.DragEvent) =>
+    Array.from(event.dataTransfer.types).includes(MEDIA_DRAG_TYPE)
+  const dropUs = (event: React.DragEvent) =>
+    snap(
+      clientXToUs(event.clientX),
+      pointsFor(),
+      snapThreshold,
+      event.shiftKey
+    ).atUs
+  const showDropLine = (atUs: number | null) => {
+    const line = dropLine.current
+    if (!line) return
+    if (atUs === null) {
+      line.style.visibility = "hidden"
+      return
+    }
+    line.style.left = `${(atUs / span) * 100}%`
+    line.style.visibility = "visible"
+  }
 
   /**
    * The effects on each track, packed into rows.
@@ -621,6 +689,28 @@ export function StudioLanes({
           style={{ width: `${zoom * 100}%` }}
           onPointerMove={onLanePointerMove}
           onPointerLeave={onLanePointerLeave}
+          onDragOver={(event) => {
+            if (!onDropMedia || locked || !isMediaDrag(event)) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = "copy"
+            showDropLine(dropUs(event))
+          }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null))
+              return
+            showDropLine(null)
+          }}
+          onDrop={(event) => {
+            showDropLine(null)
+            if (!onDropMedia || locked || !isMediaDrag(event)) return
+            event.preventDefault()
+            const mediaId = event.dataTransfer.getData(MEDIA_DRAG_TYPE)
+            const lane = (event.target as HTMLElement).closest<HTMLElement>(
+              "[data-track-id]"
+            )
+            if (mediaId)
+              onDropMedia(mediaId, dropUs(event), lane?.dataset.trackId ?? null)
+          }}
           onPointerDown={(event) => {
             // Clicking the lane itself is "I am looking somewhere else now", so
             // it drops the effect selection as well as moving the playhead.
@@ -653,6 +743,13 @@ export function StudioLanes({
             />
           </div>
           <LivePlayhead player={player} spanUs={span} live={playing} />
+
+          {/* Where a dragged library item will land, snapped. */}
+          <div
+            ref={dropLine}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute inset-y-0 z-30 w-0.5 -translate-x-1/2 bg-kit-ink select-none"
+          />
 
           {/* The range being chosen. Drawn over every lane rather than inside
               one, because the gesture is about a stretch of time and not about
@@ -770,6 +867,13 @@ export function StudioLanes({
                       trimming={trim?.elementId === element.id}
                       onTrim={onTrim}
                       onTrimCommit={onTrimCommit}
+                      movable={
+                        Boolean(onMoveElement) && !locked && !track.isMain
+                      }
+                      snapStart={snapStart}
+                      onMove={(startUs, toTrackId) =>
+                        onMoveElement?.(track.id, element.id, startUs, toTrackId)
+                      }
                     />
                   )
                 )}
@@ -874,6 +978,7 @@ function Lane({
           quiet: a recess, no border (a border reads as a drop zone). */}
       <div
         data-target={`track:${track.id}`}
+        data-track-id={track.id}
         data-lane-kind={track.kind}
         className={cn("relative h-full rounded-[3px]", empty && "bg-kit-well")}
       >
@@ -1394,10 +1499,22 @@ function Clip({
   revealIndex,
   revealCount,
   laneWidth,
+  movable = false,
+  snapStart,
+  onMove,
 }: {
   element: TimelineElement
   geometry: Geometry
   trackId: string
+  /** Off the spine, a clip can be dragged along (and across) lanes. */
+  movable?: boolean
+  snapStart?: (
+    startUs: number,
+    durationUs: number,
+    excludeElementId: string,
+    free: boolean
+  ) => number
+  onMove?: (startUs: number, toTrackId: string | null) => void
   span: number
   selected: boolean
   onSelect: (elementId: string) => void
@@ -1414,6 +1531,30 @@ function Clip({
   const clip = element as VideoElement
   const trimmable = element.kind === "video"
   const widthPx = (geometry.durationUs / span) * laneWidth
+
+  /**
+   * A move in flight: where the clip would start, drawn before it lands. One
+   * op on release, so a drag is one undo; a press that never travels is a
+   * click and selects.
+   */
+  const [moveTo, setMoveTo] = React.useState<number | null>(null)
+  const moving = React.useRef<{
+    x: number
+    pxPerUs: number
+    travelled: boolean
+  } | null>(null)
+  const swallow = React.useRef(false)
+  const targetFor = (clientX: number, shift: boolean) => {
+    const drag = moving.current
+    if (!drag) return geometry.startUs
+    const raw = Math.max(
+      0,
+      geometry.startUs + (clientX - drag.x) / drag.pxPerUs
+    )
+    return snapStart
+      ? snapStart(raw, geometry.durationUs, element.id, shift)
+      : raw
+  }
   const labelFits = laneWidth === 0 || widthPx >= labelMinPx(element.name)
 
   const offsetPx = revealOffsetPx(
@@ -1438,7 +1579,7 @@ function Clip({
       // What Quincy's cursor presses (plans/036): the clip itself.
       data-target={`element:${element.id}`}
       style={{
-        left: `${(geometry.startUs / span) * 100}%`,
+        left: `${((moveTo ?? geometry.startUs) / span) * 100}%`,
         width: `${(geometry.durationUs / span) * 100}%`,
         transform: offsetPx ? `translateX(${offsetPx}px)` : undefined,
         transitionDuration: reveal ? `${reveal.travelMs}ms` : undefined,
@@ -1454,9 +1595,60 @@ function Clip({
           // The lane below seeks on pointerdown; a click on a clip should
           // select it and not also move the playhead to its left edge.
           event.stopPropagation()
+          if (swallow.current) {
+            swallow.current = false
+            return
+          }
           onSelect(element.id)
         }}
-        onPointerDown={(event) => event.stopPropagation()}
+        data-owns-drag={movable ? "" : undefined}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          if (!movable || event.button !== 0) return
+          const box = event.currentTarget.getBoundingClientRect()
+          if (box.width <= 0 || geometry.durationUs <= 0) return
+          moving.current = {
+            x: event.clientX,
+            pxPerUs: box.width / geometry.durationUs,
+            travelled: false,
+          }
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId)
+          } catch {
+            /* capture is an optimisation */
+          }
+        }}
+        onPointerMove={(event) => {
+          const drag = moving.current
+          if (!drag) return
+          if (!drag.travelled && Math.abs(event.clientX - drag.x) < 4) return
+          drag.travelled = true
+          setMoveTo(targetFor(event.clientX, event.shiftKey))
+        }}
+        onPointerUp={(event) => {
+          const drag = moving.current
+          moving.current = null
+          if (!drag?.travelled) return
+          swallow.current = true
+          const startUs = targetFor(event.clientX, event.shiftKey)
+          setMoveTo(null)
+          // The lane under the pointer, when it moved to another of its kind.
+          const under = document
+            .elementsFromPoint(event.clientX, event.clientY)
+            .map((node) => (node as HTMLElement).closest?.("[data-track-id]"))
+            .find(Boolean) as HTMLElement | undefined
+          const toTrackId = under?.dataset.trackId ?? null
+          onMove?.(Math.round(startUs), toTrackId === trackId ? null : toTrackId)
+          try {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          } catch {
+            /* already released */
+          }
+        }}
+        onPointerCancel={() => {
+          moving.current = null
+          setMoveTo(null)
+        }}
         title={element.name}
         className={cn(
           // One outer radius; the strips inside are square and clipped here.

@@ -128,6 +128,102 @@ export async function uploadAndOpen(
   }
 }
 
+/**
+ * Bring a file into an open project's library: the same hash, ask, upload and
+ * ingest as a first recording, without making a project of it. Music goes in
+ * untranscribed. An image is measured here, by the browser that decodes it,
+ * and is ready the moment its bytes are stored.
+ */
+export async function uploadToLibrary(
+  file: File,
+  onProgress: (progress: UploadProgress) => void,
+  options: { purpose?: "take" | "broll" | "music" } = {},
+  signal?: AbortSignal
+): Promise<{ assetId: string; warnings: string[] }> {
+  onProgress({ phase: "hashing", fraction: 0 })
+  const mimeType = file.type || guessMimeType(file.name)
+  const image = mimeType.startsWith("image/")
+  const durationSeconds = image ? null : await readDurationSeconds(file)
+  const size = image ? await readImageSize(file) : null
+
+  const { hash, sizeBytes } = await hashFile(file, (bytesRead) =>
+    onProgress({
+      phase: "hashing",
+      fraction: file.size > 0 ? bytesRead / file.size : 1,
+    })
+  )
+
+  onProgress({ phase: "requesting", fraction: null })
+  const upload = await postJson<{
+    assetId: string
+    alreadyIngested: boolean
+    uploadUrl?: string
+  }>(
+    "/api/editor/uploads",
+    {
+      filename: file.name,
+      mimeType,
+      sizeBytes,
+      hash,
+      ...(durationSeconds !== null ? { durationSeconds } : {}),
+    },
+    "requesting",
+    signal
+  )
+
+  if (upload.alreadyIngested) {
+    onProgress({ phase: "done", fraction: 1, deduped: true })
+    return { assetId: upload.assetId, warnings: [] }
+  }
+  if (!upload.uploadUrl) {
+    throw new UploadError("The server issued no upload URL.", "requesting")
+  }
+
+  await putWithProgress(
+    upload.uploadUrl,
+    file,
+    (fraction) => onProgress({ phase: "uploading", fraction }),
+    signal
+  )
+
+  onProgress({ phase: "processing", fraction: null })
+  const ingest = await postJson<{ warnings?: string[] }>(
+    `/api/editor/assets/${upload.assetId}/ingest`,
+    {
+      purpose: options.purpose ?? "take",
+      ...(size ? { image: size } : {}),
+    },
+    "processing",
+    signal
+  )
+  onProgress({ phase: "done", fraction: 1 })
+  return { assetId: upload.assetId, warnings: ingest.warnings ?? [] }
+}
+
+/** The picture's own size, from the browser that decodes it. */
+function readImageSize(
+  file: File
+): Promise<{ width: number; height: number } | null> {
+  if (typeof document === "undefined") return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const picture = new Image()
+    picture.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(
+        picture.naturalWidth > 0 && picture.naturalHeight > 0
+          ? { width: picture.naturalWidth, height: picture.naturalHeight }
+          : null
+      )
+    }
+    picture.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }
+    picture.src = url
+  })
+}
+
 async function createProject(
   assetId: string,
   signal?: AbortSignal
@@ -284,5 +380,13 @@ function guessMimeType(filename: string): string {
     flac: "audio/flac",
   }
 
-  return video[extension] ?? audio[extension] ?? "video/mp4"
+  const image: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+  }
+
+  return video[extension] ?? audio[extension] ?? image[extension] ?? "video/mp4"
 }

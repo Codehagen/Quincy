@@ -136,9 +136,10 @@ export function splitBySourceRanges(
   }
 
   let cursor = element.startUs
+  const rate = clipRate(element)
 
   return keeps.map((keep, index) => {
-    const duration = us(keep.endUs - keep.startUs)
+    const duration = us(Math.round((keep.endUs - keep.startUs) / rate))
     const piece: VideoElement = {
       ...element,
       // The first piece keeps the id so the clip the user selected is still
@@ -193,10 +194,26 @@ export function sourceToTimelineUs(
     if (sourceUs < element.trimStartUs || sourceUs >= element.trimEndUs)
       continue
 
-    return us(element.startUs + (sourceUs - element.trimStartUs))
+    return us(
+      element.startUs +
+        Math.round((sourceUs - element.trimStartUs) / clipRate(element))
+    )
   }
 
   return null
+}
+
+/**
+ * Source microseconds per timeline microsecond: 2 for a clip at double speed.
+ *
+ * Read from the stored speed, not from the window over the duration, because
+ * the two disagree for a frame or two after rounding and a split must not
+ * drift. Anything that turns a source span into a timeline span divides by
+ * this; nothing assumes the two are equal.
+ */
+export function clipRate(element: VideoElement): number {
+  const speed = element.speed
+  return speed && Number.isFinite(speed) && speed > 0 ? speed : 1
 }
 
 /**
@@ -303,9 +320,10 @@ function clampTokenEnd(spine: Track, token: CaptionToken, start: Us): Us {
   )
 
   if (!element) return us(start + spoken)
+  const rate = element.kind === "video" ? clipRate(element) : 1
 
   const elementEnd = us(element.startUs + element.durationUs)
-  return us(Math.min(start + spoken, elementEnd))
+  return us(Math.min(start + Math.round(spoken / rate), elementEnd))
 }
 
 /**

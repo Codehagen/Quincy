@@ -19,6 +19,7 @@ import {
   removeEffectsOfType,
   punchIn,
   reframe,
+  setSpeed,
   setVoice,
   splitAt,
 } from "./edits"
@@ -35,6 +36,11 @@ import {
 } from "./cut-style"
 import { cleanUpReceipt, type DisfluencyKind } from "./disfluency"
 import { captionRules } from "./document"
+import { findWords, replaceWords } from "./correct-words"
+import { applyCaptionPreset } from "./presets"
+import { MAX_SPEAKER_NAME, nameSpeaker } from "./speakers"
+import { addText, MAX_TEXT_LENGTH } from "./titles"
+import { setTransition } from "./transitions"
 import {
   addCaptions,
   cleanUpSteps,
@@ -706,7 +712,7 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
 
     fade_clip: tool({
       description:
-        "Fade a clip up from the background at its start, down into it at its end, or both. Use for 'fade in', 'fade out at the end', 'soften that cut'. There is no cross-dissolve: clips on the spine butt up against each other, so a softened cut is a dip through the background.",
+        "Fade a clip up from the background at its start, down into it at its end, or both. Use for 'fade in' and 'fade out at the end'. To soften a join between two clips, use add_transition instead.",
       inputSchema: z.object({
         clipNumber: z
           .number()
@@ -914,6 +920,154 @@ export function editorTools(context: AgentContext): Record<string, Tool> {
         }
         await context.saveCutStyle(style)
         return `Saved as your cut style:\n${lines.join("\n")}`
+      },
+    }),
+
+    add_text: tool({
+      description:
+        "Put text over the picture: a title card at the start, a name and role (lower third) at a moment, or an end card at the end. Use for 'add a title', 'put my name on screen', 'end with a call to action'. Keep it short: a title is a few words.",
+      inputSchema: z.object({
+        role: z.enum(["title", "lower_third", "end_card"]),
+        text: z.string().min(1).max(MAX_TEXT_LENGTH).describe("What it says. For a lower third, the name."),
+        subtitle: z
+          .string()
+          .max(MAX_TEXT_LENGTH)
+          .optional()
+          .describe("A lower third's second line: the role or company."),
+        atSeconds: z
+          .number()
+          .min(0)
+          .optional()
+          .describe("Where it appears. Omit for the start (title), the end (end card), or 3s in (lower third)."),
+        seconds: z.number().min(0.5).max(15).optional().describe("How long it stays up."),
+      }),
+      execute: async ({ role, text, subtitle, atSeconds, seconds }, options?: CallOptions) =>
+        run(
+          { toolCallId: options?.toolCallId, toolName: "add_text" },
+          (scene) =>
+            addText(scene, {
+              role,
+              content: text,
+              subtitle,
+              atUs:
+                atSeconds !== undefined
+                  ? secondsToUs(atSeconds)
+                  : role === "lower_third"
+                    ? secondsToUs(3)
+                    : undefined,
+              durationUs: seconds !== undefined ? secondsToUs(seconds) : undefined,
+              author: "agent",
+            }),
+          () => `Added the ${role === "lower_third" ? "name" : role === "end_card" ? "end card" : "title"} "${text}".`,
+          "There was no text to add."
+        ),
+    }),
+
+    add_transition: tool({
+      description:
+        "Soften the join before a clip on the spine: a dissolve, a dip to black or a dip to white; or take one off with kind 'cut'. Clips are numbered from 1; the join is the one where this clip starts, so clip 1 has none. Use sparingly: most joins read best as a straight cut. A dissolve needs footage after the end of the clip before it; when there is none, use a dip.",
+      inputSchema: z.object({
+        clipNumber: z.number().int().min(2).describe("The clip after the join. 2 is the first join."),
+        kind: z.enum(["dissolve", "dip_black", "dip_white", "cut"]),
+        seconds: z.number().min(0.1).max(2).optional().describe("Length. Default 0.5."),
+      }),
+      execute: async ({ clipNumber, kind, seconds }, options?: CallOptions) => {
+        const scene = onScreen()
+        const spine = scene ? findMainTrack(scene) : undefined
+        const clip = spine?.elements[clipNumber - 1]
+        if (!scene || !spine || !clip) return `There is no clip ${clipNumber} on the spine.`
+        const result = setTransition(
+          scene,
+          spine.id,
+          clip.id,
+          kind === "cut" ? null : kind,
+          seconds !== undefined ? secondsToUs(seconds) : undefined
+        )
+        if (result.ops.length === 0) return result.reason ?? "Nothing changed at that join."
+        context.commit(result.ops, { toolCallId: options?.toolCallId, toolName: "add_transition" })
+        return kind === "cut"
+          ? `The join before clip ${clipNumber} is a straight cut again.`
+          : `Added a ${kind.replace("_", " to ")} before clip ${clipNumber}.`
+      },
+    }),
+
+    set_speed: tool({
+      description:
+        "Play a clip on the spine faster or slower, from 0.5× to 2×. Everything after it moves with the captions. Use for 'speed up the boring part', 'slow that down'. The voice changes pitch with the speed, so above 1.5× speech sounds hurried; split first to change only part of a clip.",
+      inputSchema: z.object({
+        clipNumber: z.number().int().min(1),
+        speed: z.number().min(0.5).max(2).describe("1 is normal speed."),
+      }),
+      execute: async ({ clipNumber, speed }, options?: CallOptions) =>
+        run(
+          { toolCallId: options?.toolCallId, toolName: "set_speed" },
+          (scene) => {
+            const spine = findMainTrack(scene)
+            const clip = spine?.elements[clipNumber - 1]
+            return spine && clip ? setSpeed(scene, spine.id, clip.id, speed) : []
+          },
+          (scene) => `Clip ${clipNumber} plays at ${speed}×. ${describeScene(scene)}`,
+          `Clip ${clipNumber} is not on the spine, or already plays at ${speed}×.`
+        ),
+    }),
+
+    correct_words: tool({
+      description:
+        "Fix words the transcriber got wrong, everywhere they are said, without cutting anything: names, product names, jargon. Use for 'it is Quincy, not Quinsy', 'fix the spelling of my name'. Whole words only; punctuation around them is kept.",
+      inputSchema: z.object({
+        replacements: z
+          .array(
+            z.object({
+              find: z.string().min(1).max(60).describe("One word, as it appears in the transcript."),
+              replace: z.string().min(1).max(60),
+            })
+          )
+          .min(1)
+          .max(20),
+      }),
+      execute: async ({ replacements }, options?: CallOptions) => {
+        let total = 0
+        for (const { find, replace } of replacements) {
+          const scene = onScreen()
+          if (!scene) return "This project has no scene."
+          const count = findWords(scene, find).length
+          const ops = replaceWords(scene, find, replace)
+          if (ops.length === 0) continue
+          context.commit(ops, { toolCallId: options?.toolCallId, toolName: "correct_words" })
+          total += count
+        }
+        return total === 0
+          ? "None of those words are in the captions. Read the transcript to see how they were written."
+          : `Corrected ${total} ${total === 1 ? "word" : "words"}.`
+      },
+    }),
+
+    style_captions: tool({
+      description:
+        "Restyle every caption with one look: clean (white, a few words at a time), bold (big capitals, one word, the word in yellow), boxed (on a dark box), quiet (small, a line at a time). Captions must exist; add_captions first.",
+      inputSchema: z.object({ look: z.enum(["clean", "bold", "boxed", "quiet"]) }),
+      execute: async ({ look }, options?: CallOptions) =>
+        run(
+          { toolCallId: options?.toolCallId, toolName: "style_captions" },
+          (scene) => applyCaptionPreset(scene, look),
+          () => `The captions are ${look} now.`,
+          "There are no captions to style. Add them first."
+        ),
+    }),
+
+    name_speaker: tool({
+      description:
+        "Give a speaker the transcriber numbered a name, for the transcript and the subtitle files. Speaker 1 is the first voice heard.",
+      inputSchema: z.object({
+        speakerNumber: z.number().int().min(1),
+        name: z.string().max(MAX_SPEAKER_NAME),
+      }),
+      execute: async ({ speakerNumber, name }, options?: CallOptions) => {
+        const document = context.snapshot().document
+        const ops = nameSpeaker(document.metadata, speakerNumber - 1, name)
+        if (ops.length === 0) return "That speaker already has that name."
+        context.commit(ops, { toolCallId: options?.toolCallId, toolName: "name_speaker" })
+        return `Speaker ${speakerNumber} is ${name.trim() || "unnamed"} now.`
       },
     }),
 

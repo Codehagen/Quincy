@@ -40,15 +40,22 @@ import { formatClock } from "./studio-parts"
  */
 const RAIL: { icon: IconSvgElement; label: string; tool?: StudioTool }[] = [
   { icon: Video01Icon, label: "Media", tool: "media" },
-  { icon: Image01Icon, label: "Images" },
-  { icon: MusicNote01Icon, label: "Sounds" },
+  { icon: Image01Icon, label: "Images", tool: "images" },
+  { icon: MusicNote01Icon, label: "Sounds", tool: "sounds" },
   { icon: SparklesIcon, label: "Effects", tool: "effects" },
-  { icon: TextFontIcon, label: "Text" },
-  { icon: Layers01Icon, label: "Transitions" },
-  { icon: Settings01Icon, label: "Settings" },
+  { icon: TextFontIcon, label: "Text", tool: "text" },
+  { icon: Layers01Icon, label: "Transitions", tool: "transitions" },
+  { icon: Settings01Icon, label: "Settings", tool: "settings" },
 ]
 
-export type StudioTool = "media" | "effects"
+export type StudioTool =
+  | "media"
+  | "images"
+  | "sounds"
+  | "effects"
+  | "text"
+  | "transitions"
+  | "settings"
 export type SideView = "chat" | "transcript"
 
 /** Where the media panel opens by default: from `xl` (1280) up. Narrower, it

@@ -42,6 +42,19 @@ export type DocumentMetadata = {
    * Validated on the way in (chapters.ts).
    */
   chapters?: Chapter[]
+  /**
+   * Media brought into this project and not necessarily placed yet: a second
+   * take, b-roll, an image, a music track. The library lists it so it can be
+   * dragged in. Media already on a track is in the project whether or not it
+   * is here; this only holds what nothing references yet would otherwise
+   * lose. Absent is an empty library.
+   */
+  library?: string[]
+  /**
+   * The person's names for speaker numbers the transcriber returned ("0" is
+   * the first voice it heard). Absent means unnamed: "Speaker 1".
+   */
+  speakers?: Record<string, string>
 }
 
 export type Chapter = {
@@ -108,7 +121,7 @@ export type Track = {
 }
 
 export type TimelineElement =
-  VideoElement | AudioElement | CaptionElement | TextElement
+  VideoElement | AudioElement | CaptionElement | TextElement | ImageElement
 
 type ElementBase = {
   id: string
@@ -167,6 +180,51 @@ export type VideoElement = ElementBase & {
    * asset has no cleaned track yet.
    */
   voice?: "original" | "clean"
+  /**
+   * Playback speed, 0.25–4. Absent is 1. The timeline length follows from the
+   * window and the speed (`durationUs = (trimEndUs - trimStartUs) / speed`),
+   * so everything that maps source time to timeline time goes through
+   * `clipRate` in timeline.ts and never assumes the two are equal.
+   */
+  speed?: number
+  /**
+   * How this clip arrives from the one before it on the same track. Lives on
+   * the later clip of a join, so a join has at most one, and deleting either
+   * clip takes it away with nothing left dangling.
+   */
+  transition?: Transition
+  /**
+   * The picture's placement inside the frame, for a clip over the spine
+   * (picture in picture, side by side). Absent fills the frame as before.
+   * Fractions of the canvas: x and y are the top-left corner.
+   */
+  box?: Box
+  effects: Effect[]
+  animations: Animations
+}
+
+export type TransitionKind = "dissolve" | "dip_black" | "dip_white"
+
+export type Transition = {
+  kind: TransitionKind
+  durationUs: Us
+}
+
+/** A rectangle in fractions of the canvas, 0–1. */
+export type Box = { x: number; y: number; width: number; height: number }
+
+/**
+ * A still picture over the cut: a screenshot, a logo, a photo. Its length is
+ * whatever the timeline gives it; there is no source window to trim into.
+ */
+export type ImageElement = ElementBase & {
+  kind: "image"
+  mediaId: string
+  /** Absent fills the frame (with `fit`). */
+  box?: Box
+  fit?: "cover" | "contain"
+  opacity: number
+  transform: Transform
   effects: Effect[]
   animations: Animations
 }
@@ -228,6 +286,14 @@ export type CaptionToken = {
   sourceElementId: string
   sourceStartUs: Us
   sourceEndUs: Us
+  /**
+   * What the transcriber heard, kept when the person corrects the word. The
+   * text shown is `text`; this is only so a correction can be undone by
+   * hand and so a vocabulary pass never corrects its own correction.
+   */
+  heard?: string
+  /** The speaker number the transcriber gave this word, when it gave one. */
+  speaker?: number
 }
 
 export type CaptionStyle = {
@@ -258,6 +324,14 @@ export type CaptionStyle = {
 export type TextElement = ElementBase & {
   kind: "text"
   content: string
+  /**
+   * What the text is for, which decides where it sits and how it enters:
+   * a title card over the middle, a name and role low on the left, an end
+   * card. Absent is a plain line in the middle.
+   */
+  role?: "title" | "lower_third" | "end_card"
+  /** A second, smaller line under the first (a lower third's role). */
+  subtitle?: string
   style: CaptionStyle
   transform: Transform
   animations: Animations

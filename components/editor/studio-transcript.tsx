@@ -6,6 +6,7 @@ import {
   Copy01Icon,
   Delete02Icon,
   MagicWand01Icon,
+  Search01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -58,6 +59,10 @@ export function StudioTranscript({
   chapters = [],
   chapterText = null,
   transcriptMissing = false,
+  onCorrect,
+  onReplace,
+  countMatches,
+  speakerName,
 }: {
   lines: TranscriptLine[]
   /** Which words the selection currently covers. Derived by Studio, not here. */
@@ -83,6 +88,14 @@ export function StudioTranscript({
   chapterText?: string | null
   /** The recording's transcript did not load, so cut words cannot be shown. */
   transcriptMissing?: boolean
+  /** Fix one word the transcriber got wrong (double-click a word). */
+  onCorrect?: (tokenId: string, text: string) => void
+  /** Replace a word everywhere it is said. */
+  onReplace?: (find: string, replace: string) => void
+  /** How many words a find matches, shown before replacing. */
+  countMatches?: (find: string) => number
+  /** The name for a speaker number, when the transcript has speakers. */
+  speakerName?: (speaker: number) => string
 }) {
   /**
    * Which word the drag started on, in a ref rather than in state.
@@ -107,6 +120,13 @@ export function StudioTranscript({
   }, [])
 
   const count = selectedIds.size
+
+  /** The word being corrected in place, or null. */
+  const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [finding, setFinding] = React.useState(false)
+  const [find, setFind] = React.useState("")
+  const [replace, setReplace] = React.useState("")
+  const matches = finding && find.trim() && countMatches ? countMatches(find) : 0
 
   const [reviewing, setReviewing] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
@@ -199,6 +219,14 @@ export function StudioTranscript({
                 Select words to cut
               </span>
             )}
+            {onReplace ? (
+              <PanelAction
+                label="Find and replace a word"
+                icon={Search01Icon}
+                onClick={() => setFinding((open) => !open)}
+                disabled={locked}
+              />
+            ) : null}
             {chapterText ? (
               <PanelAction
                 label={copied ? "Copied" : "Copy chapters"}
@@ -220,6 +248,41 @@ export function StudioTranscript({
           Cut words cannot be shown: the recording&apos;s transcript did not
           load.
         </p>
+      ) : null}
+
+      {finding && onReplace ? (
+        <form
+          className="flex flex-wrap items-center gap-2 border-b border-kit-hairline px-4 py-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!find.trim() || !replace.trim() || matches === 0) return
+            onReplace(find, replace)
+            setFind("")
+            setReplace("")
+          }}
+        >
+          <input
+            aria-label="Find"
+            placeholder="Word as transcribed"
+            value={find}
+            onChange={(event) => setFind(event.target.value)}
+            className="h-8 min-w-0 flex-1 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-small text-kit-ink outline-hidden focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid"
+          />
+          <input
+            aria-label="Replace with"
+            placeholder="Should be"
+            value={replace}
+            onChange={(event) => setReplace(event.target.value)}
+            className="h-8 min-w-0 flex-1 rounded-kit-control border border-kit-hairline bg-kit-object px-2 text-kit-small text-kit-ink outline-hidden focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid"
+          />
+          <button
+            type="submit"
+            disabled={locked || matches === 0 || !replace.trim()}
+            className="h-8 rounded-kit-control border border-kit-hairline px-2 text-kit-small text-kit-ink outline-hidden transition-[background-color] duration-150 ease-out hover:bg-kit-row-hover focus-visible:outline-2 focus-visible:outline-kit-focus focus-visible:outline-solid disabled:opacity-50"
+          >
+            {find.trim() ? `Replace ${matches}` : "Replace"}
+          </button>
+        </form>
       ) : null}
 
       {reviewing && review.length > 0 && onCleanUp ? (
@@ -272,17 +335,37 @@ export function StudioTranscript({
                 </button>
 
                 <p className="min-w-0 flex-1 text-kit-body">
-                  {row.line.words.map((word) => (
-                    <Word
-                      key={word.id}
-                      word={word}
-                      selected={selectedIds.has(word.id)}
-                      live={word.id === liveWordId}
-                      anchorRef={anchorRef}
-                      onSelect={onSelect}
-                      onSeek={onSeek}
-                    />
-                  ))}
+                  {speakerName && row.line.words[0]?.speaker !== undefined ? (
+                    <span className="mr-1 text-kit-small font-kit-strong text-kit-ink-muted">
+                      {speakerName(row.line.words[0].speaker)}
+                    </span>
+                  ) : null}
+                  {row.line.words.map((word) =>
+                    editingId === word.id && onCorrect ? (
+                      <WordEdit
+                        key={word.id}
+                        word={word}
+                        onDone={(text) => {
+                          setEditingId(null)
+                          if (text !== null && text.trim() && text !== word.text)
+                            onCorrect(word.id, text)
+                        }}
+                      />
+                    ) : (
+                      <Word
+                        key={word.id}
+                        word={word}
+                        selected={selectedIds.has(word.id)}
+                        live={word.id === liveWordId}
+                        anchorRef={anchorRef}
+                        onSelect={onSelect}
+                        onSeek={onSeek}
+                        onEdit={
+                          onCorrect && !locked ? () => setEditingId(word.id) : undefined
+                        }
+                      />
+                    )
+                  )}
                 </p>
               </div>
             )
@@ -436,6 +519,7 @@ function Word({
   anchorRef,
   onSelect,
   onSeek,
+  onEdit,
 }: {
   word: TranscriptWord
   selected: boolean
@@ -443,10 +527,14 @@ function Word({
   anchorRef: React.RefObject<string | null>
   onSelect: (selection: TranscriptSelection | null) => void
   onSeek: (atUs: number) => void
+  /** Double-click: correct the word's spelling, without touching the cut. */
+  onEdit?: () => void
 }) {
   return (
     <span
       data-word={word.id}
+      onDoubleClick={onEdit}
+      title={onEdit ? "Double-click to correct the word" : undefined}
       onPointerDown={(event) => {
         // Left button only: a right-click on a word should open the browser's
         // menu, not silently move the playhead somewhere else first.
@@ -475,6 +563,33 @@ function Word({
     >
       {word.text}{" "}
     </span>
+  )
+}
+
+/** One word being corrected in place: Enter keeps it, Escape leaves it. */
+function WordEdit({
+  word,
+  onDone,
+}: {
+  word: TranscriptWord
+  onDone: (text: string | null) => void
+}) {
+  const [text, setText] = React.useState(word.text)
+  return (
+    <input
+      autoFocus
+      aria-label={`Correct “${word.text}”`}
+      value={text}
+      size={Math.max(3, text.length + 1)}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={() => onDone(text)}
+      onKeyDown={(event) => {
+        event.stopPropagation()
+        if (event.key === "Enter") onDone(text)
+        if (event.key === "Escape") onDone(null)
+      }}
+      className="mx-0.5 rounded-[3px] border border-kit-focus bg-kit-object px-0.5 text-kit-body text-kit-ink outline-hidden"
+    />
   )
 }
 

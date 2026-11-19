@@ -46,7 +46,9 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
  * host, not to second-guess ffmpeg. The real gate is the probe: a file that
  * lies about its type fails ingest and says so.
  */
-const ACCEPTED = /^(video|audio)\//
+const ACCEPTED = /^(video|audio)\/|^image\/(png|jpeg|webp|gif)$/
+/** Bytes. A still bigger than this is a print file, not something to put on a cut. */
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 type UploadRequest = {
   filename?: unknown
@@ -170,7 +172,7 @@ function validate(body: UploadRequest): string | null {
   }
 
   if (typeof body.mimeType !== "string" || !ACCEPTED.test(body.mimeType)) {
-    return "mimeType must be a video or audio type."
+    return "mimeType must be a video, audio or image (PNG, JPEG, WebP, GIF) type."
   }
 
   if (
@@ -179,6 +181,10 @@ function validate(body: UploadRequest): string | null {
     body.sizeBytes <= 0
   ) {
     return "sizeBytes must be a positive integer."
+  }
+
+  if (body.mimeType.startsWith("image/") && body.sizeBytes > MAX_IMAGE_BYTES) {
+    return `Images are limited to ${MAX_IMAGE_BYTES / 1024 ** 2}MB.`
   }
 
   if (body.sizeBytes > MAX_UPLOAD_BYTES) {

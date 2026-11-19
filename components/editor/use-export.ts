@@ -5,7 +5,7 @@ import * as React from "react"
 import { durationInFrames } from "@/lib/editor/frames"
 import type { Scene } from "@/lib/editor/types"
 
-import { EditorComposition, type CompositionMedia } from "./composition"
+import { ScaledComposition, type CompositionMedia } from "./composition"
 
 /**
  * Export, as the same composition the preview draws.
@@ -39,6 +39,27 @@ export type ExportState =
   | { status: "unsupported"; reasons: string[] }
   | { status: "error"; message: string }
 
+/** The short side of the export, or the canvas as it is. */
+export type ExportResolution = "source" | 720 | 1080 | 2160
+
+export const EXPORT_RESOLUTIONS: { value: ExportResolution; label: string }[] = [
+  { value: "source", label: "Original" },
+  { value: 720, label: "720p" },
+  { value: 1080, label: "1080p" },
+  { value: 2160, label: "4K" },
+]
+
+/** Even pixel sizes, because the encoder refuses odd ones. */
+export function exportSize(
+  canvas: { width: number; height: number },
+  resolution: ExportResolution
+): { width: number; height: number } {
+  if (resolution === "source") return canvas
+  const scale = resolution / Math.min(canvas.width, canvas.height)
+  const even = (value: number) => Math.max(2, Math.round((value * scale) / 2) * 2)
+  return { width: even(canvas.width), height: even(canvas.height) }
+}
+
 export function useExport({
   scene,
   media,
@@ -65,8 +86,9 @@ export function useExport({
     setState({ status: "idle" })
   }, [])
 
-  const start = React.useCallback(async () => {
+  const start = React.useCallback(async (resolution: ExportResolution = "source") => {
     if (abort.current) return
+    const size = exportSize(canvas, resolution)
 
     const controller = new AbortController()
     abort.current = controller
@@ -85,8 +107,8 @@ export function useExport({
        */
       const capability = await canRenderMediaOnWeb({
         container: "mp4",
-        width: canvas.width,
-        height: canvas.height,
+        width: size.width,
+        height: size.height,
       })
 
       if (!capability.canRender) {
@@ -107,16 +129,16 @@ export function useExport({
       const result = await renderMediaOnWeb({
         composition: {
           id: "cut",
-          component: EditorComposition,
-          width: canvas.width,
-          height: canvas.height,
+          component: ScaledComposition,
+          width: size.width,
+          height: size.height,
           fps,
           durationInFrames: durationInFrames(durationUs, fps),
           // Required by the renderer's types even though inputProps supplies
           // the real values. The same object, so a mismatch is impossible.
-          defaultProps: { scene, media, background },
+          defaultProps: { scene, media, background, canvas },
         },
-        inputProps: { scene, media, background },
+        inputProps: { scene, media, background, canvas },
         container: "mp4",
         signal: controller.signal,
         onProgress: ({ progress }) =>
@@ -147,7 +169,7 @@ export function useExport({
  * before the click has been dispatched cancels the download, and revoking never
  * holds the whole encoded video in memory for the life of the tab.
  */
-function download(blob: Blob, filename: string) {
+export function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
 
@@ -166,7 +188,7 @@ function download(blob: Blob, filename: string) {
  * Projects are named after the file they came from, and a recording called
  * "Sales / Q3.mov" would otherwise produce a path with a directory in it.
  */
-function safeName(name: string): string {
+export function safeName(name: string): string {
   const cleaned = name
     .replace(/[/\\?%*:|"<>]/g, "-")
     .replace(/\s+/g, " ")

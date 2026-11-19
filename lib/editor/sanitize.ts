@@ -1,3 +1,4 @@
+import { clipRate } from "./timeline"
 import type { Scene, TimelineElement, VideoDocument } from "./types"
 
 /**
@@ -95,7 +96,8 @@ function sanitizeElement(element: TimelineElement): TimelineElement {
       trimStartUs = Math.max(0, sourceUs - durationUs)
     }
   }
-  if (durationUs === 0) durationUs = trimEndUs - trimStartUs
+  if (durationUs === 0)
+    durationUs = Math.round((trimEndUs - trimStartUs) / clipRate(element))
 
   if (
     startUs === element.startUs &&

@@ -626,6 +626,7 @@ export function buildCaptionSeeds(
         sourceElementId: options.elementId,
         sourceStartUs: word.startUs,
         sourceEndUs: word.endUs,
+        ...(word.speaker !== undefined ? { speaker: word.speaker } : {}),
       })),
     }
   })

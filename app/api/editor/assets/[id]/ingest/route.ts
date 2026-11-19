@@ -2,6 +2,7 @@ import { join } from "node:path"
 
 import {
   claimForIngest,
+  completeImage,
   completeIngest,
   failIngest,
   getAsset,
@@ -77,7 +78,7 @@ const VOICE_BUDGET_MS = 150_000
 // rejects the `runtime` segment config outright.
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
@@ -97,6 +98,30 @@ export async function POST(
   const asset = await getAsset(id, userId)
   if (!asset) {
     return Response.json({ error: "No such asset." }, { status: 404 })
+  }
+
+  // What the file is for, from the client. Music is not transcribed: nobody
+  // edits a song by its words, and every second of it would be bought.
+  const options = await readIngestOptions(request)
+
+  if (asset.mimeType.startsWith("image/") && asset.state !== "ready") {
+    if (!options.image) {
+      return Response.json(
+        { error: "An image needs its width and height." },
+        { status: 400 }
+      )
+    }
+    const done = await completeImage(id, userId, options.image)
+    return Response.json({
+      assetId: id,
+      state: done?.state ?? "ready",
+      durationUs: null,
+      width: options.image.width,
+      height: options.image.height,
+      hasAudio: false,
+      hasTranscript: false,
+      warnings: [],
+    })
   }
 
   if (asset.state === "ready") {
@@ -196,6 +221,7 @@ export async function POST(
           // The second line, on the PCM length: a container that reported no
           // duration passed `admit` at zero seconds.
           admitTranscription: async (audioSeconds) => {
+            if (!options.transcribe) return "Music is not transcribed."
             const length = recordingVerdict(audioSeconds)
             if (!length.ok) return length.error
 
@@ -266,5 +292,30 @@ function transcriber(
           "Set it and re-run ingest to add them."
       )
     },
+  }
+}
+
+type IngestOptions = {
+  transcribe: boolean
+  image: { width: number; height: number } | null
+}
+
+/** The body is optional; an empty or broken one is the defaults. */
+async function readIngestOptions(request: Request): Promise<IngestOptions> {
+  const body: unknown = await request.json().catch(() => null)
+  const record =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : {}
+  const image = record.image as Record<string, unknown> | undefined
+  const size = (value: unknown) =>
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= 20_000
+  return {
+    transcribe: record.purpose !== "music",
+    image:
+      image && size(image.width) && size(image.height)
+        ? { width: image.width as number, height: image.height as number }
+        : null,
   }
 }

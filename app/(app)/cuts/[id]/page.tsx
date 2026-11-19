@@ -3,11 +3,10 @@ import { notFound, redirect } from "next/navigation"
 
 import { Studio, type MediaEntry } from "@/components/editor/studio"
 import { getAsset } from "@/lib/editor/assets"
+import { mediaEntryFor } from "@/lib/editor/media-entry"
+import { referencedMediaIds } from "@/lib/editor/placement"
 import { getProject } from "@/lib/editor/projects"
-import { readTake, strongLineSlot } from "@/lib/editor/reading"
-import { storageKeys } from "@/lib/editor/media"
 import { createR2Storage } from "@/lib/editor/storage-r2"
-import { wordsFromDeepgram } from "@/lib/editor/transcript"
 import type { VideoDocument } from "@/lib/editor/types"
 import { constructMetadata } from "@/lib/metadata"
 import { getSession } from "@/lib/session"
@@ -78,27 +77,22 @@ async function Cut({ params }: { params: Promise<{ id: string }> }) {
 }
 
 /**
- * Signed URLs for whatever the document currently references.
+ * Signed URLs for whatever the document currently references, and for what
+ * the person brought into the project and has not placed yet (its library).
  *
  * Read off the elements rather than a stored list: the document is the only
  * thing that knows what it uses right now, and a stored list goes stale the
- * moment a clip is deleted.
+ * moment a clip is deleted. The library is the one list kept, because an
+ * unplaced picture is referenced by nothing else.
  */
 async function resolveMedia(
   document: VideoDocument,
   userId: string
 ): Promise<Record<string, MediaEntry>> {
-  const mediaIds = new Set<string>()
-
-  for (const scene of document.scenes) {
-    for (const track of scene.tracks) {
-      for (const element of track.elements) {
-        if ("mediaId" in element && element.mediaId) {
-          mediaIds.add(element.mediaId)
-        }
-      }
-    }
-  }
+  const mediaIds = new Set<string>([
+    ...referencedMediaIds(document.scenes),
+    ...(document.metadata.library ?? []),
+  ])
 
   const storage = createR2Storage()
 
@@ -106,73 +100,9 @@ async function resolveMedia(
     [...mediaIds].map(async (mediaId) => {
       const asset = await getAsset(mediaId, userId)
       if (!asset) return null
-
-      const voiceKey = storageKeys.voice(asset.contentHash)
-      const [proxyUrl, seekIndexUrl, filmstripUrl, voiceUrl] =
-        await Promise.all([
-          asset.proxyKey ? storage.url(asset.proxyKey) : null,
-          asset.seekIndexKey ? storage.url(asset.seekIndexKey) : null,
-          asset.filmstripKey ? storage.url(asset.filmstripKey) : null,
-          // The cleaned voice, when ingest made one. A failed check is a take
-          // that plays its own sound, never a page that does not open.
-          asset.hasAudio
-            ? storage
-                .exists(voiceKey)
-                .then((found) => (found ? storage.url(voiceKey) : null))
-                .catch(() => null)
-            : null,
-        ])
-
-      return [
-        mediaId,
-        {
-          id: asset.id,
-          filename: asset.filename,
-          durationUs: asset.durationUs,
-          width: asset.width,
-          height: asset.height,
-          fps: asset.fps,
-          rotation: asset.rotation,
-          hasAudio: asset.hasAudio,
-          proxyUrl,
-          seekIndexUrl,
-          voiceUrl,
-          // All four or none: a sheet whose geometry did not survive is a sheet
-          // nothing can slice into tiles.
-          filmstrip:
-            filmstripUrl &&
-            asset.filmstripTiles &&
-            asset.filmstripIntervalUs &&
-            asset.filmstripTileWidth &&
-            asset.filmstripTileHeight
-              ? {
-                  url: filmstripUrl,
-                  tiles: asset.filmstripTiles,
-                  intervalUs: asset.filmstripIntervalUs,
-                  tileWidth: asset.filmstripTileWidth,
-                  tileHeight: asset.filmstripTileHeight,
-                }
-              : null,
-          // The reading of the take, counted here from the transcript the
-          // row already carries: a few numbers cross to the client, never
-          // the provider response (lib/editor/reading.ts).
-          reading: asset.transcript
-            ? readTake(
-                wordsFromDeepgram(asset.transcript),
-                asset.durationUs ?? 0,
-                strongLineOf(asset.transcript)
-              )
-            : null,
-        } satisfies MediaEntry,
-      ] as const
+      return [mediaId, await mediaEntryFor(asset, storage)] as const
     })
   )
 
   return Object.fromEntries(entries.filter((entry) => entry !== null))
-}
-
-/** The cached strong line, when one has been chosen (lib/editor/strong-line.ts). */
-function strongLineOf(transcript: unknown): string | null {
-  const slot = strongLineSlot(transcript)
-  return slot?.state === "done" ? slot.line : null
 }

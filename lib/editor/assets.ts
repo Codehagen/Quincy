@@ -248,3 +248,34 @@ export async function failIngest(
     })
     .where(and(eq(videoAsset.id, id), eq(videoAsset.userId, userId)))
 }
+
+/**
+ * An image is ready the moment its bytes are stored: there is nothing to
+ * transcode, nothing to hear and no length. The original is its own proxy
+ * and its own thumbnail. The dimensions come from the browser, which decoded
+ * the picture to show it; they place the box and nothing trusts them more.
+ */
+export async function completeImage(
+  id: string,
+  userId: string,
+  size: { width: number; height: number }
+): Promise<VideoAssetRow | null> {
+  const asset = await getAsset(id, userId)
+  if (!asset) return null
+  const rows = await db
+    .update(videoAsset)
+    .set({
+      state: "ready",
+      proxyKey: asset.storageKey,
+      thumbnailKey: asset.storageKey,
+      width: size.width,
+      height: size.height,
+      durationUs: null,
+      hasAudio: false,
+      error: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(videoAsset.id, id), eq(videoAsset.userId, userId)))
+    .returning()
+  return rows[0] ?? null
+}
