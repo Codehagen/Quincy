@@ -1,4 +1,9 @@
-import { audioFile, audioSeconds, storedTranscript, type SpeechToText } from "./speech-to-text"
+import {
+  audioFile,
+  audioSeconds,
+  storedTranscript,
+  type SpeechToText,
+} from "./speech-to-text"
 
 /**
  * Speech to text on a server we run. Prepared, and off.
@@ -44,7 +49,12 @@ type VerboseResponse = {
   text?: string
   language?: string
   duration?: number
-  words?: { word?: string; start?: number; end?: number; probability?: number }[]
+  words?: {
+    word?: string
+    start?: number
+    end?: number
+    probability?: number
+  }[]
 }
 
 export function createSelfHostedSpeechToText(

@@ -22,7 +22,11 @@ import {
 } from "@/lib/editor/ingest-meter"
 import { peaksFromPcm } from "@/lib/editor/media"
 import { imageProblem } from "@/lib/editor/image-check"
-import { createR2Storage, downloadObject, readObjectHead } from "@/lib/editor/storage-r2"
+import {
+  createR2Storage,
+  downloadObject,
+  readObjectHead,
+} from "@/lib/editor/storage-r2"
 import {
   createFfmpegTranscoder,
   withWorkspace,
@@ -115,7 +119,10 @@ export async function POST(
     }
     // The bytes, not the browser's word for them: an image never reaches
     // ffmpeg, so this is the only place anything checks what was stored.
-    const problem = imageProblem(await readObjectHead(asset.storageKey), asset.mimeType)
+    const problem = imageProblem(
+      await readObjectHead(asset.storageKey),
+      asset.mimeType
+    )
     if (problem) {
       // Too big or not a picture is a final answer, so the row says so, as a
       // failed video ingest does. Not uploaded yet (409) is not: the PUT may

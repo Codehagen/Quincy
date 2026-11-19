@@ -1,5 +1,11 @@
-import { looksMistranscribed, wordDensity } from "@/lib/editor/transcript-quality"
-import { wordsFromTranscript, type TranscriptWord } from "@/lib/editor/transcript"
+import {
+  looksMistranscribed,
+  wordDensity,
+} from "@/lib/editor/transcript-quality"
+import {
+  wordsFromTranscript,
+  type TranscriptWord,
+} from "@/lib/editor/transcript"
 
 import {
   audioSeconds,
@@ -203,7 +209,11 @@ export function listenUrl(
     model: modelFor(options),
     ...(sampleRate === null
       ? {}
-      : { encoding: "linear16", sample_rate: String(sampleRate), channels: "1" }),
+      : {
+          encoding: "linear16",
+          sample_rate: String(sampleRate),
+          channels: "1",
+        }),
     punctuate: "true",
     smart_format: "true",
     utterances: "true",

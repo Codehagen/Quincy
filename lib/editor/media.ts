@@ -289,7 +289,16 @@ const VOICE_OUTPUT = [
 ] as const
 
 export function voiceCleanArgs(input: string, output: string): string[] {
-  return ["-i", input, "-vn", "-af", VOICE_FILTER, ...VOICE_OUTPUT, "-y", output]
+  return [
+    "-i",
+    input,
+    "-vn",
+    "-af",
+    VOICE_FILTER,
+    ...VOICE_OUTPUT,
+    "-y",
+    output,
+  ]
 }
 
 /**
@@ -632,7 +641,11 @@ export function contentKey(sizeBytes: number, hash: string): string {
  * reach that user's own files. Re-uploading stays free for the same person,
  * which is all the dedupe was for.
  */
-export function userContentKey(userId: string, sizeBytes: number, hash: string): string {
+export function userContentKey(
+  userId: string,
+  sizeBytes: number,
+  hash: string
+): string {
   const scope = userId.replace(/[^A-Za-z0-9_-]/g, "")
   if (!scope) throw new Error("A content key needs a user.")
   return `u/${scope}/${contentKey(sizeBytes, hash)}`
@@ -665,8 +678,7 @@ export const storageKeys = {
    * model is missing or did not keep the voice. Keyed by what it is, so the
    * two are never mistaken for each other.
    */
-  voicePlain: (contentHash: string) =>
-    `derived/voice/v2/${contentHash}.m4a`,
+  voicePlain: (contentHash: string) => `derived/voice/v2/${contentHash}.m4a`,
 }
 
 /**

@@ -269,7 +269,10 @@ export function createFfmpegTranscoder(
           )
 
           if (denoiseKeptVoice(dry, wet)) {
-            return { bytes: new Uint8Array(await readFile(output)), denoised: true }
+            return {
+              bytes: new Uint8Array(await readFile(output)),
+              denoised: true,
+            }
           }
 
           note = `speech model lowered the voice from ${dry} to ${wet} LUFS, cleaned without it`
@@ -283,7 +286,11 @@ export function createFfmpegTranscoder(
         encoding: "buffer",
       })
 
-      return { bytes: new Uint8Array(await readFile(output)), denoised: false, note }
+      return {
+        bytes: new Uint8Array(await readFile(output)),
+        denoised: false,
+        note,
+      }
     },
 
     async thumbnail(source) {

@@ -1,7 +1,11 @@
 import { gateway } from "@ai-sdk/gateway"
 import { experimental_transcribe as transcribe } from "ai"
 
-import { audioFile, storedTranscript, type SpeechToText } from "./speech-to-text"
+import {
+  audioFile,
+  storedTranscript,
+  type SpeechToText,
+} from "./speech-to-text"
 
 /**
  * Speech to text through the AI Gateway. The voice notes' default

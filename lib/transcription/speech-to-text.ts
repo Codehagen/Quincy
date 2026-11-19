@@ -137,7 +137,10 @@ export function pcmBytes(samples: Int16Array): Uint8Array {
  * A 44-byte header in front of the samples, nothing re-encoded: mono, 16-bit,
  * little-endian, at the rate the samples were taken.
  */
-export function wavFromPcm(samples: Int16Array, sampleRate: number): Uint8Array {
+export function wavFromPcm(
+  samples: Int16Array,
+  sampleRate: number
+): Uint8Array {
   const data = pcmBytes(samples)
   const bytes = new Uint8Array(44 + data.byteLength)
   const view = new DataView(bytes.buffer)
@@ -168,7 +171,8 @@ export function audioFile(audio: SpeechAudio): {
   bytes: Uint8Array
   mediaType: string
 } {
-  if (audio.kind === "file") return { bytes: audio.bytes, mediaType: audio.mediaType }
+  if (audio.kind === "file")
+    return { bytes: audio.bytes, mediaType: audio.mediaType }
   return {
     bytes: wavFromPcm(audio.samples, audio.sampleRate),
     mediaType: "audio/wav",
@@ -202,7 +206,10 @@ export function pcmTranscriber(speech: SpeechToText): {
       // The editor cuts on word boundaries. Text with no timings under it
       // would store as a transcript with no words, which reads downstream as
       // a silent take and lets silence removal cut the whole thing.
-      if (result.words === null || (result.text.trim() && !result.words.length)) {
+      if (
+        result.words === null ||
+        (result.text.trim() && !result.words.length)
+      ) {
         throw new Error(
           `${speech.name}: the transcript came back without word timings, which the editor needs`
         )

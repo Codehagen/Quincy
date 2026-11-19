@@ -192,7 +192,11 @@ const nextConfig: NextConfig = {
        * the intent reads without knowing path-to-regexp.
        */
       { source: "/riffs", destination: "/ideas", permanent: true },
-      { source: "/riffs/:path*", destination: "/ideas/:path*", permanent: true },
+      {
+        source: "/riffs/:path*",
+        destination: "/ideas/:path*",
+        permanent: true,
+      },
       /**
        * /sources and /channels became one page, /connectors, on 2026-11-17
        * (the connectors lab: material in and writing out are one idea, and
@@ -202,9 +206,21 @@ const nextConfig: NextConfig = {
        * GitHub callback link or a mailed `/sources` still works. A channel's
        * topics and times moved with it: /channels/x is /connectors/x.
        */
-      { source: "/sources", destination: "/connectors?show=sources", permanent: true },
-      { source: "/channels", destination: "/connectors?show=channels", permanent: true },
-      { source: "/channels/:platform", destination: "/connectors/:platform", permanent: true },
+      {
+        source: "/sources",
+        destination: "/connectors?show=sources",
+        permanent: true,
+      },
+      {
+        source: "/channels",
+        destination: "/connectors?show=channels",
+        permanent: true,
+      },
+      {
+        source: "/channels/:platform",
+        destination: "/connectors/:platform",
+        permanent: true,
+      },
     ]
   },
 }
