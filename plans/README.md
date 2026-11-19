@@ -349,3 +349,58 @@ Direction (options, not plans yet):
 - **Backfill on connect.** Fathom's `GET /meetings` (with `include_transcript`) and Granola's `GET /v1/notes` could turn the last week's calls into ideas the moment a key is pasted, the way GitHub's backfill reads the last merge. The first-run value of a meeting source today is zero until the next call ends.
 - **A fourth note taker.** After 033 it is one registry entry plus a mapper and a route.
 
+
+## Branch audit of `claude/project-thread-wfsndu` (PR #5, 2026-11-19)
+
+Scope: the editing basics (plan 042) as of `80bdd94`, after the first review
+round was fixed. Light recon, all categories, no subagents. Written by the
+session that wrote the branch, so the provenance note above applies. Not
+audited: the composition's render performance on long cuts, and a real
+upload against R2.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| [043](043-one-caption-restyle-for-the-panel-and-the-agent.md) | Restyling captions groups the words the same way from the panel and from the agent | P1 | S | — | DONE — on PR #5 |
+| [044](044-a-file-added-during-a-run-stays-in-the-library.md) | A file added to the library while the agent is cutting is not lost | P2 | S | — | DONE — on PR #5 |
+| [045](045-test-the-new-agent-tools-and-upload-routes.md) | Test the six new agent tools and the image and music paths through the upload routes | P2 | M | 043 | DONE — on PR #5 |
+| [046](046-a-refused-image-is-marked-failed.md) | A refused image is marked failed | P3 | S | — (extends 045's test if present) | DONE — on PR #5 |
+| [047](047-edit-list-exports-say-what-they-leave-out.md) | Edit-list exports keep the spine's timing and say what they leave out | P3 | S | — | DONE — on PR #5 |
+| [048](048-one-media-lookup-for-the-page-and-the-api.md) | The project API reads its media the same way the cut page does | P3 | S | — | DONE — on PR #5 |
+
+Dependency notes:
+- 045 tests `style_captions`, whose behaviour 043 changes. Land 043 first, or
+  write that one test against whichever behaviour is live.
+- 046's tests use the ingest route mocks that 045 sets up.
+
+Fixed on PR #5 (pre-existing, made more visible by this branch):
+- **Originals were keyed by a hash the browser reports.** New uploads are now
+  stored under `u/<userId>/…` (`userContentKey`, `lib/editor/media.ts`), so a
+  claimed digest only reaches the claimant's own files; a finished legacy row
+  of the person's own is still reused, an unfinished one is not. Original note: Originals are stored
+  at `assets/<contentHash>` (`lib/editor/media.ts:494`), shared across users,
+  and the hash comes from the client (`app/api/editor/uploads/route.ts:198-203`).
+  Anyone who knows another person's hash and size can be given an upload URL
+  for the same key. For video, derived files shield the person who uploaded
+  first. For images (new in 042), the original *is* what the editor shows,
+  so the bytes the person sees could be replaced. Exploiting it requires
+  knowing the exact hash. Worth a decision on whether to scope keys by user
+  or verify the hash on ingest.
+
+Direction (options, not plans yet):
+- **Overlays that follow the spine.** B-roll, text and music stay put when
+  the spine is cut, trimmed or sped up. Whether they should ripple is a
+  design decision for every spine edit, not only speed.
+- **Captions per recording.** Captioning, regrouping and subtitle import all
+  assume the first spine clip's recording. A second take cannot be captioned
+  without replacing the first take's captions.
+- **Subtitle round trip.** Exported SRT/VTT is timed to the cut; import reads
+  cues as timed to the recording. Export, fix and re-import misplaces every
+  caption after the first cut. Either detect it or offer "timed to this cut"
+  on import.
+
+Considered and rejected:
+- **`TextHandles` polling the DOM every 250ms.** It runs only while a text is
+  selected and the playhead is inside it. Not worth the complexity of an
+  observer.
+- **Ducking scanning every region per frame.** The loop stops at the first
+  region past the instant, and a talk has hundreds of regions, not thousands.

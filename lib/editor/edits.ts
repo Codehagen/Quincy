@@ -12,6 +12,7 @@ import {
 } from "./ops"
 import { stampFields } from "./provenance"
 import {
+  clipRate,
   elementAt,
   findMainTrack,
   layOut,
@@ -301,8 +302,9 @@ export function trimEdge(
   if (!track || !element || element.kind !== "video") return []
 
   const clip = element as VideoElement
-  const delta = clampTrimDelta(clip, edge, deltaUs)
+  const delta = Math.round(clampTrimDelta(clip, edge, deltaUs))
   if (delta === 0) return []
+  const sourceDelta = Math.round(delta * clipRate(clip))
 
   if (edge === "end") {
     return withRipple(scene, trackId, elementId, {
@@ -312,7 +314,7 @@ export function trimEdge(
       elementId,
       patch: {
         durationUs: us(clip.durationUs + delta),
-        trimEndUs: us(clip.trimEndUs + delta),
+        trimEndUs: us(clip.trimEndUs + sourceDelta),
       },
     })
   }
@@ -327,7 +329,7 @@ export function trimEdge(
     patch: {
       startUs: us(clip.startUs + delta),
       durationUs: us(clip.durationUs - delta),
-      trimStartUs: us(clip.trimStartUs + delta),
+      trimStartUs: us(clip.trimStartUs + sourceDelta),
     },
   })
 }
@@ -348,13 +350,15 @@ export function clampTrimDelta(
   edge: "start" | "end",
   deltaUs: number
 ): number {
+  // The delta is timeline time; the source moves by `rate` times as much.
+  const rate = clipRate(clip)
   if (edge === "end") {
-    const room = clip.sourceDurationUs - clip.trimEndUs
+    const room = (clip.sourceDurationUs - clip.trimEndUs) / rate
     return Math.max(MINIMUM_CLIP_US - clip.durationUs, Math.min(deltaUs, room))
   }
 
   return Math.max(
-    -clip.trimStartUs,
+    -clip.trimStartUs / rate,
     Math.min(deltaUs, clip.durationUs - MINIMUM_CLIP_US)
   )
 }
@@ -1453,7 +1457,10 @@ export function timelineSpans(
         const startUs = sourceToTimelineUs(spine, mediaId, us(from))
         if (startUs === null) continue
 
-        spans.push({ startUs, endUs: us(startUs + (to - from)) })
+        spans.push({
+          startUs,
+          endUs: us(startUs + Math.round((to - from) / clipRate(element))),
+        })
       }
     }
   }
@@ -1483,4 +1490,43 @@ export function setVoice(scene: Scene, voice: "original" | "clean"): EditOp[] {
       : []
   )
   return aimed(ops, { action: "press", kind: "track", trackId: spine.id })
+}
+
+/** The speeds the toolbar offers. Anything between the bounds is allowed. */
+export const SPEED_PRESETS = [0.5, 1, 1.5, 2] as const
+export const MIN_SPEED = 0.25
+export const MAX_SPEED = 4
+
+/**
+ * Play a clip faster or slower. The clip keeps the same footage, so its length
+ * on the timeline changes by the rate, and on the spine everything after it
+ * closes up (or moves out) with the captions bound to it. The voice changes
+ * pitch with the rate: honest, and the reason the presets stop at 2×.
+ */
+export function setSpeed(
+  scene: Scene,
+  trackId: string,
+  elementId: string,
+  speed: number
+): EditOp[] {
+  const track = scene.tracks.find((candidate) => candidate.id === trackId)
+  const element = track?.elements.find((candidate) => candidate.id === elementId)
+  if (!track || !element || element.kind !== "video") return []
+  if (!Number.isFinite(speed)) return []
+
+  const rate = Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100
+  if (rate === clipRate(element)) return []
+  const span = element.trimEndUs - element.trimStartUs
+  const durationUs = us(Math.max(MINIMUM_CLIP_US, Math.round(span / rate)))
+  const op: Extract<EditOp, { op: "update_element" }> = {
+    op: "update_element",
+    sceneId: scene.id,
+    trackId,
+    elementId,
+    // null removes the field: a clip at 1× carries no speed at all.
+    patch: { speed: rate === 1 ? null : rate, durationUs },
+  }
+  if (findMainTrack(scene)?.id === trackId)
+    return withRipple(scene, trackId, elementId, op)
+  return [{ ...op, target: { action: "press", kind: "element", trackId, elementId } }]
 }

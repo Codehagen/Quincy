@@ -292,3 +292,33 @@ export async function deleteObject(key: string, config = readR2Config()) {
     new DeleteObjectCommand({ Bucket: config.bucket, Key: key })
   )
 }
+
+/**
+ * How big a stored object really is, and its first bytes: enough to tell
+ * what kind of file it is without downloading it. Null when it is not there.
+ *
+ * For uploads that skip ffmpeg (images), where nothing else ever looks at
+ * the bytes the browser sent: the size and type the client declared are not
+ * bound into the upload URL, so they are only a claim until read back here.
+ */
+export async function readObjectHead(
+  key: string,
+  bytes = 16,
+  config = readR2Config()
+): Promise<{ sizeBytes: number; head: Uint8Array } | null> {
+  const client = r2Client(config)
+  try {
+    const response = await client.send(
+      new GetObjectCommand({ Bucket: config.bucket, Key: key, Range: `bytes=0-${bytes - 1}` })
+    )
+    const range = response.ContentRange?.match(/\/(\d+)$/)
+    const sizeBytes = range ? Number(range[1]) : Number(response.ContentLength ?? 0)
+    const head = response.Body
+      ? await (response.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray()
+      : new Uint8Array()
+    return { sizeBytes, head }
+  } catch (error) {
+    if (isNotFound(error)) return null
+    throw error
+  }
+}

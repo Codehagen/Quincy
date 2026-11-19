@@ -1,4 +1,5 @@
 import { findOrCreateAsset } from "@/lib/editor/assets"
+import { MAX_IMAGE_BYTES as IMAGE_LIMIT } from "@/lib/editor/image-check"
 import {
   cooldownMessage,
   dailyVerdict,
@@ -46,7 +47,9 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
  * host, not to second-guess ffmpeg. The real gate is the probe: a file that
  * lies about its type fails ingest and says so.
  */
-const ACCEPTED = /^(video|audio)\//
+const ACCEPTED = /^(video|audio)\/|^image\/(png|jpeg|webp|gif)$/
+/** Bytes. A still bigger than this is a print file, not something to put on a cut. */
+const MAX_IMAGE_BYTES = IMAGE_LIMIT
 
 type UploadRequest = {
   filename?: unknown
@@ -59,6 +62,8 @@ type UploadRequest = {
    * before the upload. The probe on the ingest route is the real check.
    */
   durationSeconds?: unknown
+  /** "music" or a picture buys no transcription, so the daily allowance does not apply. */
+  purpose?: unknown
 }
 
 export async function POST(request: Request) {
@@ -143,7 +148,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const today = dailyVerdict({ usedSeconds })
+  const transcribes = body.purpose !== "music" && !mimeType.startsWith("image/")
+  const today = transcribes ? dailyVerdict({ usedSeconds }) : ({ ok: true } as const)
   if (!today.ok) {
     return Response.json({ error: today.error, state: "ceiling" }, { status: 429 })
   }
@@ -170,7 +176,7 @@ function validate(body: UploadRequest): string | null {
   }
 
   if (typeof body.mimeType !== "string" || !ACCEPTED.test(body.mimeType)) {
-    return "mimeType must be a video or audio type."
+    return "mimeType must be a video, audio or image (PNG, JPEG, WebP, GIF) type."
   }
 
   if (
@@ -179,6 +185,10 @@ function validate(body: UploadRequest): string | null {
     body.sizeBytes <= 0
   ) {
     return "sizeBytes must be a positive integer."
+  }
+
+  if (body.mimeType.startsWith("image/") && body.sizeBytes > MAX_IMAGE_BYTES) {
+    return `Images are limited to ${MAX_IMAGE_BYTES / 1024 ** 2}MB.`
   }
 
   if (body.sizeBytes > MAX_UPLOAD_BYTES) {

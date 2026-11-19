@@ -11,6 +11,7 @@ import {
   type CompositionMedia,
   type CompositionProps,
 } from "./composition"
+import type { FrameRect } from "./preview-handles"
 import type { Player as EditorPlayer } from "./use-player"
 
 /**
@@ -41,6 +42,7 @@ export function StudioPreview({
   durationUs,
   background,
   playbackRate = 1,
+  overlay,
 }: {
   player: EditorPlayer
   scene: Scene
@@ -51,14 +53,39 @@ export function StudioPreview({
   background: string
   /** The preview's speed only; the document and the export stay in real time. */
   playbackRate?: number
+  /**
+   * Drawn over the picture (preview-handles.tsx), given where the letterboxed
+   * frame sits inside the preview and the preview's own node.
+   */
+  overlay?: (frame: FrameRect, container: HTMLElement | null) => React.ReactNode
 }) {
+  const [container, setContainer] = React.useState<HTMLDivElement | null>(null)
+  const [box, setBox] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 })
+  const hasOverlay = Boolean(overlay)
+  React.useLayoutEffect(() => {
+    const node = container
+    if (!node || !hasOverlay) return
+    const observer = new ResizeObserver(([entry]) =>
+      setBox({ width: entry.contentRect.width, height: entry.contentRect.height })
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasOverlay, container])
+  const scale = Math.min(box.width / canvas.width, box.height / canvas.height) || 0
+  const frame: FrameRect = {
+    width: canvas.width * scale,
+    height: canvas.height * scale,
+    left: (box.width - canvas.width * scale) / 2,
+    top: (box.height - canvas.height * scale) / 2,
+  }
+
   const inputProps = React.useMemo<CompositionProps>(
     () => ({ scene, media, background }),
     [scene, media, background]
   )
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div ref={setContainer} className="relative flex h-full w-full items-center justify-center">
       <Player
         // `player.ref` is a plain useRef created in use-player.ts and only
         // *passed* here, never read during render. The react-hooks/refs rule
@@ -99,6 +126,11 @@ export function StudioPreview({
           </div>
         )}
       />
+      {overlay ? (
+        <div className="pointer-events-none absolute inset-0 *:pointer-events-auto">
+          {overlay(frame, container)}
+        </div>
+      ) : null}
     </div>
   )
 }

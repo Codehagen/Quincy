@@ -507,3 +507,78 @@ describe("remove_fillers", () => {
     }
   })
 })
+
+describe("the basics tools", () => {
+  const sceneOf = (run: ReturnType<typeof harness>["run"]) => run.snapshot().document.scenes[0]
+  const captionsOf = (run: ReturnType<typeof harness>["run"]) =>
+    sceneOf(run)
+      .tracks.filter((track) => track.kind === "caption")
+      .flatMap((track) => track.elements) as Array<{ tokens: unknown[] }>
+
+  it("add_text puts a title on and credits the agent", async () => {
+    const { run, tools } = harness()
+    const said = await call(tools.add_text, { role: "title", text: "Hello" })
+    const text = sceneOf(run)
+      .tracks.flatMap((track) => track.elements)
+      .find((element) => element.kind === "text")
+    expect(said).toContain("Hello")
+    expect(text && "content" in text ? text.content : null).toBe("Hello")
+    expect(text?.provenance?.createdBy).toBe("agent")
+  })
+
+  it("add_transition softens a join and refuses a clip that is not there", async () => {
+    const { run, tools, streamed } = harness()
+    await call(tools.split_clip, { atSeconds: 20 })
+    const said = await call(tools.add_transition, { clipNumber: 2, kind: "dip_black" })
+    expect(said).toMatch(/before clip 2/)
+    const second = spineOf(run)[1] as VideoElement
+    expect(second.transition?.kind).toBe("dip_black")
+
+    const before = streamed.length
+    expect(await call(tools.add_transition, { clipNumber: 9, kind: "dissolve" })).toBe(
+      "There is no clip 9 on the spine."
+    )
+    expect(streamed).toHaveLength(before)
+  })
+
+  it("set_speed retimes the clip, and says so when it already plays at that speed", async () => {
+    const { run, tools } = harness()
+    await call(tools.set_speed, { clipNumber: 1, speed: 2 })
+    expect(spineOf(run)[0].durationUs).toBe(secondsToUs(30))
+    expect(await call(tools.set_speed, { clipNumber: 1, speed: 2 })).toMatch(/already plays at 2×/)
+  })
+
+  it("correct_words fixes a word everywhere and says when it found none", async () => {
+    const { tools } = harness({ words: WORDS })
+    await call(tools.add_captions, {})
+    expect(
+      await call(tools.correct_words, { replacements: [{ find: "two", replace: "2" }] })
+    ).toBe("Corrected 1 word.")
+    expect(
+      await call(tools.correct_words, { replacements: [{ find: "seven", replace: "7" }] })
+    ).toMatch(/^None of those words/)
+  })
+
+  it("style_captions regroups a look that shows one word at a time", async () => {
+    const { run, tools } = harness({ words: WORDS })
+    expect(await call(tools.style_captions, { look: "bold" })).toMatch(/no captions/)
+
+    await call(tools.add_captions, {})
+    await call(tools.style_captions, { look: "clean" })
+    expect(captionsOf(run).some((caption) => caption.tokens.length > 1)).toBe(true)
+
+    await call(tools.style_captions, { look: "bold" })
+    expect(captionsOf(run).every((caption) => caption.tokens.length === 1)).toBe(true)
+  })
+
+  it("name_speaker names a speaker once", async () => {
+    const { run, tools } = harness()
+    expect(await call(tools.name_speaker, { speakerNumber: 1, name: "Ada" })).toBe(
+      "Speaker 1 is Ada now."
+    )
+    expect(run.snapshot().document.metadata.speakers?.["0"]).toBe("Ada")
+    expect(await call(tools.name_speaker, { speakerNumber: 1, name: "Ada" })).toBe(
+      "That speaker already has that name."
+    )
+  })
+})

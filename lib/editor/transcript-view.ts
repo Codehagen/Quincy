@@ -29,6 +29,8 @@ export type TranscriptWord = {
   sourceEndUs: Us
   /** Silence before this word, in scene time. Zero on the first word of a line. */
   gapUs: Us
+  /** The transcriber's speaker number, when it gave one. */
+  speaker?: number
 }
 
 export type TranscriptLine = {
@@ -113,6 +115,7 @@ export function transcriptWords(scene: Scene): TranscriptWord[] {
             sourceStartUs: token.sourceStartUs,
             sourceEndUs: token.sourceEndUs,
             gapUs: us(0),
+            ...(token.speaker !== undefined ? { speaker: token.speaker } : {}),
           }))
         )
     )

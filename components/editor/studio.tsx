@@ -83,7 +83,9 @@ import {
   type SideView,
   type StudioTool,
 } from "./studio-frame"
-import { StudioLibrary } from "./studio-library"
+import { useStudioTools } from "./use-studio-tools"
+import { correctWords, findWords, replaceWords } from "@/lib/editor/correct-words"
+import { speakerLabel, speakerNumbers } from "@/lib/editor/speakers"
 import { formatClockTenths, PlayButton, PlayheadClock } from "./studio-parts"
 import { StudioLanes, type TrimDrag } from "./studio-lanes"
 import { StudioTranscript, type TranscriptSelection } from "./studio-transcript"
@@ -113,6 +115,8 @@ import { usePlayer, usePlayheadSelector } from "./use-player"
 export type MediaEntry = {
   id: string
   filename: string
+  /** Absent on entries made before images and music: a video. */
+  kind?: "video" | "audio" | "image"
   durationUs: number | null
   width: number | null
   height: number | null
@@ -124,6 +128,8 @@ export type MediaEntry = {
   /** The cleaned voice (media.ts `voiceCleanArgs`), when one is stored. */
   voiceUrl?: string | null
   filmstrip: Filmstrip | null
+  /** The poster frame, or the picture itself for an image. */
+  thumbnailUrl?: string | null
   /** What Quincy noticed in the take; null without a transcript. */
   reading: TakeReading | null
 }
@@ -156,7 +162,7 @@ export function Studio({
   projectId,
   document: initialDocument,
   revision,
-  media,
+  media: initialMedia,
   localFile,
   harness,
 }: {
@@ -187,6 +193,12 @@ export function Studio({
     save,
     retry,
   } = useDocument(projectId, initialDocument, revision, harness?.fetch)
+
+  /**
+   * The project's media. State rather than the prop, because the library adds
+   * to it: a file uploaded here is listed (and placeable) without a reload.
+   */
+  const [media, setMedia] = React.useState(initialMedia)
 
   /**
    * Undo and redo jump the lanes without the cursor: one crossfade, 150ms
@@ -512,6 +524,20 @@ export function Studio({
     },
     [apply, running]
   )
+
+  const studioTools = useStudioTools({
+    document,
+    scene: scene ?? document.scenes[0],
+    canvas,
+    fps,
+    media,
+    setMedia,
+    commit,
+    player,
+    selectedId,
+    running,
+    fetcher: harness?.fetch ?? fetch,
+  })
 
   const openScene = React.useCallback(
     (sceneId: string) => {
@@ -868,6 +894,12 @@ export function Studio({
     [scene]
   )
 
+  /** Where words begin and end, for a dragged overlay to snap to. */
+  const wordEdgesUs = React.useMemo(
+    () => words.flatMap((word) => [word.startUs, word.endUs]),
+    [words]
+  )
+
   /**
    * The word under the playhead, at the word's cadence rather than the
    * frame's. The transcript renders from this id and so re-renders a few
@@ -1157,9 +1189,25 @@ export function Studio({
     }
 
     if (!trackId || !selectedId) return
+    // Something over the cut (b-roll, a picture, text, music) comes off its
+    // own lane and leaves a gap; only the spine ripples.
+    const over = studioTools.selected
+    if (over && over.track.id !== trackId) {
+      commit([
+        {
+          op: "remove_element",
+          sceneId: scene.id,
+          trackId: over.track.id,
+          elementId: over.element.id,
+          target: { action: "press", kind: "track", trackId: over.track.id },
+        },
+      ])
+      setSelectedId(null)
+      return
+    }
     commit(deleteAndRipple(scene, trackId, selectedId))
     setSelectedId(null)
-  }, [commit, scene, trackId, selectedId, selectedWords, deleteWords])
+  }, [commit, scene, trackId, selectedId, selectedWords, deleteWords, studioTools.selected])
 
   /**
    * Keyboard, because this is an editor. Who owns a press (a text field, a
@@ -1206,8 +1254,6 @@ export function Studio({
   }, [player, split, remove, undo, redo, running])
 
   if (!scene) return null
-
-  const mediaList = Object.values(media)
 
   return (
     <StudioFrame
@@ -1262,14 +1308,22 @@ export function Studio({
           durationUs={durationUs}
           background={document.settings.background.color}
           playbackRate={rate}
+          overlay={studioTools.previewOverlay}
         />
       }
       headerEnd={<SaveBadge save={save} onRetry={retry} />}
       exportAction={
         <ExportButton
           state={exporter.state}
-          onStart={exporter.start}
+          onStart={(resolution) => void exporter.start(resolution)}
           onCancel={exporter.cancel}
+          onFile={(file) =>
+            studioTools.exportFile(
+              file,
+              placedChapters.length > 0 ? chapterLines(placedChapters) : null
+            )
+          }
+          files={studioTools.exportFiles}
           // A run is rewriting the timeline; rendering it mid-edit would
           // encode a cut that is still moving.
           disabled={running}
@@ -1401,7 +1455,10 @@ export function Studio({
             locked={running}
           />
         ) : (
-          <StudioLibrary media={mediaList} />
+          <>
+            {studioTools.inspector}
+            {studioTools.panelFor(tool, null)}
+          </>
         )
       }
       side={side}
@@ -1459,6 +1516,16 @@ export function Studio({
           chapterText={
             placedChapters.length > 0 ? chapterLines(placedChapters) : null
           }
+          onCorrect={(tokenId, text) =>
+            commit(correctWords(scene, [{ tokenId, text }]))
+          }
+          onReplace={(find, replace) => commit(replaceWords(scene, find, replace))}
+          countMatches={(find) => findWords(scene, find).length}
+          speakerName={
+            speakerNumbers(scene).length > 1
+              ? (speaker) => speakerLabel(speaker, document.metadata.speakers)
+              : undefined
+          }
         />
       }
     >
@@ -1501,6 +1568,9 @@ export function Studio({
             onResizeEffect={resizeSelectedEffect}
             locked={running}
             scanning={arrival.phase === "scanning"}
+            onDropMedia={studioTools.dropMedia}
+            onMoveElement={studioTools.moveOverlay}
+            wordEdgesUs={wordEdgesUs}
           />
         )}
       </div>

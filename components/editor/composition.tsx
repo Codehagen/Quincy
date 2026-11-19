@@ -4,12 +4,25 @@ import * as React from "react"
 import { Audio, Video } from "@remotion/media"
 import {
   AbsoluteFill,
+  Img,
   Sequence,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion"
 
+import { isFullFrame } from "@/lib/editor/box"
+import { bedGain, voiceRegions } from "@/lib/editor/ducking"
+import { clipRate } from "@/lib/editor/timeline"
+import { us } from "@/lib/editor/time"
+import { textOpacity } from "@/lib/editor/titles"
 import {
+  dipOpacity,
+  dissolveOpacity,
+  transitionWindows,
+  type TransitionWindow,
+} from "@/lib/editor/transitions"
+import {
+  sampleChannel,
   cssFilter,
   cssObjectPosition,
   cssTransform,
@@ -19,7 +32,10 @@ import {
 import { cutEdges, edgeGain, type AudioEdges } from "@/lib/editor/audio-edges"
 import { durationInFrames, framesFor, usForFrame } from "@/lib/editor/frames"
 import type {
+  AudioElement,
+  Box,
   CaptionElement,
+  ImageElement,
   Scene,
   TextElement,
   TimelineElement,
@@ -81,12 +97,55 @@ export type CompositionProps = {
  */
 const PREMOUNT_FRAMES = 60
 
+/**
+ * The canvas the document was laid out on. Fonts and offsets are in its
+ * pixels, so an export at another resolution draws at this size and scales
+ * the whole frame (`ScaledComposition`), rather than relaying out the text.
+ */
+const LayoutCanvas = React.createContext<{ width: number; height: number } | null>(null)
+
+function useLayoutCanvas(): { width: number; height: number } {
+  const config = useVideoConfig()
+  return React.useContext(LayoutCanvas) ?? { width: config.width, height: config.height }
+}
+
+/** The cut drawn at `canvas` and scaled to whatever size is rendering it. */
+export function ScaledComposition({
+  canvas,
+  ...props
+}: CompositionProps & { canvas: { width: number; height: number } }) {
+  const { width } = useVideoConfig()
+  const scale = width / canvas.width
+  return (
+    <AbsoluteFill style={{ backgroundColor: props.background, overflow: "hidden" }}>
+      <LayoutCanvas.Provider value={canvas}>
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: canvas.width,
+            height: canvas.height,
+            transform: `scale(${scale})`,
+            transformOrigin: "0 0",
+          }}
+        >
+          <EditorComposition {...props} />
+        </div>
+      </LayoutCanvas.Provider>
+    </AbsoluteFill>
+  )
+}
+
 export function EditorComposition({
   scene,
   media,
   background,
 }: CompositionProps) {
   const { fps } = useVideoConfig()
+  // Where the voice is, for every music bed's duck. Once per scene, not per
+  // frame: the regions only move when the document does.
+  const voice = React.useMemo(() => voiceRegions(scene), [scene])
 
   return (
     <AbsoluteFill style={{ backgroundColor: background }}>
@@ -104,29 +163,103 @@ export function EditorComposition({
         .filter((track) => !track.hidden)
         .map((track) => {
           const edges = cutEdges(track)
-          return track.elements.map((element) => {
+          const windows = transitionWindows(track)
+          const into = new Map(windows.map((window) => [window.next.id, window]))
+          const outOf = new Map(
+            windows
+              .filter((window) => window.kind === "dissolve")
+              .map((window) => [window.previous.id, window])
+          )
+          const muted = Boolean(track.muted)
+
+          const layers = track.elements.map((element) => {
             if (element.hidden) return null
 
             const from = framesFor(element.startUs, fps)
             const length = durationInFrames(element.durationUs, fps)
 
             if (element.kind === "video") {
+              const tail = outOf.get(element.id)
+              return (
+                <React.Fragment key={element.id}>
+                  <Sequence
+                    from={from}
+                    durationInFrames={length}
+                    premountFor={PREMOUNT_FRAMES}
+                    // Named, because Remotion's own timeline reads these and a
+                    // composition of "Sequence, Sequence, Sequence" is unusable
+                    // the moment something goes wrong.
+                    name={element.name}
+                  >
+                    <Clip
+                      element={element}
+                      media={media[element.mediaId]}
+                      edges={edges.get(element.id)}
+                      length={length}
+                      trackMuted={muted}
+                      dissolve={into.get(element.id)}
+                    />
+                  </Sequence>
+                  {tail ? (
+                    // The outgoing clip carries on past its own end, under the
+                    // incoming one, for as long as the dissolve lasts. Silent:
+                    // the sound cuts where the cut is.
+                    <Sequence
+                      from={framesFor(tail.joinUs, fps)}
+                      durationInFrames={durationInFrames(tail.durationUs, fps)}
+                      name={`${element.name} (dissolve)`}
+                    >
+                      <Clip
+                        element={{
+                          ...element,
+                          startUs: tail.joinUs,
+                          durationUs: tail.durationUs,
+                          trimStartUs: element.trimEndUs,
+                          trimEndUs: us(
+                            element.trimEndUs +
+                              Math.round(tail.durationUs * clipRate(element))
+                          ),
+                          muted: true,
+                          animations: { channels: {} },
+                        }}
+                        media={media[element.mediaId]}
+                        length={durationInFrames(tail.durationUs, fps)}
+                        trackMuted
+                      />
+                    </Sequence>
+                  ) : null}
+                </React.Fragment>
+              )
+            }
+
+            if (element.kind === "image") {
               return (
                 <Sequence
                   key={element.id}
                   from={from}
                   durationInFrames={length}
                   premountFor={PREMOUNT_FRAMES}
-                  // Named, because Remotion's own timeline reads these and a
-                  // composition of "Sequence, Sequence, Sequence" is unusable
-                  // the moment something goes wrong.
                   name={element.name}
                 >
-                  <Clip
+                  <Still element={element} media={media[element.mediaId]} />
+                </Sequence>
+              )
+            }
+
+            if (element.kind === "audio") {
+              return (
+                <Sequence
+                  key={element.id}
+                  from={from}
+                  durationInFrames={length}
+                  premountFor={PREMOUNT_FRAMES}
+                  name={element.name}
+                >
+                  <Bed
                     element={element}
                     media={media[element.mediaId]}
-                    edges={edges.get(element.id)}
-                    length={length}
+                    regions={voice}
+                    trackMuted={muted}
                   />
                 </Sequence>
               )
@@ -160,9 +293,137 @@ export function EditorComposition({
 
             return null
           })
+
+          // Dips paint over the whole track, after its clips.
+          const dips = windows
+            .filter((window) => window.kind !== "dissolve")
+            .map((window) => {
+              const half = Math.round(window.durationUs / 2)
+              return (
+                <Sequence
+                  key={`dip-${window.next.id}`}
+                  from={framesFor(us(window.joinUs - half), fps)}
+                  durationInFrames={Math.max(
+                    1,
+                    durationInFrames(window.durationUs, fps)
+                  )}
+                  name="Dip"
+                >
+                  <Dip window={window} />
+                </Sequence>
+              )
+            })
+
+          return (
+            <React.Fragment key={track.id}>
+              {layers}
+              {dips}
+            </React.Fragment>
+          )
         })}
     </AbsoluteFill>
   )
+}
+
+/** The colour across a dip, coming up to the join and back down after it. */
+function Dip({ window }: { window: TransitionWindow }) {
+  const frame = useCurrentFrame()
+  const { fps } = useVideoConfig()
+  const half = Math.round(window.durationUs / 2)
+  const atUs = window.joinUs - half + usForFrame(frame, fps)
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: window.kind === "dip_white" ? "#ffffff" : "#000000",
+        opacity: dipOpacity(atUs, window),
+        pointerEvents: "none",
+      }}
+    />
+  )
+}
+
+/** A rectangle of the frame, for a picture that does not fill it. */
+function boxStyle(box: Box | undefined): React.CSSProperties | undefined {
+  if (isFullFrame(box) || !box) return undefined
+  return {
+    left: `${box.x * 100}%`,
+    top: `${box.y * 100}%`,
+    width: `${box.width * 100}%`,
+    height: `${box.height * 100}%`,
+    overflow: "hidden",
+  }
+}
+
+/** A still over the cut. */
+function Still({
+  element,
+  media,
+}: {
+  element: ImageElement
+  media: CompositionMedia | undefined
+}) {
+  const visual = useVisual(element)
+  const src = media?.proxyUrl ?? media?.localUrl ?? null
+  if (!src) return null
+  return (
+    <AbsoluteFill
+      style={{
+        ...boxStyle(element.box),
+        transform: cssTransform(visual),
+        transformOrigin: cssTransformOrigin(visual),
+        filter: cssFilter(visual),
+        opacity: visual.opacity,
+      }}
+    >
+      <Img
+        src={src}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: element.fit ?? "contain",
+        }}
+      />
+    </AbsoluteFill>
+  )
+}
+
+/** A music bed, ducked under the voice. */
+function Bed({
+  element,
+  media,
+  regions,
+  trackMuted,
+}: {
+  element: AudioElement
+  media: CompositionMedia | undefined
+  regions: ReturnType<typeof voiceRegions>
+  trackMuted: boolean
+}) {
+  const { fps } = useVideoConfig()
+  const src = media?.proxyUrl ?? media?.localUrl ?? null
+  if (!src || trackMuted || element.muted) return null
+  return (
+    <Audio
+      src={src}
+      trimBefore={framesFor(element.trimStartUs, fps)}
+      trimAfter={framesFor(element.trimEndUs, fps)}
+      volume={(frame: number) =>
+        bedGain(element, usForFrame(frame, fps), regions) *
+        fadeGain(element, usForFrame(frame, fps))
+      }
+    />
+  )
+}
+
+/**
+ * A bed's own fade, from the `volume` channel when it has one (keyframed
+ * 0–1). Absent is flat.
+ */
+function fadeGain(element: AudioElement, elementUs: number): number {
+  const channel = element.animations.channels["volume"]
+  if (!channel || channel.keys.length === 0) return 1
+  const value = sampleChannel(channel, Math.round(elementUs))
+  return value === null ? 1 : Math.max(0, Math.min(1, value))
 }
 
 /**
@@ -185,6 +446,8 @@ function Clip({
   media,
   edges,
   length,
+  trackMuted = false,
+  dissolve,
 }: {
   element: VideoElement
   media: CompositionMedia | undefined
@@ -192,9 +455,19 @@ function Clip({
   edges?: AudioEdges
   /** The clip's length in frames, for the ramp at its end. */
   length: number
+  /** The lane's own mute, over the clip's. */
+  trackMuted?: boolean
+  /** The dissolve this clip arrives through, when it has one. */
+  dissolve?: TransitionWindow
 }) {
   const { fps } = useVideoConfig()
+  const frame = useCurrentFrame()
   const visual = useVisual(element)
+  const arriving =
+    dissolve && dissolve.kind === "dissolve"
+      ? dissolveOpacity(usForFrame(frame, fps), dissolve)
+      : 1
+  const speed = clipRate(element)
 
   const src = media?.proxyUrl ?? media?.localUrl ?? null
 
@@ -214,7 +487,7 @@ function Clip({
   // recorded, which is what "clean" falls back to rather than silence.
   const cleanVoice =
     element.voice === "clean" ? (media?.voiceUrl ?? null) : null
-  const volume = element.muted
+  const volume = element.muted || trackMuted
     ? 0
     : edges && (edges.in || edges.out)
       ? (frame: number) => element.volume * edgeGain(frame, length, edges)
@@ -232,7 +505,11 @@ function Clip({
         transform: cssTransform(visual),
         transformOrigin: cssTransformOrigin(visual),
         filter: cssFilter(visual),
-        opacity: visual.opacity === 1 ? undefined : visual.opacity,
+        opacity:
+          visual.opacity * arriving === 1
+            ? undefined
+            : visual.opacity * arriving,
+        ...boxStyle(element.box),
         mixBlendMode:
           element.blendMode === "normal" ? undefined : element.blendMode,
       }}
@@ -245,6 +522,7 @@ function Clip({
           trimBefore={framesFor(element.trimStartUs, fps)}
           trimAfter={framesFor(element.trimEndUs, fps)}
           volume={cleanVoice ? 0 : volume}
+          playbackRate={speed}
           style={{
             width: "100%",
             height: "100%",
@@ -263,6 +541,7 @@ function Clip({
           trimBefore={framesFor(element.trimStartUs, fps)}
           trimAfter={framesFor(element.trimEndUs, fps)}
           volume={volume}
+          playbackRate={speed}
         />
       ) : null}
     </AbsoluteFill>
@@ -318,7 +597,8 @@ function captionInset(width: number, height: number): number {
  */
 function Caption({ element }: { element: CaptionElement }) {
   const frame = useCurrentFrame()
-  const { fps, width, height } = useVideoConfig()
+  const { fps } = useVideoConfig()
+  const { width, height } = useLayoutCanvas()
   const style = element.style
 
   const atUs = (frame / fps) * 1_000_000
@@ -382,35 +662,71 @@ function Caption({ element }: { element: CaptionElement }) {
   )
 }
 
+/**
+ * Text over the picture, placed by what it is for (lib/editor/titles.ts):
+ * a title in the middle, a name and role low on the left, an end card in the
+ * middle. `transform.position` moves it from there, in canvas pixels.
+ */
 function TextLayer({ element }: { element: TextElement }) {
-  const { width, height } = useVideoConfig()
+  const frame = useCurrentFrame()
+  const { fps } = useVideoConfig()
+  const { width, height } = useLayoutCanvas()
   const style = element.style
+  const role = element.role
+  const opacity = textOpacity(usForFrame(frame, fps), element.durationUs)
+  const lower = role === "lower_third"
+  const inset = Math.round(Math.min(width, height) * 0.06)
 
   return (
     <AbsoluteFill
       style={{
-        justifyContent: "center",
-        alignItems: "center",
+        justifyContent: lower ? "flex-end" : "center",
+        alignItems: lower ? "flex-start" : "center",
+        padding: lower ? `0 ${inset}px ${Math.round(height * 0.16)}px` : inset,
         pointerEvents: "none",
-        transform: `translate(${element.transform.position.x / width}%, ${
-          element.transform.position.y / height
-        }%)`,
+        opacity,
+        transform:
+          element.transform.position.x || element.transform.position.y
+            ? `translate(${element.transform.position.x}px, ${element.transform.position.y}px)`
+            : undefined,
       }}
     >
-      <span
+      <div
+        // The preview's handles find the text by this to draw around it.
+        data-text-id={element.id}
         style={{
-          maxWidth: "86%",
+          maxWidth: lower ? "70%" : "86%",
           textAlign: style.textAlign,
           fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
           fontWeight: style.fontWeight,
           lineHeight: style.lineHeight,
+          letterSpacing: style.letterSpacing,
+          textTransform: style.textTransform,
           color: style.color,
           textShadow: `${style.shadow.offsetX}px ${style.shadow.offsetY}px ${style.shadow.blur}px ${style.shadow.color}`,
+          ...(style.background.enabled
+            ? {
+                backgroundColor: style.background.color,
+                borderRadius: style.background.cornerRadius,
+                padding: `${style.background.paddingY}px ${style.background.paddingX}px`,
+              }
+            : null),
         }}
       >
-        {element.content}
-      </span>
+        <div style={{ fontSize: style.fontSize }}>{element.content}</div>
+        {element.subtitle ? (
+          <div
+            style={{
+              fontSize: Math.round(style.fontSize * 0.6),
+              fontWeight: Math.max(400, style.fontWeight - 200),
+              opacity: 0.85,
+              marginTop: Math.round(style.fontSize * 0.15),
+            }}
+          >
+            {element.subtitle}
+          </div>
+        ) : null}
+      </div>
     </AbsoluteFill>
   )
 }

@@ -2,6 +2,7 @@ import { join } from "node:path"
 
 import {
   claimForIngest,
+  completeImage,
   completeIngest,
   failIngest,
   getAsset,
@@ -20,7 +21,8 @@ import {
   transcribedSecondsToday,
 } from "@/lib/editor/ingest-meter"
 import { peaksFromPcm } from "@/lib/editor/media"
-import { createR2Storage, downloadObject } from "@/lib/editor/storage-r2"
+import { imageProblem } from "@/lib/editor/image-check"
+import { createR2Storage, downloadObject, readObjectHead } from "@/lib/editor/storage-r2"
 import {
   createFfmpegTranscoder,
   withWorkspace,
@@ -77,7 +79,7 @@ const VOICE_BUDGET_MS = 150_000
 // rejects the `runtime` segment config outright.
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
@@ -97,6 +99,41 @@ export async function POST(
   const asset = await getAsset(id, userId)
   if (!asset) {
     return Response.json({ error: "No such asset." }, { status: 404 })
+  }
+
+  // What the file is for, from the client. Music is not transcribed: nobody
+  // edits a song by its words, and every second of it would be bought.
+  const options = await readIngestOptions(request)
+
+  if (asset.mimeType.startsWith("image/") && asset.state !== "ready") {
+    if (!options.image) {
+      return Response.json(
+        { error: "An image needs its width and height." },
+        { status: 400 }
+      )
+    }
+    // The bytes, not the browser's word for them: an image never reaches
+    // ffmpeg, so this is the only place anything checks what was stored.
+    const problem = imageProblem(await readObjectHead(asset.storageKey), asset.mimeType)
+    if (problem) {
+      // Too big or not a picture is a final answer, so the row says so, as a
+      // failed video ingest does. Not uploaded yet (409) is not: the PUT may
+      // still land. The bytes stay, because originals are shared by content
+      // and another row may hold the same ones.
+      if (problem.status !== 409) await failIngest(id, userId, problem.error)
+      return Response.json({ error: problem.error }, { status: problem.status })
+    }
+    const done = await completeImage(id, userId, options.image)
+    return Response.json({
+      assetId: id,
+      state: done?.state ?? "ready",
+      durationUs: null,
+      width: options.image.width,
+      height: options.image.height,
+      hasAudio: false,
+      hasTranscript: false,
+      warnings: [],
+    })
   }
 
   if (asset.state === "ready") {
@@ -133,9 +170,11 @@ export async function POST(
     )
   }
 
-  const today = dailyVerdict({
-    usedSeconds: await transcribedSecondsToday(userId),
-  })
+  // The daily allowance is transcription; music buys none, so it is not
+  // refused for it. The cooldown above still holds.
+  const today = options.transcribe
+    ? dailyVerdict({ usedSeconds: await transcribedSecondsToday(userId) })
+    : ({ ok: true } as const)
   if (!today.ok) {
     return Response.json(
       { error: today.error, state: "ceiling" },
@@ -196,6 +235,7 @@ export async function POST(
           // The second line, on the PCM length: a container that reported no
           // duration passed `admit` at zero seconds.
           admitTranscription: async (audioSeconds) => {
+            if (!options.transcribe) return "Music is not transcribed."
             const length = recordingVerdict(audioSeconds)
             if (!length.ok) return length.error
 
@@ -266,5 +306,30 @@ function transcriber(
           "Set it and re-run ingest to add them."
       )
     },
+  }
+}
+
+type IngestOptions = {
+  transcribe: boolean
+  image: { width: number; height: number } | null
+}
+
+/** The body is optional; an empty or broken one is the defaults. */
+async function readIngestOptions(request: Request): Promise<IngestOptions> {
+  const body: unknown = await request.json().catch(() => null)
+  const record =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : {}
+  const image = record.image as Record<string, unknown> | undefined
+  const size = (value: unknown) =>
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= 20_000
+  return {
+    transcribe: record.purpose !== "music",
+    image:
+      image && size(image.width) && size(image.height)
+        ? { width: image.width as number, height: image.height as number }
+        : null,
   }
 }

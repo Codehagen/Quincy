@@ -6,6 +6,7 @@ import type { Us, UsRange } from "./time"
 import type {
   Author,
   Chapter,
+  DocumentMetadata,
   Effect,
   Keyframe,
   ProjectSnapshot,
@@ -158,7 +159,18 @@ type EditOpBody =
    * it lands in a revision, carries an author, and undoes.
    */
   | { op: "update_scene"; sceneId: string; patch: ScenePatch }
-  | { op: "add_track"; sceneId: string; track: Omit<Track, "id">; id?: string }
+  /**
+   * `index` places the track among the others (0 is first, painted
+   * underneath); absent appends it, painted on top. Placement decides the
+   * index (placement.ts) so overlays sit over the spine and under captions.
+   */
+  | {
+      op: "add_track"
+      sceneId: string
+      track: Omit<Track, "id">
+      id?: string
+      index?: number
+    }
   | { op: "remove_track"; sceneId: string; trackId: string }
   | { op: "update_track"; sceneId: string; trackId: string; patch: TrackPatch }
   | {
@@ -195,6 +207,11 @@ type EditOpBody =
     }
   | { op: "update_settings"; patch: Partial<VideoDocument["settings"]> }
   | { op: "rename"; name: string }
+  /** The project's library and speaker names (types.ts DocumentMetadata). */
+  | {
+      op: "update_metadata"
+      patch: Partial<Pick<DocumentMetadata, "library" | "speakers">>
+    }
   /** The project's chapters, whole (chapters.ts validates them). Empty clears. */
   | { op: "set_chapters"; chapters: Chapter[] }
   /**
@@ -305,6 +322,12 @@ function applyOne(
     case "rename":
       return { ...document, metadata: { ...document.metadata, name: op.name } }
 
+    case "update_metadata":
+      return {
+        ...document,
+        metadata: { ...document.metadata, ...op.patch },
+      }
+
     case "set_chapters":
       return {
         ...document,
@@ -356,7 +379,14 @@ function applyOne(
       trackIds.add(id)
       return mapScene(document, op.sceneId, (scene) => ({
         ...scene,
-        tracks: [...scene.tracks, { ...op.track, id }],
+        tracks:
+          op.index === undefined
+            ? [...scene.tracks, { ...op.track, id }]
+            : [
+                ...scene.tracks.slice(0, Math.max(0, op.index)),
+                { ...op.track, id },
+                ...scene.tracks.slice(Math.max(0, op.index)),
+              ],
       }))
     }
 
@@ -409,11 +439,15 @@ function applyOne(
           track.elements.map((element) => {
             if (element.id !== op.elementId) return element
 
-            const merged = { ...element, ...op.patch } as TimelineElement
+            // A null in a patch takes the field off. Undefined cannot say
+            // that: it does not survive JSON, and every op crosses the wire.
+            const merged = { ...element, ...op.patch } as Record<string, unknown>
+            for (const [key, value] of Object.entries(op.patch))
+              if (value === null) delete merged[key]
             // Diff rather than trusting the patch keys: setting volume to the
             // value it already held is not an edit, and stamping it would
             // repaint an untouched clip as the agent's work.
-            const paths = changedPaths(element, merged)
+            const paths = changedPaths(element, merged as TimelineElement)
 
             return {
               ...merged,

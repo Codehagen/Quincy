@@ -96,6 +96,36 @@ export const EDITOR_TOOL_SENTENCES = {
     done: "Faded the clip",
     failed: "Could not fade the clip.",
   },
+  add_text: {
+    running: "Adding the text",
+    done: "Added the text",
+    failed: "Could not add the text.",
+  },
+  add_transition: {
+    running: "Setting the transition",
+    done: "Set the transition",
+    failed: "Could not set the transition.",
+  },
+  set_speed: {
+    running: "Changing the speed",
+    done: "Changed the speed",
+    failed: "Could not change the speed.",
+  },
+  correct_words: {
+    running: "Correcting the words",
+    done: "Corrected the words",
+    failed: "Could not correct the words.",
+  },
+  style_captions: {
+    running: "Styling the captions",
+    done: "Styled the captions",
+    failed: "Could not style the captions.",
+  },
+  name_speaker: {
+    running: "Naming the speaker",
+    done: "Named the speaker",
+    failed: "Could not name the speaker.",
+  },
   describe_timeline: {
     running: "Reading the timeline",
     done: "Read the timeline",
