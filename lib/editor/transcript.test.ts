@@ -12,7 +12,7 @@ import {
   MAX_CAPTION_WORD_US,
   snapToQuiet,
   transcriptText,
-  wordsFromDeepgram,
+  wordsFromTranscript,
   type Word,
 } from "./transcript"
 
@@ -22,7 +22,7 @@ function word(text: string, start: number, end: number): Word {
   return { text, startUs: s(start), endUs: s(end), confidence: 1 }
 }
 
-describe("wordsFromDeepgram", () => {
+describe("wordsFromTranscript", () => {
   it("reads words out of the nested provider shape", () => {
     const response = {
       results: {
@@ -40,7 +40,7 @@ describe("wordsFromDeepgram", () => {
       },
     }
 
-    expect(wordsFromDeepgram(response)).toEqual([
+    expect(wordsFromTranscript(response)).toEqual([
       {
         text: "Hei,",
         startUs: 0,
@@ -68,12 +68,12 @@ describe("wordsFromDeepgram", () => {
       },
     }
 
-    expect(wordsFromDeepgram(response)[0].text).toBe("Ja!")
+    expect(wordsFromTranscript(response)[0].text).toBe("Ja!")
   })
 
   it("returns nothing rather than throwing on a failed transcription", () => {
-    expect(wordsFromDeepgram({})).toEqual([])
-    expect(wordsFromDeepgram(null)).toEqual([])
+    expect(wordsFromTranscript({})).toEqual([])
+    expect(wordsFromTranscript(null)).toEqual([])
   })
 })
 

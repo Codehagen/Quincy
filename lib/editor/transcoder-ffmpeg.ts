@@ -6,10 +6,13 @@ import { join } from "node:path"
 import ffmpegPath from "ffmpeg-static"
 import ffprobeStatic from "ffprobe-static"
 
-import type { MediaSource, Transcoder } from "./ingest"
+import type { MediaSource, Transcoder, VoiceTrack } from "./ingest"
 import {
   audioExtractArgs,
+  denoiseKeptVoice,
+  parseLoudnessMeter,
   voiceCleanArgs,
+  voiceDenoiseArgs,
   probeArgs,
   proxyArgs,
   filmstripArgs,
@@ -17,6 +20,7 @@ import {
   type ProxyOptions,
 } from "./media"
 import { us, type Us } from "./time"
+import { voiceModelState } from "./voice-model"
 
 /**
  * The transcoder, as ffmpeg on the local filesystem.
@@ -227,16 +231,84 @@ export function createFfmpegTranscoder(
       return pcmFromWav(new Uint8Array(await readFile(output)))
     },
 
-    async voice(source) {
+    /**
+     * The speech model first, the plain chain when it cannot be used.
+     *
+     * Four ways to land on the plain chain, each said in `note` so a take
+     * that sounds like it did before the model can be traced: the model
+     * turned off, no model file,
+     * the model pass failing (an ffmpeg built without `arnndn`), and the
+     * model taking the voice down with the noise (media.ts
+     * `denoiseKeptVoice`). The last two cost a second pass, which only a
+     * take the model could not hear pays, and only while `mayRetry` allows
+     * it: otherwise this resolves to null and the Sound button makes the
+     * track later.
+     */
+    async voice(source, options): Promise<VoiceTrack | null> {
       const input = await materialise(source, workdir)
       const output = join(workdir, "voice.m4a")
+      const state = await voiceModelState()
+      const model = "path" in state ? state.path : null
+
+      let note: string | undefined
+      if ("off" in state) {
+        note = "speech model turned off (VOICE_DENOISE=off), cleaned without it"
+      } else if ("missing" in state) {
+        note = `speech model not found at ${state.missing}, cleaned without it`
+        // On the row this is one warning among many. A deploy that lost the
+        // file (next.config.ts traces it) files every take under the plain
+        // key for good, so it is said where errors are watched too.
+        console.error("[voice] speech model missing:", state.missing)
+      } else {
+        const dryMeter = join(workdir, "voice-dry.txt")
+        const wetMeter = join(workdir, "voice-wet.txt")
+
+        try {
+          await run(
+            ffmpegBinary(),
+            voiceDenoiseArgs(input, output, {
+              model: state.path,
+              dryMeter,
+              wetMeter,
+            }),
+            { timeout: TRANSCODE_TIMEOUT, encoding: "buffer" }
+          )
+
+          const [dry, wet] = await Promise.all(
+            [dryMeter, wetMeter].map((path) =>
+              readFile(path, "utf8")
+                .then(parseLoudnessMeter)
+                .catch(() => null)
+            )
+          )
+
+          if (denoiseKeptVoice(dry, wet)) {
+            return {
+              bytes: new Uint8Array(await readFile(output)),
+              denoised: true,
+            }
+          }
+
+          note = `speech model lowered the voice from ${dry} to ${wet} LUFS, cleaned without it`
+        } catch (error) {
+          note = `speech model failed (${error instanceof Error ? error.message : String(error)}), cleaned without it`
+        }
+      }
+
+      // A missing model is the plain chain's only pass, so it is never
+      // gated. After a model pass, a second one has to fit the deadline.
+      if (model && options?.mayRetry?.() === false) return null
 
       await run(ffmpegBinary(), voiceCleanArgs(input, output), {
         timeout: TRANSCODE_TIMEOUT,
         encoding: "buffer",
       })
 
-      return new Uint8Array(await readFile(output))
+      return {
+        bytes: new Uint8Array(await readFile(output)),
+        denoised: false,
+        note,
+      }
     },
 
     async thumbnail(source) {

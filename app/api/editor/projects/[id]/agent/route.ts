@@ -45,7 +45,7 @@ import {
   type VideoProjectRow,
 } from "@/lib/editor/projects"
 import { findMainTrack } from "@/lib/editor/timeline"
-import { wordsFromDeepgram, type AudioPeaks } from "@/lib/editor/transcript"
+import { wordsFromTranscript, type AudioPeaks } from "@/lib/editor/transcript"
 import { describeCutStyle, type CutStyle } from "@/lib/editor/cut-style"
 import { getCutStyle, saveCutStyle } from "@/lib/editor/cut-style-store"
 import { createR2Storage } from "@/lib/editor/storage-r2"
@@ -383,7 +383,7 @@ function startRun({
       if (!clip) return null
 
       const asset = await getAsset(clip.mediaId, userId)
-      return asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
+      return asset?.transcript ? wordsFromTranscript(asset.transcript) : null
     },
     loadPeaks: async () => {
       const clip = scene && findMainTrack(scene)?.elements.find(isVideo)

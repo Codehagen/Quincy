@@ -1,15 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import { wordsFromDeepgram } from "./transcript"
+import { wordsFromTranscript } from "@/lib/editor/transcript"
 
 import {
+  createDeepgramSpeechToText,
   createDeepgramTranscriber,
   isDeepgramConfigured,
   listenUrl,
   modelFor,
   MissingDeepgramKeyError,
   readDeepgramOptions,
-} from "./transcriber-deepgram"
+} from "./deepgram"
 
 describe("listenUrl", () => {
   it("describes the audio, because raw PCM carries no header", () => {
@@ -118,7 +119,7 @@ describe("createDeepgramTranscriber", () => {
   })
 
   it("returns the response verbatim", async () => {
-    // Stored as-is on video_asset.transcript; wordsFromDeepgram is the only
+    // Stored as-is on video_asset.transcript; wordsFromTranscript is the only
     // thing that reads the shape.
     const body = { results: { channels: [{ alternatives: [{ words: [] }] }] } }
 
@@ -335,7 +336,7 @@ describe("transcribe fallback", () => {
       })
 
       expect(stub.asked).toContain("no")
-      expect(wordsFromDeepgram(result)).toHaveLength(26)
+      expect(wordsFromTranscript(result)).toHaveLength(26)
     } finally {
       stub.restore()
     }
@@ -382,9 +383,51 @@ describe("transcribe fallback", () => {
       })
 
       // A failed candidate is not a reason to lose the transcript we have.
-      expect(wordsFromDeepgram(result)).toHaveLength(2)
+      expect(wordsFromTranscript(result)).toHaveLength(2)
     } finally {
       globalThis.fetch = original
+    }
+  })
+})
+
+describe("createDeepgramSpeechToText, an encoded file", () => {
+  it("lets the container describe the audio, and sends its type", async () => {
+    let url = ""
+    let type = ""
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string, init: RequestInit) => {
+        url = input
+        type = (init.headers as Record<string, string>)["Content-Type"]
+        return new Response(
+          JSON.stringify({
+            metadata: { duration: 4.5 },
+            results: {
+              channels: [{ alternatives: [{ transcript: "Hei", words: [] }] }],
+            },
+          })
+        )
+      })
+    )
+    try {
+      const result = await createDeepgramSpeechToText({
+        apiKey: "k",
+      }).transcribe({
+        kind: "file",
+        bytes: new Uint8Array([1]),
+        mediaType: "audio/webm",
+      })
+      const params = new URL(url).searchParams
+      expect(params.has("encoding")).toBe(false)
+      expect(params.has("sample_rate")).toBe(false)
+      expect(type).toBe("audio/webm")
+      expect(result).toMatchObject({
+        provider: "deepgram",
+        text: "Hei",
+        durationSeconds: 4.5,
+      })
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })

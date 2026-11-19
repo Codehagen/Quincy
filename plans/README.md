@@ -404,3 +404,35 @@ Considered and rejected:
   observer.
 - **Ducking scanning every region per frame.** The loop stops at the first
   region past the instant, and a talk has hundreds of regions, not thousands.
+
+## Branch audit of `claude/project-thread-euok8k` (PR #7, 2026-11-19)
+
+Scope: the speech-model voice cleaning and the shared transcription port, as
+of `7872775`. Light recon, all categories, no subagents, written by the
+session that wrote the branch (the provenance note applies). Not audited:
+dependencies, UI, and whether a real Vercel build carries the model file.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| [049](049-the-second-voice-pass-respects-the-deadline.md) | The second voice pass respects the ingest deadline | P1 | S | — | DONE — on PR #7 |
+| [050](050-a-missing-voice-model-is-loud.md) | A missing voice model is caught before deploy and loud after it | P2 | S | 049 | DONE — on PR #7 |
+| [051](051-test-that-finished-cuts-keep-their-sound.md) | Test that finished cuts keep their sound | P2 | S | 049 | DONE — on PR #7 |
+
+Not planned (low leverage): none beyond what 050 and 051 fold in (the
+"turned off" note, the parallel HEADs).
+
+Direction (options, not plans yet):
+- **Measure the Norwegian model before using it.** A script that runs the
+  same takes through Deepgram and the self-hosted adapter and compares word
+  counts and accuracy against a corrected transcript.
+- **Re-clean old takes with the model.** Takes cleaned before PR #7 keep the
+  plain track; a backfill script or a "clean again" choice would upgrade them.
+- **A real speech fixture.** Only the fallback is tested (a sine tone). A
+  short recording of the owner's own voice would pin the model's success path.
+
+Considered and rejected:
+- **Filter-path escaping.** Verified with `: , ; [ ] '` in real paths.
+- **Silent takes in the loudness guard.** ebur128 reports -70, not -inf, so
+  the drop is 0 and the track is kept.
+- **The model Deepgram reports after a language retry.** The field is not
+  read anywhere.

@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest"
+import { execFile } from "node:child_process"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { promisify } from "node:util"
 
-import { keyframeArgs, parseKeyframes, pcmFromWav } from "./transcoder-ffmpeg"
+import ffmpegPath from "ffmpeg-static"
+import { describe, expect, it, vi } from "vitest"
+
+import {
+  createFfmpegTranscoder,
+  keyframeArgs,
+  parseKeyframes,
+  pcmFromWav,
+  withWorkspace,
+} from "./transcoder-ffmpeg"
 
 /**
  * Build a WAV the way ffmpeg does, optionally with the LIST/INFO chunk some
@@ -147,3 +159,82 @@ describe("keyframeArgs", () => {
     expect(keyframeArgs("/tmp/proxy.mp4")).toContain("v:0")
   })
 })
+
+/**
+ * The cleaned voice through the real binary. Skipped where the install has no
+ * ffmpeg, like every other path here that needs one.
+ *
+ * Only the fallback can be shown without a recording of a person: a test
+ * tone is exactly the audio the speech model does not hear as a voice, so it
+ * is what proves the meter catches a model that took the sound away.
+ */
+describe.skipIf(!ffmpegPath || !existsSync(ffmpegPath))(
+  "createFfmpegTranscoder().voice",
+  () => {
+    const tone = async (workdir: string) => {
+      const path = join(workdir, "tone.wav")
+      await promisify(execFile)(ffmpegPath!, [
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=220:duration=3:sample_rate=32000",
+        "-y",
+        path,
+      ])
+      return path
+    }
+
+    it("cleans without the model when the model removes the sound", async () => {
+      await withWorkspace(async (workdir) => {
+        const path = await tone(workdir)
+        const track = await createFfmpegTranscoder({ workdir }).voice!({
+          kind: "path",
+          path,
+        })
+        expect(track?.denoised).toBe(false)
+        expect(track?.note).toMatch(/^speech model lowered the voice/)
+        expect(track?.bytes.byteLength).toBeGreaterThan(0)
+      })
+    })
+
+    it("gives no track rather than a second pass past the deadline", async () => {
+      await withWorkspace(async (workdir) => {
+        const path = await tone(workdir)
+        const track = await createFfmpegTranscoder({ workdir }).voice!(
+          { kind: "path", path },
+          { mayRetry: () => false }
+        )
+        expect(track).toBeNull()
+      })
+    })
+
+    it("cleans without the model when it is turned off", async () => {
+      vi.stubEnv("VOICE_DENOISE", "off")
+      try {
+        await withWorkspace(async (workdir) => {
+          const path = await tone(workdir)
+          const track = await createFfmpegTranscoder({ workdir }).voice!({
+            kind: "path",
+            path,
+          })
+          expect(track).toMatchObject({
+            denoised: false,
+            note: "speech model turned off (VOICE_DENOISE=off), cleaned without it",
+          })
+
+          // Without the model there is only one pass, so no deadline
+          // stops it.
+          const gated = await createFfmpegTranscoder({ workdir }).voice!(
+            { kind: "path", path },
+            { mayRetry: () => false }
+          )
+          expect(gated?.denoised).toBe(false)
+        })
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+  }
+)

@@ -150,9 +150,23 @@ const nextConfig: NextConfig = {
      * never renders in production, because the manifest is not on disk.
      */
     "/cuts": ["./public/samples/cuts/**"],
+    /**
+     * The speech model the cleaned voice runs through (lib/editor/voice-model.ts)
+     * is a file read by path, like the binaries, so it is listed beside them
+     * on both routes that clean a voice. Without it the voice is still made,
+     * on the plain chain, and the warning says the model was not found.
+     *
+     * The voice route makes the track for a take ingest did not, and runs
+     * the same ffmpeg, so it carries the binary too.
+     */
     "/api/editor/assets/[id]/ingest": [
       "./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/ffmpeg",
       "./node_modules/.pnpm/ffprobe-static@*/node_modules/ffprobe-static/bin/linux/x64/ffprobe",
+      "./lib/editor/models/speech.rnnn",
+    ],
+    "/api/editor/assets/[id]/voice": [
+      "./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/ffmpeg",
+      "./lib/editor/models/speech.rnnn",
     ],
   },
   async redirects() {
@@ -178,7 +192,11 @@ const nextConfig: NextConfig = {
        * the intent reads without knowing path-to-regexp.
        */
       { source: "/riffs", destination: "/ideas", permanent: true },
-      { source: "/riffs/:path*", destination: "/ideas/:path*", permanent: true },
+      {
+        source: "/riffs/:path*",
+        destination: "/ideas/:path*",
+        permanent: true,
+      },
       /**
        * /sources and /channels became one page, /connectors, on 2026-11-17
        * (the connectors lab: material in and writing out are one idea, and
@@ -188,9 +206,21 @@ const nextConfig: NextConfig = {
        * GitHub callback link or a mailed `/sources` still works. A channel's
        * topics and times moved with it: /channels/x is /connectors/x.
        */
-      { source: "/sources", destination: "/connectors?show=sources", permanent: true },
-      { source: "/channels", destination: "/connectors?show=channels", permanent: true },
-      { source: "/channels/:platform", destination: "/connectors/:platform", permanent: true },
+      {
+        source: "/sources",
+        destination: "/connectors?show=sources",
+        permanent: true,
+      },
+      {
+        source: "/channels",
+        destination: "/connectors?show=channels",
+        permanent: true,
+      },
+      {
+        source: "/channels/:platform",
+        destination: "/connectors/:platform",
+        permanent: true,
+      },
     ]
   },
 }

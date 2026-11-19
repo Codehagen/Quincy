@@ -53,10 +53,11 @@ vi.mock("@/lib/editor/transcoder-ffmpeg", () => ({
   createFfmpegTranscoder: () => ({}),
   withWorkspace: async () => {},
 }))
-vi.mock("@/lib/editor/transcriber-deepgram", () => ({
-  createDeepgramTranscriber: () => ({}),
-  isDeepgramConfigured: () => false,
-  readDeepgramOptions: () => ({}),
+vi.mock("@/lib/transcription", () => ({
+  isSpeechConfigured: () => false,
+  pcmTranscriber: () => ({}),
+  speechProviderFor: () => "deepgram",
+  speechToTextFor: () => ({}),
 }))
 
 const { POST } = await import("./route")

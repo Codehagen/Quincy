@@ -3,7 +3,8 @@ import { join } from "node:path"
 import { getAsset } from "@/lib/editor/assets"
 import { cooldownMessage } from "@/lib/editor/ingest-limits"
 import { recordVoiceStart, voiceCooldown } from "@/lib/editor/ingest-meter"
-import { storageKeys } from "@/lib/editor/media"
+import { firstExisting } from "@/lib/editor/ingest"
+import { storageKeys, voiceKeys } from "@/lib/editor/media"
 import { createR2Storage, downloadObject } from "@/lib/editor/storage-r2"
 import {
   createFfmpegTranscoder,
@@ -17,7 +18,8 @@ import {
 import { getSession } from "@/lib/session"
 
 /**
- * The cleaned voice of a take (media.ts `voiceCleanArgs`).
+ * The cleaned voice of a take (media.ts `voiceDenoiseArgs`, or
+ * `voiceCleanArgs` when the speech model could not be used).
  *
  * Ingest makes it; this is for takes uploaded before it did, or whose step
  * failed. A track already stored is free and needs no gate. Making one is an
@@ -50,9 +52,9 @@ export async function POST(
   }
 
   const storage = createR2Storage()
-  const key = storageKeys.voice(asset.contentHash)
-  if (await storage.exists(key)) {
-    return Response.json({ url: await storage.url(key) })
+  const existing = await firstExisting(storage, voiceKeys(asset.contentHash))
+  if (existing) {
+    return Response.json({ url: await storage.url(existing) })
   }
 
   const entitlement = await resolveEntitlementForRequest(session.user)
@@ -71,6 +73,7 @@ export async function POST(
   }
   await recordVoiceStart(userId)
 
+  let key = storageKeys.voice(asset.contentHash)
   try {
     await withWorkspace(async (workdir) => {
       const source = join(workdir, "original")
@@ -79,7 +82,14 @@ export async function POST(
         kind: "path",
         path: source,
       })
-      await storage.put(key, voice, "audio/mp4")
+      // No `mayRetry`, so the plain chain always runs when the model does
+      // not give a track: this route has the whole function to itself.
+      if (!voice) throw new Error("no voice track")
+      if (!voice.denoised) {
+        key = storageKeys.voicePlain(asset.contentHash)
+        console.warn(`[voice] ${id}: ${voice.note}`)
+      }
+      await storage.put(key, voice.bytes, "audio/mp4")
     })
   } catch {
     return Response.json(

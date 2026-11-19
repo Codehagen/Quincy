@@ -2,6 +2,7 @@ import {
   parseProbe,
   planFilmstrip,
   storageKeys,
+  voiceKeys,
   type FilmstripPlan,
   type ProbeResult,
   type ProxyOptions,
@@ -54,8 +55,34 @@ export type Transcoder = {
    * without it the timeline seeks approximately, which is worse but not broken.
    */
   keyframes?(source: MediaSource): Promise<Us[]>
-  /** The voice, cleaned (media.ts `voiceCleanArgs`). Optional like keyframes. */
-  voice?(source: MediaSource): Promise<Uint8Array>
+  /**
+   * The voice, cleaned (media.ts `voiceDenoiseArgs`, or `voiceCleanArgs`
+   * when the speech model could not be used). Optional like keyframes.
+   */
+  voice?(
+    source: MediaSource,
+    options?: {
+      /**
+       * Asked before a second pass. When the speech model did not give a
+       * track and this answers false, `voice` resolves to null instead of
+       * running the plain chain again.
+       */
+      mayRetry?: () => boolean
+    }
+  ): Promise<VoiceTrack | null>
+}
+
+/**
+ * A cleaned voice, and which chain made it. The two are stored under
+ * different keys (`storageKeys.voice`, `storageKeys.voicePlain`), so a track
+ * is always filed as what it is.
+ */
+export type VoiceTrack = {
+  bytes: Uint8Array
+  /** True when the speech model ran and kept the voice. */
+  denoised: boolean
+  /** Why the model was not used, when it was not. Becomes a warning. */
+  note?: string
 }
 
 export type Transcriber = {
@@ -151,6 +178,13 @@ export type IngestPorts = {
    * not one of them: the studio's Sound button can make it later.
    */
   voiceDeadline?: () => boolean
+  /**
+   * True once there is no longer time for a second voice pass: the plain
+   * chain after the speech model did not give a track. Checked between the
+   * passes, because the first gate only says the step may start, and two
+   * full passes on a long take can outlast the function.
+   */
+  voiceRetryDeadline?: () => boolean
 }
 
 export type IngestStep =
@@ -319,13 +353,28 @@ export async function runIngest(
     warnings.push("voice: skipped, left for the Sound button")
   } else if (probe.hasAudio && transcoder.voice) {
     try {
-      const voiceKey = storageKeys.voice(input.contentHash)
-      if (!(await storage.exists(voiceKey))) {
-        await storage.put(
-          voiceKey,
-          await transcoder.voice(input.source),
-          "audio/mp4"
-        )
+      const existing = await firstExisting(
+        storage,
+        voiceKeys(input.contentHash)
+      )
+      if (!existing) {
+        const track = await transcoder.voice(input.source, {
+          mayRetry: () => !ports.voiceRetryDeadline?.(),
+        })
+        if (!track) {
+          warnings.push(
+            "voice: the speech model gave no track and there was no time to clean again, left for the Sound button"
+          )
+        } else {
+          await storage.put(
+            track.denoised
+              ? storageKeys.voice(input.contentHash)
+              : storageKeys.voicePlain(input.contentHash),
+            track.bytes,
+            "audio/mp4"
+          )
+          if (track.note) warnings.push(`voice: ${track.note}`)
+        }
       }
     } catch (error) {
       warnings.push(`voice: ${message(error)}`)
@@ -390,6 +439,20 @@ export function visionHandleIsLive(
   // A minute of headroom, because a handle that expires mid-request is the
   // same failure as one that expired an hour ago.
   return expiresAt.getTime() - now.getTime() > 60_000
+}
+
+/**
+ * The first of these keys that holds an object, or null. In order, so the
+ * caller decides which copy wins when more than one exists.
+ */
+export async function firstExisting(
+  storage: Pick<Storage, "exists">,
+  keys: string[]
+): Promise<string | null> {
+  // Asked together, one round trip rather than one per key: a page with many
+  // takes runs this for every one of them.
+  const found = await Promise.all(keys.map((key) => storage.exists(key)))
+  return keys[found.indexOf(true)] ?? null
 }
 
 function message(error: unknown): string {

@@ -60,9 +60,14 @@ function ports(overrides: Partial<IngestPorts> = {}): IngestPorts {
 }
 
 describe("runIngest, the cleaned voice", () => {
-  const withVoice = (voiceDeadline: () => boolean) => {
-    const base = ports()
-    const voice = vi.fn().mockResolvedValue(new Uint8Array([6]))
+  const withVoice = (
+    voiceDeadline: () => boolean,
+    track: { denoised: boolean; note?: string } = { denoised: true },
+    base = ports()
+  ) => {
+    const voice = vi
+      .fn()
+      .mockResolvedValue({ bytes: new Uint8Array([6]), ...track })
     return {
       voice,
       ports: {
@@ -89,8 +94,61 @@ describe("runIngest, the cleaned voice", () => {
     const keys = (p.storage.put as ReturnType<typeof vi.fn>).mock.calls.map(
       (call) => call[0] as string
     )
-    expect(keys.some((key) => key.startsWith("derived/voice/"))).toBe(true)
+    expect(keys).toContain(`derived/voice/v3/${input.contentHash}.m4a`)
     expect(result.warnings).toEqual([])
+  })
+
+  it("files a plain-chain track under the plain key, and says why", async () => {
+    const { ports: p } = withVoice(() => false, {
+      denoised: false,
+      note: "speech model not found, cleaned without it",
+    })
+    const result = await runIngest(input, p)
+    const keys = (p.storage.put as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string
+    )
+    expect(keys).toContain(`derived/voice/v2/${input.contentHash}.m4a`)
+    expect(keys).not.toContain(`derived/voice/v3/${input.contentHash}.m4a`)
+    expect(result.warnings).toEqual([
+      "voice: speech model not found, cleaned without it",
+    ])
+  })
+
+  it("stores nothing, and says so, when there was no time for a second pass", async () => {
+    const base = ports()
+    const voice = vi.fn().mockResolvedValue(null)
+    const p = {
+      ...base,
+      transcoder: { ...base.transcoder, voice },
+      voiceDeadline: () => false,
+    }
+    const result = await runIngest(input, p)
+    const keys = (p.storage.put as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string
+    )
+    expect(keys.some((key) => key.startsWith("derived/voice/"))).toBe(false)
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toMatch(/^voice: .*Sound button/)
+  })
+
+  it("lets the second pass run only while the retry deadline allows", async () => {
+    let late = false
+    const { voice, ports: p } = withVoice(() => false)
+    await runIngest(input, { ...p, voiceRetryDeadline: () => late })
+    const { mayRetry } = voice.mock.calls[0][1] as { mayRetry: () => boolean }
+    expect(mayRetry()).toBe(true)
+    late = true
+    expect(mayRetry()).toBe(false)
+  })
+
+  it("does not clean again a take that already has a plain track", async () => {
+    const base = ports()
+    base.storage.exists = vi.fn(async (key: string) =>
+      key.startsWith("derived/voice/v2/")
+    )
+    const { voice, ports: p } = withVoice(() => false, undefined, base)
+    await runIngest(input, p)
+    expect(voice).not.toHaveBeenCalled()
   })
 })
 

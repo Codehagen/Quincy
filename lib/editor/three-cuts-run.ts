@@ -23,7 +23,7 @@ import { CHECK_MODEL, needsCheck } from "./self-check"
 import { signOffer } from "./self-check-server"
 import type { CutsMessage } from "./stream-parts"
 import { findMainTrack, sceneDurationUs } from "./timeline"
-import { wordsFromDeepgram, type Word } from "./transcript"
+import { wordsFromTranscript, type Word } from "./transcript"
 import {
   briefsFor,
   copyScene,
@@ -137,7 +137,7 @@ export async function threeCutsResponse(o: ThreeCutsOptions): Promise<Response> 
     }
 
     const asset = await getAsset(clip.mediaId, o.userId)
-    words = asset?.transcript ? wordsFromDeepgram(asset.transcript) : null
+    words = asset?.transcript ? wordsFromTranscript(asset.transcript) : null
     const slot = strongLineSlot(asset?.transcript)
     briefs = briefsFor({
       durationUs: sceneDurationUs(base),

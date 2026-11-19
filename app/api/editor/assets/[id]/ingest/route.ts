@@ -22,16 +22,21 @@ import {
 } from "@/lib/editor/ingest-meter"
 import { peaksFromPcm } from "@/lib/editor/media"
 import { imageProblem } from "@/lib/editor/image-check"
-import { createR2Storage, downloadObject, readObjectHead } from "@/lib/editor/storage-r2"
+import {
+  createR2Storage,
+  downloadObject,
+  readObjectHead,
+} from "@/lib/editor/storage-r2"
 import {
   createFfmpegTranscoder,
   withWorkspace,
 } from "@/lib/editor/transcoder-ffmpeg"
 import {
-  createDeepgramTranscriber,
-  isDeepgramConfigured,
-  readDeepgramOptions,
-} from "@/lib/editor/transcriber-deepgram"
+  isSpeechConfigured,
+  pcmTranscriber,
+  speechProviderFor,
+  speechToTextFor,
+} from "@/lib/transcription"
 import {
   isEntitled,
   paywallResponse,
@@ -74,6 +79,14 @@ export const maxDuration = 300
  */
 const VOICE_BUDGET_MS = 150_000
 
+/**
+ * How long into an ingest a second voice pass may still start: the plain
+ * chain, when the speech model did not give a track. The plain pass on a
+ * 20-minute take and `completeIngest` fit in the last 100 seconds; past
+ * this the track is left for the Sound button.
+ */
+const VOICE_RETRY_BUDGET_MS = 200_000
+
 // ffmpeg needs a real filesystem, which only the Node.js runtime has — and
 // Node.js is the default, so this route no longer says so: cacheComponents
 // rejects the `runtime` segment config outright.
@@ -114,7 +127,10 @@ export async function POST(
     }
     // The bytes, not the browser's word for them: an image never reaches
     // ffmpeg, so this is the only place anything checks what was stored.
-    const problem = imageProblem(await readObjectHead(asset.storageKey), asset.mimeType)
+    const problem = imageProblem(
+      await readObjectHead(asset.storageKey),
+      asset.mimeType
+    )
     if (problem) {
       // Too big or not a picture is a final answer, so the row says so, as a
       // failed video ingest does. Not uploaded yet (409) is not: the PUT may
@@ -219,6 +235,8 @@ export async function POST(
           transcoder: createFfmpegTranscoder({ workdir }),
           transcriber: meteredTranscriber,
           voiceDeadline: () => Date.now() - startedAt > VOICE_BUDGET_MS,
+          voiceRetryDeadline: () =>
+            Date.now() - startedAt > VOICE_RETRY_BUDGET_MS,
           peaksFromPcm,
           admit: async (probe) => {
             const seconds = probe.durationUs / 1_000_000
@@ -283,26 +301,38 @@ export async function POST(
 }
 
 /**
- * A transcriber, configured or not.
+ * A transcriber, configured or not: the editor's speech-to-text
+ * (`EDITOR_TRANSCRIBER`, Deepgram unless set; lib/transcription/index.ts).
  *
- * When the key is absent this returns one that throws on use, which `runIngest`
- * catches into a warning — so the asset still reaches `ready` and the footage
- * is still editable, minus captions. The alternative, skipping the port
- * entirely, would make a missing key indistinguishable from a file with no
- * speech in it, and only one of those is worth telling someone about.
+ * When it is not set up this returns one that throws on use, which
+ * `runIngest` catches into a warning — so the asset still reaches `ready` and
+ * the footage is still editable, minus captions. The alternative, skipping
+ * the port entirely, would make a missing key indistinguishable from a file
+ * with no speech in it, and only one of those is worth telling someone about.
+ * A setting that names a provider the editor cannot use is the same: a
+ * warning on the asset, never a failed upload.
  */
 function transcriber(
   onRequest: (audioSeconds: number) => Promise<void>
 ): Transcriber {
-  if (isDeepgramConfigured()) {
-    return createDeepgramTranscriber({ ...readDeepgramOptions(), onRequest })
+  let problem: string
+  try {
+    if (isSpeechConfigured("editor")) {
+      return pcmTranscriber(speechToTextFor("editor", { onRequest }))
+    }
+    problem =
+      speechProviderFor("editor") === "deepgram"
+        ? "DEEPGRAM_API_KEY is not set"
+        : "the editor's transcriber is not set up"
+  } catch (error) {
+    problem = error instanceof Error ? error.message : String(error)
   }
 
   return {
     name: "none",
     transcribe: () => {
       throw new Error(
-        "DEEPGRAM_API_KEY is not set, so this asset has no captions yet. " +
+        `${problem}, so this asset has no captions yet. ` +
           "Set it and re-run ingest to add them."
       )
     },

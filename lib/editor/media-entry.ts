@@ -1,12 +1,12 @@
 import type { MediaEntry } from "@/components/editor/studio"
 
 import { getAsset, type VideoAssetRow } from "./assets"
-import { storageKeys } from "./media"
+import { voiceKeys } from "./media"
 import { referencedMediaIds } from "./placement"
 import { readTake, strongLineSlot } from "./reading"
-import type { Storage } from "./ingest"
+import { firstExisting, type Storage } from "./ingest"
 import { createR2Storage } from "./storage-r2"
-import { wordsFromDeepgram } from "./transcript"
+import { wordsFromTranscript } from "./transcript"
 import type { VideoDocument } from "./types"
 
 /**
@@ -21,18 +21,18 @@ export async function mediaEntryFor(
   storage: Pick<Storage, "url" | "exists">
 ): Promise<MediaEntry> {
   const kind = mediaKindOf(asset.mimeType)
-  const voiceKey = storageKeys.voice(asset.contentHash)
   const [proxyUrl, seekIndexUrl, filmstripUrl, voiceUrl, thumbnailUrl] =
     await Promise.all([
       asset.proxyKey ? storage.url(asset.proxyKey) : null,
       asset.seekIndexKey ? storage.url(asset.seekIndexKey) : null,
       asset.filmstripKey ? storage.url(asset.filmstripKey) : null,
-      // The cleaned voice, when ingest made one. A failed check is a take
-      // that plays its own sound, never a page that does not open.
+      // The cleaned voice, when ingest made one: the speech model's track,
+      // else the plain one a take cleaned before the model has. A failed
+      // check is a take that plays its own sound, never a page that does not
+      // open.
       asset.hasAudio && kind === "video"
-        ? storage
-            .exists(voiceKey)
-            .then((found) => (found ? storage.url(voiceKey) : null))
+        ? firstExisting(storage, voiceKeys(asset.contentHash))
+            .then((found) => (found ? storage.url(found) : null))
             .catch(() => null)
         : null,
       asset.thumbnailKey ? storage.url(asset.thumbnailKey) : null,
@@ -74,7 +74,7 @@ export async function mediaEntryFor(
     reading:
       asset.transcript && kind === "video"
         ? readTake(
-            wordsFromDeepgram(asset.transcript),
+            wordsFromTranscript(asset.transcript),
             asset.durationUs ?? 0,
             strongLineOf(asset.transcript)
           )
